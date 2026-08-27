@@ -1,0 +1,21 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.metrics") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Metrics"
+  api = "fuchsia.metrics.api"
+  fuzzers = [
+    {
+      protocol = "fuchsia.metrics.MetricEventLoggerFactory"
+    },
+    {
+      protocol = "fuchsia.metrics.MetricEventLogger"
+    },
+  ]
+  sources = [ "metric_event_logger.fidl" ]
+}

@@ -1,0 +1,26 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.element") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Sessions"
+
+  sources = [
+    "annotations.fidl",
+    "element_manager.fidl",
+    "graphical_presenter.fidl",
+    "overview.fidl",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.mem",
+    "//sdk/fidl/fuchsia.ui.views",
+    "//sdk/fidl/fuchsia.url",
+  ]
+
+  enable_hlcpp = true
+}

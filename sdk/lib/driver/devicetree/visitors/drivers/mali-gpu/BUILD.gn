@@ -1,0 +1,66 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/devicetree/devicetree.gni")
+import("//release/devicetree/devicetree_visitor.gni")
+import("//release/test.gni")
+
+group("tests") {
+  deps = [ ":mali-gpu-visitor-test" ]
+  testonly = true
+}
+
+devicetree_visitor("mali-gpu-visitor") {
+  deps = [ ":mali-gpu" ]
+}
+
+source_set("mali-gpu") {
+  sources = [
+    "mali-gpu-visitor.cc",
+    "mali-gpu-visitor.h",
+  ]
+  deps = [
+    "//sdk/fidl/fuchsia.hardware.gpu.mali:fuchsia.hardware.gpu.mali_bindlib_cpp",
+    "//sdk/lib/driver/component/cpp:cpp",
+    "//sdk/lib/driver/devicetree/manager",
+    "//sdk/lib/driver/devicetree/visitors:registration",
+    "//sdk/lib/driver/logging/cpp",
+    "//userspace/devices/bind/fuchsia:fuchsia_cpp",
+    "//userspace/devices/bind/fuchsia.arm.platform:fuchsia.arm.platform_cpp",
+    "//userspace/lib/ddk",
+  ]
+}
+
+test("mali-gpu-visitor-test-bin") {
+  sources = [ "test/mali-gpu-visitor-test.cc" ]
+  deps = [
+    ":mali-gpu",
+    "//sdk/fidl/fuchsia.hardware.gpu.mali:fuchsia.hardware.gpu.mali_bindlib_cpp",
+    "//sdk/lib/driver/devicetree/testing:visitor-test-helper",
+    "//sdk/lib/driver/devicetree/visitors:registry",
+    "//sdk/lib/driver/devicetree/visitors/default/bind-property",
+    "//userspace/devices/bind/fuchsia:fuchsia_cpp",
+    "//userspace/devices/bind/fuchsia.arm.platform:fuchsia.arm.platform_cpp",
+    "//userspace/lib/fxl/test:gtest_main",
+  ]
+}
+
+dtb("mali-gpu-dtb") {
+  sources = [ "test/dts/mali-gpu.dts" ]
+}
+
+resource("mali-gpu-dtb-file") {
+  sources = get_target_outputs(":mali-gpu-dtb")
+  outputs = [ "test-data/{{source_file_part}}" ]
+  deps = [ ":mali-gpu-dtb" ]
+}
+
+fuchsia_unittest_package("mali-gpu-visitor-test") {
+  component_name = "mali-gpu-visitor-test"
+  deps = [
+    ":mali-gpu-dtb-file",
+    ":mali-gpu-visitor-test-bin",
+  ]
+}

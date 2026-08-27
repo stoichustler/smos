@@ -1,0 +1,177 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/test.gni")
+
+if (is_fuchsia) {
+  shared_library("fs-management") {
+    public = [
+      "admin.h",
+      "component.h",
+      "format.h",
+      "fvm.h",
+      "mount.h",
+      "options.h",
+      "volumes.h",
+    ]
+    configs += [ "//release/config:all_source" ]
+    sources = [
+      "admin.cc",
+      "component.cc",
+      "format.cc",
+      "fsck.cc",
+      "fvm.cc",
+      "fvm_internal.h",
+      "mkfs.cc",
+      "mount.cc",
+      "options.cc",
+      "volumes.cc",
+    ]
+    public_deps = [
+      "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+      "//sdk/fidl/fuchsia.hardware.block:fuchsia.hardware.block_cpp",
+      "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp",
+      "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+      "//sdk/lib/async",
+      "//sdk/lib/fidl",
+      "//userspace/lib/uuid",
+      "//userspace/storage/fidl/fuchsia.fs.startup:fuchsia.fs.startup_cpp",
+      "//userspace/storage/fxfs/fidl/fuchsia.fxfs:fuchsia.fxfs_cpp",
+      "//zircon/system/ulib/fbl",
+    ]
+    deps = [
+      "//sdk/fidl/fuchsia.boot:fuchsia.boot_cpp",
+      "//sdk/fidl/fuchsia.component:fuchsia.component_cpp",
+      "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+      "//sdk/fidl/fuchsia.hardware.block:fuchsia.hardware.block_cpp",
+      "//sdk/fidl/fuchsia.hardware.block.partition:fuchsia.hardware.block.partition_cpp",
+      "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp",
+      "//sdk/lib/component/incoming/cpp",
+      "//sdk/lib/device-watcher/cpp",
+      "//userspace/lib/digest",
+      "//userspace/lib/fxl",
+      "//userspace/storage/fvm",
+      "//userspace/storage/gpt",
+      "//userspace/storage/lib/block_client/cpp",
+      "//userspace/storage/lib/vfs/cpp",
+      "//zircon/system/ulib/fbl",
+      "//zircon/system/ulib/fdio-caller",
+      "//zircon/system/ulib/fzl",
+      "//zircon/system/ulib/pretty",
+      "//zircon/system/ulib/zx",
+      "//zircon/system/ulib/zx",
+    ]
+  }
+} else {
+  source_set("fs-management") {
+    public = [
+      "format.h",
+      "fvm.h",
+    ]
+  }
+}
+
+test("fs-management-unittest") {
+  sources = [
+    "fvm_test.cc",
+    "options_test.cc",
+  ]
+  deps = [
+    ":fs-management",
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp_testing",
+    "//sdk/fidl/fuchsia.hardware.block.partition:fuchsia.hardware.block.partition_cpp_testing",
+    "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp_testing",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/lib/fxl/test:test_settings",
+    "//userspace/storage/fvm",
+    "//userspace/storage/lib/block_client/cpp",
+    "//third_party/googletest:gtest",
+    "//zircon/system/ulib/fdio-caller",
+  ]
+}
+
+fuchsia_unittest_component("fs-management-unittest-component") {
+  deps = [ ":fs-management-unittest" ]
+}
+
+test("fs-management-test") {
+  configs += [ "//release/config:all_source" ]
+  sources = [
+    "admin_test.cc",
+    "format_test.cc",
+    "mount_test.cc",
+  ]
+  deps = [
+    ":fs-management",
+    ":mkfs_with_default",
+    "//sdk/fidl/fuchsia.component:fuchsia.component_cpp",
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.fs:fuchsia.fs_cpp",
+    "//sdk/fidl/fuchsia.hardware.block:fuchsia.hardware.block_cpp",
+    "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/component/incoming/cpp",
+    "//sdk/lib/fdio",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/lib/fxl/test:test_settings",
+    "//userspace/storage/fs_test:crypt_service",
+    "//userspace/storage/fvm",
+    "//userspace/storage/fvm:fvm-component",
+    "//userspace/storage/lib/block_client/cpp",
+    "//userspace/storage/lib/block_server:fake_block_server_cc",
+    "//userspace/storage/testing:storage_driver_test_realm",
+    "//userspace/storage/testing:storage_driver_test_support",
+    "//third_party/googletest:gtest",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/fdio-caller",
+    "//zircon/system/ulib/zx",
+  ]
+  data_deps = [ "//userspace/storage/fuchsia-fatfs:tools" ]
+}
+
+fuchsia_component("fs-management-test-component") {
+  testonly = true
+  manifest = "meta/fs_management_tests.cml"
+  deps = [
+    ":fs-management-test",
+    "//userspace/storage/crypt/fxfs",
+    "//userspace/storage/fs_test:test_crypt_service",
+  ]
+}
+
+fuchsia_test_package("fs-management-tests") {
+  test_components = [
+    ":fs-management-test-component",
+    ":fs-management-unittest-component",
+  ]
+  deps = [
+    "//userspace/storage/blobfs/bin:component",
+    "//userspace/storage/f2fs/bin:f2fs-component",
+    "//userspace/storage/fxfs:fxfs_component",
+    "//userspace/storage/minfs/bin:minfs-component",
+    "//userspace/storage/minfs/bin:minfs-component",
+  ]
+}
+
+source_set("mkfs_with_default") {
+  testonly = true
+  sources = [
+    "mkfs_with_default.cc",
+    "mkfs_with_default.h",
+  ]
+  deps = [
+    ":fs-management",
+    "//sdk/lib/component/incoming/cpp",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":fs-management-tests" ]
+}

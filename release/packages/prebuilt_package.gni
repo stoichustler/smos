@@ -1,0 +1,61 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+import("//release/packages/package_metadata.gni")
+import("//userspace/sys/pkg/bin/package-tool/package-tool.gni")
+
+# Generates package metadata from a prebuilt FAR archive.
+#
+# Parameters
+#
+#   archive (required)
+#     Path to archive containing a package.
+#
+#   package_name (optional)
+#     Name of the package.
+#     Defaults to the target's name.
+#
+#   repository (optional)
+#     The repository host name part of the package URL. Defaults to "fuchsia.com".
+#     See https://fuchsia.dev/fuchsia-src/concepts/packages/package_url#repository
+#     for more details.
+#     Type: string
+#     Default: fuchsia.com
+#
+#   deps (optional)
+#   testonly (optional)
+#   visibility (optional)
+#   metadata (optional)
+#     Usual GN meanings.
+#
+template("prebuilt_package") {
+  assert(defined(invoker.archive))
+
+  package_name = target_name
+  if (defined(invoker.package_name)) {
+    package_name = invoker.package_name
+  }
+
+  repository = "fuchsia.com"
+  if (defined(invoker.repository)) {
+    repository = invoker.repository
+  }
+
+  main_target_deps = []
+  if (defined(invoker.deps)) {
+    main_target_deps += invoker.deps
+  }
+
+  package_tool_package_archive_extract(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "visibility",
+                             "metadata",
+                           ])
+    archive = invoker.archive
+    package_name = package_name
+    repository = repository
+    deps = main_target_deps
+  }
+}

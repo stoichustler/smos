@@ -1,0 +1,21 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.net.http") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Netstack"
+
+  sources = [ "client.fidl" ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.mem",
+    "//sdk/fidl/fuchsia.url",
+    "//zircon/vdso/zx",
+  ]
+
+  enable_hlcpp = true
+}

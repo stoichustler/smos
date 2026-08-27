@@ -1,0 +1,258 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//tools/devshell/test_runner/host_script_test.gni")
+
+if (!is_host) {
+  group("fx") {
+    deps = []
+  }
+} else {
+  # Host tools required by fx commands.
+  #
+  # Generally, an fx command that depends on a host tool should compile that
+  # tool on-the-fly. However, this incurs a significant slowdown due to the
+  # latency of starting up ninja. Therefore, host tools called by commonly-used
+  # and latency-sensitive fx commands may be included here so they're latently
+  # available and get automatically rebuilt by every `fx build`.
+  group("fx") {
+    deps = [
+      "//userspace/developer/ffx:ffx_tool",
+      "//tools/bootserver_old:host",
+      "//tools/net/device-finder:host",
+      "//tools/symbolizer",
+
+      # For `fx format-code`.
+      "//release/tools/formatjson5",
+      "//tools/cmc",
+      "//tools/fidl/fidlc:fidl-format",
+      "//tools/fidl/gidl-format:host",
+
+      # For `fx klog`.
+      "//tools/loglistener:host",
+
+      # For `fx lint`.
+      "//tools/fidl/fidlc:fidl-lint",
+
+      # For `fx pretty_serial`.
+      "//tools/pretty_serial:install($host_toolchain)",
+
+      # For 'fx create'.
+      "//tools/create",
+
+      # For `fx bindc`.
+      "//tools/bindc:host",
+
+      # For `fx update-rustc-third-party`.
+      "//tools/cargo-gnaw:install-cargo-gnaw",
+
+      # For `fx test`.
+      "//scripts/fxtest/python:install($host_toolchain)",
+
+      # For Python devshell tools
+      "//tools/devshell/python:install($host_toolchain)",
+
+      # For `fx power-digest`
+      "//userspace/power/tools:install($host_toolchain)",
+
+      # For `fx bazel2gn`
+      "//release/tools/bazel2gn:host($host_toolchain)",
+    ]
+  }
+}
+
+# Tests need to be in the default toolchain, because build_api_module only
+# collects metadata (into tests.json) from the default toolchain.
+group("tests") {
+  testonly = true
+  deps = [
+    ":fx_script_tests($host_toolchain)",
+    "//tools/devshell/python:tests($host_toolchain)",
+  ]
+}
+
+# This is the list of test scripts that should be run to
+# test the bash fx scripts.
+test_scripts = [
+  "tests/fx-internal/bash_test_framework_test",
+  "tests/fx-internal/disktools_test",
+  "tests/fx-internal/ffx_target_list_usage_test",
+  "tests/fx-internal/fvm_test",
+  "tests/fx-internal/fx_helpers_test",
+  "tests/fx-internal/fx_test",
+  "tests/fx-internal/fx_update_path_test",
+  "tests/fx-internal/metrics_test",
+  "tests/fx-internal/mock_test",
+  "tests/fx-internal/optional-features_test",
+  "tests/fx-internal/reentry_test",
+  "tests/fx-internal/vars_test",
+  "tests/fx-internal/verify_default_keys_test",
+  "tests/subcommands/fx_cp_test",
+  "tests/subcommands/fx_flash_fuchsia_test",
+  "tests/subcommands/fx_format_code_test",
+  "tests/subcommands/fx_get_flash_source_test",
+  "tests/subcommands/fx_helpdoc_test",
+  "tests/subcommands/fx_host_tool_test",
+  "tests/subcommands/fx_klog_test",
+  "tests/subcommands/fx_list_build_artifacts_test",
+  "tests/subcommands/fx_log_test",
+  "tests/subcommands/fx_mkzedboot_test",
+  "tests/subcommands/fx_ota_test",
+  "tests/subcommands/fx_remote_test",
+  "tests/subcommands/fx_set_test",
+  "tests/subcommands/fx_setup_go_test",
+  "tests/subcommands/fx_ssh_test",
+
+  # tests that currently can't be included in automation.
+  # use 'fx self-test' to run them manually:
+  # "tests/subcommands/fx_test_test",  # disabled because it depends on dart prebuilt
+]
+
+# Copies the files needed for the tests to the out dir
+# This stages the data and builds the metadata needed to
+# have these files included in the test runtime deps.
+#
+# The datasets are copied to the data_path directory.
+# The source_base_dir must be a prefix of the files
+# being copied. The target_base dir is the destination
+# directory within the data_path.
+#
+# There are multiple datasets, one for each unique source_base_dir.
+host_script_test_data("fx_bash_tests") {
+  data_path = "fx_bash_tests"
+  datasets = [
+    {
+      source_base_dir = "//scripts"
+      target_base_dir = "scripts"
+      files = [
+        "//scripts/fx",
+        "//scripts/fx-env.sh",
+        "//scripts/fx-help.awk",
+        "//scripts/fx-reentry",
+      ]
+    },
+    {
+      source_base_dir = "//tools/devshell/tests"
+      target_base_dir = "tools/devshell/tests"
+      files = []
+      foreach(f, test_scripts) {
+        files += [ "//tools/devshell/$f" ]
+      }
+    },
+    {
+      source_base_dir = "//tools/devshell/tests/lib"
+      target_base_dir = "tools/devshell"
+      files = [ "//tools/devshell/tests/lib/script_runner.sh" ]
+    },
+    {
+      source_base_dir = "//tools/devshell/tests/lib"
+      target_base_dir = "tools/devshell/tests/lib"
+      files = [
+        "//tools/devshell/tests/lib/bash_test_framework.sh",
+        "//tools/devshell/tests/lib/fuchsia-mock.sh",
+        "//tools/devshell/tests/lib/mock.sh",
+      ]
+    },
+    {
+      source_base_dir = "//tools/devshell"
+      target_base_dir = "tools/devshell"
+
+      # Consolidated dependencies of all scripts. Extracted with:
+      # find tools/devshell/tests -name "*_test" -type f | xargs cat | awk '/^[ ]*BT_FILE_DEPS=/{flag=1;next}/[ ]*\)/{flag=0}flag'  | grep "tools/devshell" | sort -u | sed 's/[ ]*"\(.*\)".*/  "\/\/\1",/'
+
+      files = [
+        "//tools/devshell/build-metrics",
+        "//tools/devshell/contrib/ffx",
+        "//tools/devshell/contrib/lint",
+        "//tools/devshell/contrib/setup-go",
+        "//tools/devshell/cp",
+        "//tools/devshell/flash",
+        "//tools/devshell/flash-remote",
+        "//tools/devshell/format-code",
+        "//tools/devshell/get-build-dir",
+        "//tools/devshell/get-device-addr",
+        "//tools/devshell/get-flash-source",
+        "//tools/devshell/go",
+        "//tools/devshell/helpdoc",
+        "//tools/devshell/host-tool",
+        "//tools/devshell/jq.fx",
+        "//tools/devshell/klog",
+        "//tools/devshell/lib/disktools.sh",
+        "//tools/devshell/lib/fvm.sh",
+        "//tools/devshell/lib/fx-cmd-locator.sh",
+        "//tools/devshell/lib/fx-flash.sh",
+        "//tools/devshell/lib/fx-mkzedboot.sh",
+        "//tools/devshell/lib/fx-optional-features.sh",
+        "//tools/devshell/lib/fx-remote.sh",
+        "//tools/devshell/lib/generate-ssh-config.sh",
+        "//tools/devshell/lib/host_symbolizer.sh",
+        "//tools/devshell/lib/metrics.sh",
+        "//tools/devshell/lib/platform.sh",
+        "//tools/devshell/lib/style.sh",
+        "//tools/devshell/lib/updates.sh",
+        "//tools/devshell/lib/vars.sh",
+        "//tools/devshell/lib/verify-default-keys.sh",
+        "//tools/devshell/list-build-artifacts",
+        "//tools/devshell/log",
+        "//tools/devshell/metrics",
+        "//tools/devshell/mkzedboot",
+        "//tools/devshell/ota",
+        "//tools/devshell/serve",
+        "//tools/devshell/serve-remote",
+        "//tools/devshell/set",
+        "//tools/devshell/set-device",
+        "//tools/devshell/shell",
+        "//tools/devshell/symbolize",
+        "//tools/devshell/test",
+        "//tools/devshell/tests/subcommands/data/fx_format_code_test/fidl.test.fidl",
+        "//tools/devshell/tests/subcommands/data/fx_format_code_test/cml.cml",
+        "//tools/devshell/tests/subcommands/data/fx_format_code_test/cplusplus.cc",
+        "//tools/devshell/tests/subcommands/data/fx_format_code_test/gidl.gidl",
+        "//tools/devshell/tests/subcommands/data/fx_format_code_test/gn.gn",
+        "//tools/devshell/tests/subcommands/data/fx_format_code_test/gn.gni",
+        "//tools/devshell/tests/subcommands/data/fx_format_code_test/json5.json5",
+        "//tools/devshell/tests/subcommands/data/fx_format_code_test/python3.py",
+        "//tools/devshell/tests/subcommands/data/fx_format_code_test/rust.rs",
+        "//tools/devshell/tests/subcommands/data/fx_serve_update_test/testpackage.json",
+        "//tools/devshell/tests/subcommands/data/fx_serve_update_test/testpackage.manifest",
+        "//tools/devshell/tests/subcommands/data/fx_set_test/myboard.gni",
+        "//tools/devshell/tests/subcommands/data/fx_set_test/myproduct.gni",
+        "//tools/devshell/tests/subcommands/data/fx_test_test/tests_hashfile/out/default/tests.json",
+        "//tools/devshell/tests/subcommands/data/fx_test_test/tests_hashfile/out/default/package-repositories.json",
+        "//tools/devshell/tests/subcommands/data/fx_test_test/tests_hashfile/out/default/amber-files/repository/targets.json",
+        "//tools/devshell/tests/subcommands/data/fx_test_test/tests_multiple_in_package.json",
+        "//tools/devshell/tests/subcommands/data/fx_test_test/tests_package_server_integration.json",
+        "//tools/devshell/vendor",
+      ]
+    },
+    {
+      source_base_dir = target_out_dir
+      target_base_dir = "tools/devshell"
+      files = [ "${target_out_dir}/run_fx_bash_tests_driver.sh" ]
+    },
+    {
+      source_base_dir = "//prebuilt"
+      target_base_dir = "prebuilt"
+      files = [ "//prebuilt/third_party/jq/${host_platform}/bin/jq" ]
+    },
+  ]
+  data_deps = [ ":run_fx_bash_tests_driver" ]
+}
+
+generated_file("run_fx_bash_tests_driver") {
+  outputs = [ "${target_out_dir}/run_fx_bash_tests_driver.sh" ]
+  contents =
+      read_file("//tools/devshell/tests/lib/script_header.sh", "list lines")
+  foreach(s, test_scripts) {
+    contents += [ "tools/devshell/script_runner.sh $s" ]
+  }
+}
+
+# This is the entrypoint for the fx script tests.
+host_script_test("fx_script_tests") {
+  # Script path is relative to $testroot
+  test_root = "fx_bash_tests"
+  test_script = "fx_bash_tests/tools/devshell/run_fx_bash_tests_driver.sh"
+  data_deps = [ ":fx_bash_tests" ]
+}

@@ -1,0 +1,90 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+assert(is_host, "Assembly libraries are host-only")
+
+rustc_library("platform_configuration") {
+  edition = "2021"
+  name = "assembly_platform_configuration"
+  with_unit_tests = true
+
+  sources = [
+    "src/common.rs",
+    "src/lib.rs",
+    "src/subsystems.rs",
+    "src/subsystems/battery.rs",
+    "src/subsystems/bluetooth.rs",
+    "src/subsystems/build_info.rs",
+    "src/subsystems/component.rs",
+    "src/subsystems/connectivity.rs",
+    "src/subsystems/development.rs",
+    "src/subsystems/diagnostics.rs",
+    "src/subsystems/driver_framework.rs",
+    "src/subsystems/example.rs",
+    "src/subsystems/factory_store_providers.rs",
+    "src/subsystems/fonts.rs",
+    "src/subsystems/forensics.rs",
+    "src/subsystems/graphics.rs",
+    "src/subsystems/hwinfo.rs",
+    "src/subsystems/icu.rs",
+    "src/subsystems/intl.rs",
+    "src/subsystems/kernel.rs",
+    "src/subsystems/media.rs",
+    "src/subsystems/memory_monitor.rs",
+    "src/subsystems/paravirtualization.rs",
+    "src/subsystems/power.rs",
+    "src/subsystems/radar.rs",
+    "src/subsystems/rcs.rs",
+    "src/subsystems/recovery.rs",
+    "src/subsystems/sensors.rs",
+    "src/subsystems/session.rs",
+    "src/subsystems/setui.rs",
+    "src/subsystems/starnix.rs",
+    "src/subsystems/storage.rs",
+    "src/subsystems/swd.rs",
+    "src/subsystems/system_sounds.rs",
+    "src/subsystems/tee_clients.rs",
+    "src/subsystems/thermal.rs",
+    "src/subsystems/timekeeper.rs",
+    "src/subsystems/trusted_apps.rs",
+    "src/subsystems/ui.rs",
+    "src/subsystems/usb.rs",
+    "src/subsystems/virtualization.rs",
+    "src/util.rs",
+  ]
+  deps = [
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/devices/bind/fuchsia.platform:fuchsia.platform_rust",
+    "//userspace/diagnostics/lib/sampler-config",
+    "//userspace/lib/assembly/component_id_index",
+    "//userspace/lib/assembly/component_manager_config",
+    "//userspace/lib/assembly/config_capabilities",
+    "//userspace/lib/assembly/config_schema",
+    "//userspace/lib/assembly/constants",
+    "//userspace/lib/assembly/images_config",
+    "//userspace/lib/assembly/named_file_map",
+    "//userspace/lib/assembly/util",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/sys/lib/cm_types",
+    "//userspace/tee/manager-config",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:handlebars",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:uuid",
+    "//tools/lib/cml",
+  ]
+  test_deps = [
+    "//userspace/lib/assembly/images_config",
+    "//userspace/lib/assembly/util",
+    "//userspace/lib/diagnostics/selectors",
+    "//userspace/lib/utf8_path",
+    "//third_party/rust_crates:lazy_static",
+    "//third_party/rust_crates:tempfile",
+  ]
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+}

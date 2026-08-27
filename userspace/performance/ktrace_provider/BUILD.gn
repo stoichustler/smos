@@ -1,0 +1,42 @@
+# Copyright 2016 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+
+executable("bin") {
+  output_name = "ktrace_provider"
+
+  sources = [
+    "app.cc",
+    "app.h",
+    "device_reader.cc",
+    "device_reader.h",
+    "log_importer.cc",
+    "log_importer.h",
+    "main.cc",
+    "reader.cc",
+    "reader.h",
+  ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.boot:fuchsia.boot_cpp",
+    "//sdk/fidl/fuchsia.kernel:fuchsia.kernel_cpp",
+    "//sdk/lib/async:async-cpp",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/component/incoming/cpp",
+    "//sdk/lib/sys/cpp",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/lib/fxl:fxl_cli",
+    "//userspace/performance/lib/fxt",
+    "//zircon/system/ulib/trace",
+    "//zircon/system/ulib/trace-provider",
+    "//zircon/system/ulib/zircon-internal",
+  ]
+}
+
+fuchsia_package_with_single_component("ktrace_provider") {
+  manifest = "meta/ktrace_provider.cml"
+  deps = [ ":bin" ]
+}

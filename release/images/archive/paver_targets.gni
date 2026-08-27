@@ -1,0 +1,65 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/images/paths.gni")
+import("//release/product.gni")
+
+paver_targets = [
+  {
+    name = "paver-script"
+    outputs = [ "$root_build_dir/pave.sh" ]
+    deps = [
+      "//release/images/tools:bootserver",
+      labels.images,
+    ]
+    if (use_bringup_assembly) {
+      switch = "--netboot="
+    } else {
+      switch = "--pave="
+    }
+    extra_bootserver_arguments = ""
+    metadata = {
+      images = [
+        {
+          label = get_label_info(":$name", "label_with_toolchain")
+          name = name
+          path = "pave.sh"
+          type = "script"
+        },
+      ]
+      image_paths = [ "IMAGE_PAVE_SH=pave.sh" ]
+    }
+  },
+]
+
+if (recovery_is_zedboot) {
+  paver_targets += [
+    {
+      name = "zedboot-script"
+      outputs = [ "$root_build_dir/pave-zedboot.sh" ]
+      deps = [ "//release/images/tools:bootserver" ]
+      if (use_bringup_assembly) {
+        deps += [ "//release/images/bringup" ]
+        switch = "--netboot="
+      } else {
+        if (!use_bazel_images_only) {
+          deps += [ "//release/images/zedboot" ]
+        }
+        switch = "--pave_zedboot="
+      }
+      extra_bootserver_arguments = "--allow-zedboot-version-mismatch"
+      metadata = {
+        images = [
+          {
+            label = get_label_info(":$name", "label_with_toolchain")
+            name = name
+            path = "pave-zedboot.sh"
+            type = "script"
+          },
+        ]
+        image_paths = [ "IMAGE_PAVE_ZEDBOOT_SH=pave-zedboot.sh" ]
+      }
+    },
+  ]
+}

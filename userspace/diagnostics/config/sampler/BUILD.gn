@@ -1,0 +1,41 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//userspace/diagnostics/build/sampler/merge_configs.gni")
+
+merged_sampler_config("default-config") {
+  fire_project_templates = [
+    "//userspace/diagnostics/config/sampler/fire/projects/cpu.json5",
+    "//userspace/diagnostics/config/sampler/fire/projects/crashes.json5",
+    "//userspace/diagnostics/config/sampler/fire/projects/escrow.json5",
+    "//userspace/diagnostics/config/sampler/fire/projects/minfs.json5",
+  ]
+
+  fire_component_configs =
+      [ "//userspace/diagnostics/config/sampler/fire/components.json5" ]
+
+  project_configs = [
+    "//userspace/diagnostics/config/sampler/archivist.json5",
+    "//userspace/diagnostics/config/sampler/bt_host.json5",
+    "//userspace/diagnostics/config/sampler/driver_manager_all.json5",
+    "//userspace/diagnostics/config/sampler/fshost.json5",
+    "//userspace/diagnostics/config/sampler/netstack.json5",
+    "//userspace/diagnostics/config/sampler/netstack3.json5",
+    "//userspace/diagnostics/config/sampler/power_metrics_recorder.json5",
+    "//userspace/diagnostics/config/sampler/setui.json5",
+    "//userspace/diagnostics/config/sampler/system-update-committer.json5",
+
+    # TODO(https://fxbug.dev/300170322): remove driver_manager_all.json and bring back these
+    #"audio-drivers.json5",
+    #"connectivity-wlan.json5",
+    #"display.json5",
+    #"ftl.json5",
+    #"fvm.json5",
+    #"radar.json5",
+    #"sdmmc.json5",
+    #"sysmem.json5",
+  ]
+
+  output = "${target_gen_dir}/default_sampler_config.json5"
+}

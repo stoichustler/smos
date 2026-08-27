@@ -1,0 +1,104 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/bind/bind.gni")
+import("//release/components.gni")
+import("//release/drivers.gni")
+import("//release/test.gni")
+
+assert(current_cpu == "arm64",
+       "The Amlogic CPU driver requires an arm64 SVE hardware target.")
+
+driver_bind_rules("aml-cpu-bind") {
+  rules = "meta/aml-cpu.bind"
+  bind_output = "aml-cpu.bindbc"
+  tests = "meta/bind-tests.json"
+  deps = [
+    "//sdk/fidl/fuchsia.hardware.clock:fuchsia.hardware.clock_bindlib",
+    "//sdk/fidl/fuchsia.hardware.power:fuchsia.hardware.power_bindlib",
+    "//userspace/devices/bind/fuchsia.amlogic.platform",
+    "//userspace/devices/bind/fuchsia.clock",
+    "//userspace/devices/bind/fuchsia.devicetree",
+    "//userspace/devices/bind/fuchsia.google.platform",
+    "//userspace/devices/bind/fuchsia.gpio",
+    "//userspace/devices/bind/fuchsia.platform",
+    "//userspace/devices/bind/fuchsia.power",
+  ]
+}
+
+source_set("common") {
+  sources = [
+    "aml-cpu-driver.cc",
+    "aml-cpu-driver.h",
+    "aml-cpu.cc",
+    "aml-cpu.h",
+  ]
+  configs += [
+    "//release/config:all_source",
+    "//release/config/fuchsia:enable_zircon_asserts",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.hardware.clock:fuchsia.hardware.clock_cpp",
+    "//sdk/fidl/fuchsia.hardware.cpu.ctrl:fuchsia.hardware.cpu.ctrl_cpp",
+    "//sdk/lib/driver/compat/cpp",
+    "//sdk/lib/driver/devfs/cpp",
+    "//userspace/devices/bus/lib/device-protocol-pdev",
+    "//userspace/devices/lib/amlogic",
+  ]
+}
+
+fuchsia_cc_driver("aml-cpu-driver") {
+  output_name = "aml-cpu"
+  deps = [ ":common" ]
+}
+
+fuchsia_driver_component("aml-cpu") {
+  deps = [
+    ":aml-cpu-bind",
+    ":aml-cpu-driver",
+  ]
+  manifest = "meta/aml-cpu.cml"
+  info = "meta/aml-cpu-info.json"
+}
+
+fuchsia_driver_package("package") {
+  package_name = "aml-cpu"
+  export_to_bazel = true
+  driver_components = [ ":aml-cpu" ]
+}
+
+test("aml-cpu-test-bin") {
+  sources = [ "aml-cpu-test.cc" ]
+  output_name = "aml-cpu-test"
+  deps = [
+    ":common",
+    "//sdk/fidl/fuchsia.hardware.clock:fuchsia.hardware.clock_cpp",
+    "//sdk/lib/driver/testing/cpp",
+    "//sdk/lib/inspect/testing/cpp",
+    "//userspace/devices/bus/testing/fake-pdev",
+    "//userspace/devices/testing/fake-mmio-reg",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/lib/testing/predicates",
+    "//zircon/system/ulib/fbl",
+  ]
+}
+
+fuchsia_unittest_package("aml-cpu-test") {
+  deps = [ ":aml-cpu-test-bin" ]
+  test_specs = {
+    environments = basic_envs
+    log_settings = {
+      max_severity = "ERROR"
+    }
+  }
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":aml-cpu-bind_test",
+    ":aml-cpu-test",
+  ]
+}

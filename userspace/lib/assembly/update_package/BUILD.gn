@@ -1,0 +1,43 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+import("//release/rust/rustc_library.gni")
+
+assert(is_host, "Assembly libraries are host-only")
+rustc_library("update_package") {
+  edition = "2021"
+  name = "assembly_update_package"
+  version = "0.1.0"
+  with_unit_tests = true
+  deps = [
+    "//userspace/lib/assembly/assembly_manifest",
+    "//userspace/lib/assembly/blob_size",
+    "//userspace/lib/assembly/images_config",
+    "//userspace/lib/assembly/partitions_config",
+    "//userspace/lib/assembly/tool",
+    "//userspace/lib/assembly/update_packages_manifest",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/lib/utf8_path",
+    "//userspace/lib/versioning/version-history/rust",
+    "//userspace/sys/pkg/lib/epoch",
+    "//userspace/sys/pkg/lib/fuchsia-merkle",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//userspace/sys/pkg/lib/update-package",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:serde_json",
+  ]
+  sources = [
+    "src/lib.rs",
+    "src/update_package.rs",
+  ]
+  test_deps = [
+    "//userspace/lib/assembly/util",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/sys/pkg/lib/far/rust:fuchsia-archive",
+    "//userspace/sys/pkg/lib/fuchsia-hash",
+    "//third_party/rust_crates:tempfile",
+  ]
+}

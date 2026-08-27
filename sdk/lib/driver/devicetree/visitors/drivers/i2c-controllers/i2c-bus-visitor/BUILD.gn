@@ -1,0 +1,74 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/devicetree/devicetree.gni")
+import("//release/devicetree/devicetree_visitor.gni")
+import("//release/test.gni")
+
+group("tests") {
+  deps = [ ":i2c-bus-visitor-test" ]
+  testonly = true
+}
+
+devicetree_visitor("i2c-bus-visitor") {
+  deps = [ ":i2c-bus" ]
+}
+
+source_set("i2c-bus") {
+  sources = [
+    "i2c-bus-visitor.cc",
+    "i2c-bus-visitor.h",
+  ]
+  deps = [
+    "//sdk/fidl/fuchsia.hardware.i2c:fuchsia.hardware.i2c_bindlib_cpp",
+    "//sdk/lib/driver/component/cpp:cpp",
+    "//sdk/lib/driver/devicetree/manager",
+    "//sdk/lib/driver/devicetree/visitors:common-types",
+    "//sdk/lib/driver/devicetree/visitors:registration",
+    "//sdk/lib/driver/logging/cpp",
+    "//userspace/devices/bind/fuchsia:fuchsia_cpp",
+    "//userspace/lib/ddk",
+    "//userspace/lib/ddk:ddk-metadata-headers",
+    "//zircon/system/ulib/fbl",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.hardware.i2c.businfo:fuchsia.hardware.i2c.businfo_cpp",
+    "//sdk/lib/driver/devicetree/visitors:driver-visitor",
+  ]
+}
+
+test("i2c-bus-visitor-test-bin") {
+  sources = [ "test/i2c-bus-visitor-test.cc" ]
+  deps = [
+    ":i2c-bus",
+    "//sdk/fidl/fuchsia.hardware.i2c:fuchsia.hardware.i2c_bindlib_cpp",
+    "//sdk/lib/driver/devicetree/testing:visitor-test-helper",
+    "//sdk/lib/driver/devicetree/visitors:registry",
+    "//sdk/lib/driver/devicetree/visitors/default/bind-property",
+    "//sdk/lib/driver/devicetree/visitors/default/mmio",
+    "//userspace/devices/bind/fuchsia:fuchsia_cpp",
+    "//userspace/devices/bind/fuchsia.platform:fuchsia.platform_cpp",
+    "//userspace/lib/ddk:ddk-metadata-headers",
+    "//userspace/lib/fxl/test:gtest_main",
+  ]
+}
+
+dtb("i2c-dtb") {
+  sources = [ "test/dts/i2c.dts.S" ]
+}
+
+resource("i2c-dtb-file") {
+  sources = get_target_outputs(":i2c-dtb")
+  outputs = [ "test-data/{{source_file_part}}" ]
+  deps = [ ":i2c-dtb" ]
+}
+
+fuchsia_unittest_package("i2c-bus-visitor-test") {
+  component_name = "i2c-bus-visitor-test"
+  deps = [
+    ":i2c-bus-visitor-test-bin",
+    ":i2c-dtb-file",
+  ]
+}

@@ -1,0 +1,60 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+rustc_library("lib") {
+  name = "sdk"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//release/sdk/meta:rust",
+    "//userspace/developer/ffx/lib/errors:lib",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:tracing",
+  ]
+
+  test_deps = [
+    "//userspace/lib/fuchsia",
+    "//third_party/rust_crates:regex",
+    "//third_party/rust_crates:tempfile",
+  ]
+
+  rustenv = [ "SMOS_SDK_MILESTONE=$smos_sdk_milestone" ]
+
+  sources = [ "src/lib.rs" ]
+
+  inputs = [
+    "test_data/core-sdk-root/host_arm64/gen/tools/symbol-index/symbol_index_sdk.meta.json",
+    "test_data/core-sdk-root/sdk/manifest/core",
+    "test_data/core-sdk-root/host_x64/sdk/manifest/host_tools_used_by_ffx_action_during_build",
+    "test_data/core-sdk-root/host_arm64/sdk/manifest/host_tools_used_by_ffx_action_during_build",
+    "test_data/core-sdk-root/host_x64/gen/src/developer/ffx/plugins/assembly/sdk.meta.json",
+    "test_data/core-sdk-root/host_x64/gen/src/developer/debug/zxdb/zxdb_sdk.meta.json",
+    "test_data/core-sdk-root/host_x64/gen/tools/symbol-index/symbol_index_sdk_legacy.meta.json",
+    "test_data/core-sdk-root/host_x64/gen/tools/symbol-index/symbol_index_sdk.meta.json",
+    "test_data/release-sdk-root/fidl/fuchsia.data/meta.json",
+    "test_data/release-sdk-root/meta/manifest.json",
+    "test_data/release-sdk-root/tools/ffx_tools/ffx-assembly-meta.json",
+    "test_data/release-sdk-root/tools/zxdb-meta.json",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":lib_test" ]
+}
+
+group("sdk") {
+  testonly = true
+
+  deps = [
+    ":lib",
+    ":tests",
+  ]
+}

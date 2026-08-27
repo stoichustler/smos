@@ -1,0 +1,40 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+rustc_library("clonable_error") {
+  with_unit_tests = true
+
+  visibility = [
+    ":*",
+    ":tests",
+    "//userspace/fonts:*",
+    "//userspace/fonts/manifest:*",
+    "//userspace/sys/component_manager:*",
+    "//userspace/sys/component_manager/lib/*",
+    "//userspace/sys/lib/component_id_index:*",
+    "//userspace/sys/lib/elf_runner:*",
+    "//userspace/sys/lib/routing:*",
+  ]
+
+  edition = "2021"
+
+  deps = [
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:thiserror",
+  ]
+
+  sources = [ "src/lib.rs" ]
+}
+
+fuchsia_unittest_package("clonable_error_tests") {
+  deps = [ ":clonable_error_test" ]
+}
+
+group("tests") {
+  testonly = true
+  public_deps = [ ":clonable_error_tests" ]
+}

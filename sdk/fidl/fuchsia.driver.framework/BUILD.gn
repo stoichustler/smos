@@ -1,0 +1,35 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.driver.framework") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Driver SDK"
+  api = "fuchsia.driver.framework.api"
+
+  sources = [
+    "composite_node_spec.fidl",
+    "driver.fidl",
+    "driver_info.fidl",
+    "driver_start_args.fidl",
+    "overview.fidl",
+    "topology.fidl",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.component",
+    "//sdk/fidl/fuchsia.component.decl",
+    "//sdk/fidl/fuchsia.component.runner",
+    "//sdk/fidl/fuchsia.data",
+    "//sdk/fidl/fuchsia.device.fs",
+    "//sdk/fidl/fuchsia.io",
+    "//sdk/fidl/fuchsia.url",
+  ]
+  enable_hlcpp = true
+  enable_rust_next = true
+  enable_rust_drivers = true
+  contains_drivers = true
+}

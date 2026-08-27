@@ -1,0 +1,52 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+assert(is_host || is_fidl_toolchain,
+       "fuchsia.developer.ffx is only to be used for host tool communication")
+
+_sources = [
+  "daemon.fidl",
+  "echo.fidl",
+  "fastboot.fidl",
+  "mdns.fidl",
+  "overview.fidl",
+  "repo.fidl",
+  "target.fidl",
+  "testing.fidl",
+  "tracing.fidl",
+  "tunnel.fidl",
+]
+
+_public_deps = [
+  "//sdk/fidl/fuchsia.buildinfo",
+  "//sdk/fidl/fuchsia.developer.ffxdaemonlifecycle",
+  "//sdk/fidl/fuchsia.developer.remotecontrol",
+  "//sdk/fidl/fuchsia.io",
+  "//sdk/fidl/fuchsia.net",
+  "//sdk/fidl/fuchsia.tracing.controller",
+  "//sdk/fidl/fuchsia.version",
+  "//zircon/vdso/zx",
+]
+
+# AGIS is an optional ffx protocol. The compact SVE image does not build the
+# AGIS daemon/plugin, so avoid pulling its GPU FIDL dependency into ffx's
+# common host tool. Other products keep the complete protocol surface.
+if (!smos_minimal_assembly) {
+  _sources += [ "agis.fidl" ]
+  _public_deps += [ "//sdk/fidl/fuchsia.gpu.agis" ]
+}
+
+fidl("fuchsia.developer.ffx") {
+  sources = _sources
+  public_deps = _public_deps
+
+  visibility = [
+    "//release/sdk/meta:*",
+    "//tools/funnel/*",
+    "//userspace/developer/ffx/*",
+    "//userspace/sys/pkg/lib/*",
+  ]
+}

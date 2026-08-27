@@ -1,0 +1,20 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.net") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Netstack"
+
+  api = "fuchsia.net.api"
+  sources = [
+    "net.fidl",
+    "overview.fidl",
+    "socket.fidl",
+  ]
+  enable_banjo = true
+  enable_hlcpp = true
+}

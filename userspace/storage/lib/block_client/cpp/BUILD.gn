@@ -1,0 +1,168 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/test.gni")
+
+group("tests") {
+  testonly = true
+  deps = [ ":block_client_test_pkg" ]
+}
+
+# Contains just the BlockDevice interface, but not the concrete implementation (RemoteBlockDevice).
+# This also includes Reader and Writer which are simple wrappers around the interface.
+source_set("interface") {
+  sources = [
+    "block_device.cc",
+    "block_device.h",
+    "reader.cc",
+    "reader.h",
+    "writer.cc",
+    "writer.h",
+  ]
+  public_deps = [
+    # For storage/buffer/...
+    "//zircon/system/ulib/storage/buffer",
+
+    # For fidl/fuchsia.../wire.h
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.hardware.block:fuchsia.hardware.block_cpp",
+    "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp",
+
+    # For lib/zx/...
+    "//zircon/system/ulib/zx",
+
+    # For lib/fzl/owned-vmo-mapper.h
+    "//zircon/system/ulib/fzl",
+  ]
+  deps = [ "//zircon/third_party/ulib/safemath" ]
+}
+
+static_library("cpp") {
+  public = [
+    "block_group_registry.h",
+    "client.h",
+    "pass_through_read_only_device.h",
+    "remote_block_device.h",
+  ]
+  sources = [
+    "block_group_registry.cc",
+    "client.cc",
+    "remote_block_device.cc",
+  ]
+
+  public_deps = [
+    ":interface",
+
+    # fake_block_device.h has #include <range/range.h>.
+    "//zircon/system/ulib/range",
+
+    # fake_block_device.h has #include <storage-metrics/block-metrics.h>.
+    "//userspace/storage/lib/storage-metrics",
+
+    # client.h has #include <storage/buffer/vmoid_registry.h>.
+    "//zircon/system/ulib/storage/buffer",
+
+    # client.h has #include <lib/zx/fifo.h>.
+    "//zircon/system/ulib/zx",
+  ]
+  deps = [
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.hardware.block:fuchsia.hardware.block_cpp",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/component/incoming/cpp",
+    "//sdk/lib/fdio",
+    "//userspace/lib/ddk",
+    "//userspace/storage/lib/vfs/cpp",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/fdio-caller",
+    "//zircon/system/ulib/sync",
+    "//zircon/system/ulib/zx",
+    "//zircon/third_party/ulib/safemath",
+  ]
+}
+
+static_library("fake_device") {
+  testonly = true
+  public = [ "fake_block_device.h" ]
+  sources = [ "fake_block_device.cc" ]
+  public_deps = [
+    ":cpp",
+    "//userspace/storage/lib/storage-metrics",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/range",
+    "//zircon/system/ulib/storage/buffer",
+    "//zircon/system/ulib/zx",
+  ]
+  deps = [
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.hardware.block:fuchsia.hardware.block_cpp",
+    "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/storage/fvm",
+    "//zircon/system/ulib/range",
+    "//zircon/system/ulib/storage/buffer",
+  ]
+}
+
+test("block_client_unit_test") {
+  if (is_fuchsia) {
+    fdio_config = [ "//release/config/fuchsia:fdio_config" ]
+    if (configs + fdio_config - fdio_config != configs) {
+      configs -= fdio_config
+    }
+  }
+  sources = [
+    "block_group_registry_unittest.cc",
+    "fake_block_device_unittest.cc",
+    "reader_unittest.cc",
+    "remote_block_device_unittest.cc",
+    "writer_unittest.cc",
+  ]
+
+  deps = [
+    ":cpp",
+    ":fake_device",
+    "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp_testing",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp_testing",
+    "//sdk/lib/async-loop",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/fdio",
+    "//userspace/devices/lib/block",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/storage/fvm",
+    "//userspace/storage/lib/storage-metrics",
+    "//zircon/system/ulib/fzl",
+    "//zircon/system/ulib/range",
+  ]
+}
+
+test("block_client_ramdisk_test") {
+  sources = [ "ramdisk_test.cc" ]
+  deps = [
+    ":cpp",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/storage/testing:storage_driver_test_support",
+    "//userspace/storage/testing/driver_test_realm",
+  ]
+}
+
+fuchsia_unittest_component("block_client_unit_test_component") {
+  component_name = "block_client_unit_test"
+  deps = [ ":block_client_unit_test" ]
+}
+
+fuchsia_unittest_component("block_client_ramdisk_test_component") {
+  component_name = "block_client_ramdisk_test"
+  deps = [ ":block_client_ramdisk_test" ]
+}
+
+fuchsia_test_package("block_client_test_pkg") {
+  package_name = "block_client_tests"
+  test_components = [
+    ":block_client_unit_test_component",
+    ":block_client_ramdisk_test_component",
+  ]
+}

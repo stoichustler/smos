@@ -1,0 +1,22 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.fdomain") {
+  sdk_area = "Developer"
+  sources = [
+    "channel.fidl",
+    "event.fidl",
+    "event_pair.fidl",
+    "protocol.fidl",
+    "socket.fidl",
+  ]
+  public_deps = [ "//zircon/vdso/zx" ]
+  excluded_checks = [ "vector-bounds-not-specified" ]
+  experimental_flags = [
+    "allow_arbitrary_error_types",
+    "no_resource_attribute",
+  ]
+}

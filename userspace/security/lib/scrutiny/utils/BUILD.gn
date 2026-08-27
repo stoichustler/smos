@@ -1,0 +1,168 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/rust/rustc_test.gni")
+import("//release/testing/host_test_data.gni")
+import("//release/zircon/tools.gni")
+
+if (is_host) {
+  template("scrutiny_utils_blobfs_testdata") {
+    assert(defined(invoker.blobs),
+           "scrutiny_utils_blobfs_testdata() requires blobs")
+    assert(defined(invoker.blobfs_manifest),
+           "scrutiny_utils_blobfs_testdata() requires blobfs_manifest")
+    action(target_name) {
+      script = blobfs_tool_path
+      output = "$target_out_dir/$target_name/$target_name.blk"
+      args = [
+        "--compress",
+        rebase_path(output, root_build_dir),
+        "create",
+        "--manifest",
+        rebase_path(invoker.blobfs_manifest, root_build_dir),
+      ]
+      deps = [ blobfs_tool_target ]
+      inputs = [ invoker.blobfs_manifest ] + invoker.blobs
+      outputs = [ output ]
+    }
+  }
+
+  scrutiny_utils_blobfs_testdata("alpha_beta_blobfs") {
+    blobs = [
+      "testdata/alpha",
+      "testdata/beta",
+    ]
+    blobfs_manifest = "testdata/blob.alpha_beta.manifest"
+  }
+
+  scrutiny_utils_blobfs_testdata("beta_gamma_blobfs") {
+    blobs = [
+      "testdata/beta",
+      "testdata/gamma",
+    ]
+    blobfs_manifest = "testdata/blob.beta_gamma.manifest"
+  }
+
+  host_test_data("testdata") {
+    alpha_beta_blobfs = get_label_info(":alpha_beta_blobfs", "target_out_dir") +
+                        "/alpha_beta_blobfs/alpha_beta_blobfs.blk"
+    beta_gamma_blobfs = get_label_info(":beta_gamma_blobfs", "target_out_dir") +
+                        "/beta_gamma_blobfs/beta_gamma_blobfs.blk"
+    deps = [
+      ":alpha_beta_blobfs",
+      ":beta_gamma_blobfs",
+    ]
+    sources = [
+      "testdata/alpha",
+      "testdata/beta",
+      "testdata/delta",
+      "testdata/gamma",
+      alpha_beta_blobfs,
+      beta_gamma_blobfs,
+    ]
+    outputs = [ "$target_out_dir/testdata/{{source_file_part}}" ]
+  }
+
+  rustc_library("utils") {
+    name = "scrutiny_utils"
+    with_unit_tests = true
+    edition = "2021"
+    visibility = [
+      "//userspace/developer/ffx/plugins/scrutiny/*",
+      "//userspace/security/lib/scrutiny/*",
+    ]
+    deps = [
+      "//userspace/lib/fuchsia-url",
+      "//userspace/sys/pkg/lib/far/rust:fuchsia-archive",
+      "//userspace/sys/pkg/lib/fuchsia-hash",
+      "//userspace/sys/pkg/lib/fuchsia-merkle",
+      "//third_party/rust_crates:anyhow",
+      "//third_party/rust_crates:bincode",
+      "//third_party/rust_crates:byteorder",
+      "//third_party/rust_crates:difference",
+      "//third_party/rust_crates:hex",
+      "//third_party/rust_crates:libc",
+      "//third_party/rust_crates:log",
+      "//third_party/rust_crates:pathdiff",
+      "//third_party/rust_crates:serde",
+      "//third_party/rust_crates:serde_json",
+      "//third_party/rust_crates:tempfile",
+      "//third_party/rust_crates:thiserror",
+    ]
+
+    test_deps = [
+      "//userspace/lib/fuchsia",
+      "//third_party/rust_crates:maplit",
+    ]
+
+    non_rust_deps = [
+      "//userspace/lib/chunked-compression",
+      "//userspace/security/lib/scrutiny/utils/ffi",
+      "//third_party/zstd",
+    ]
+
+    sources = [
+      "src/artifact.rs",
+      "src/blobfs.rs",
+      "src/blobfs_export.rs",
+      "src/bootfs.rs",
+      "src/build_checks.rs",
+      "src/fs.rs",
+      "src/fvm.rs",
+      "src/golden.rs",
+      "src/io/mod.rs",
+      "src/io/u64_arithmetic.rs",
+      "src/key_value.rs",
+      "src/lib.rs",
+      "src/package.rs",
+      "src/path.rs",
+      "src/url.rs",
+      "src/usage.rs",
+      "src/zbi.rs",
+      "src/zstd.rs",
+    ]
+  }
+
+  config("test_config") {
+    testdata_dir = get_label_info(":testdata($host_toolchain)",
+                                  "target_out_dir") + "/testdata"
+    rustenv = [ "TESTDATA_DIR=" + rebase_path(testdata_dir, root_build_dir) ]
+  }
+
+  rustc_test("integration_tests") {
+    source_root = "test/lib.rs"
+    sources = [ "test/lib.rs" ]
+    edition = "2021"
+    inputs = [
+      "testdata/alpha",
+      "testdata/beta",
+      "testdata/gamma",
+      "testdata/delta",
+    ]
+
+    configs += [ ":test_config" ]
+
+    deps = [
+      ":testdata($host_toolchain)",
+      ":utils($host_toolchain)",
+      "//userspace/sys/pkg/lib/fuchsia-merkle",
+    ]
+
+    non_rust_deps = [
+      "//userspace/lib/chunked-compression",
+      "//userspace/security/lib/scrutiny/utils/ffi",
+      "//third_party/zstd",
+    ]
+  }
+}
+
+group("tests") {
+  testonly = true
+  public_deps = [
+    ":integration_tests($host_toolchain)",
+    ":utils_test($host_toolchain)",
+  ]
+}

@@ -1,0 +1,27 @@
+# Copyright 2026 The Fuchsia Authors.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/test.gni")
+
+_deps = [
+  "//sdk/fidl/fuchsia.kernel:fuchsia.kernel_cpp",
+  "//sdk/lib/component/incoming/cpp",
+  "//zircon/system/ulib/zx",
+]
+
+test("virtcheck_test") {
+  sources = [
+    "main.cc",
+    "main_test.cc",
+  ]
+  defines = [ "VIRTCHECK_NO_MAIN=1" ]
+  deps = _deps + [ "//zircon/system/ulib/zxtest" ]
+}
+
+executable("virtcheck") {
+  output_name = "virtcheck"
+  sources = [ "main.cc" ]
+  deps = _deps
+  visibility = [ "//platform/products/smos_boot:*" ]
+}

@@ -1,0 +1,10 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/images/args.gni")
+import("//release/product.gni")
+import("//userspace/storage/fshost/generated_fshost_config.gni")
+
+supports_fastboot_fvm =
+    !fxfs_blob && fvm_partition != "" && !use_bringup_assembly

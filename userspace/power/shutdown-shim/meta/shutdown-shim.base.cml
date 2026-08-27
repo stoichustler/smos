@@ -1,0 +1,41 @@
+// Copyright 2024 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+    include: [
+        "inspect/client.shard.cml",
+        "syslog/client.shard.cml",
+    ],
+    capabilities: [
+        { protocol: "fuchsia.hardware.power.statecontrol.Admin" },
+        { protocol: "fuchsia.hardware.power.statecontrol.RebootMethodsWatcherRegister" },
+        { protocol: "fuchsia.power.CollaborativeRebootInitiator" },
+        { protocol: "fuchsia.power.internal.CollaborativeRebootScheduler" },
+        { protocol: "fuchsia.system.state.SystemStateTransition" },
+    ],
+    use: [
+        {
+            protocol: [
+                "fuchsia.boot.WriteOnlyLog",
+                "fuchsia.power.broker.Topology",
+                "fuchsia.sys2.SystemController",
+            ],
+        },
+        {
+            protocol: [ "fuchsia.power.system.ActivityGovernor" ],
+            availability: "optional",
+        },
+    ],
+    expose: [
+        {
+            protocol: [
+                "fuchsia.hardware.power.statecontrol.Admin",
+                "fuchsia.hardware.power.statecontrol.RebootMethodsWatcherRegister",
+                "fuchsia.power.CollaborativeRebootInitiator",
+                "fuchsia.power.internal.CollaborativeRebootScheduler",
+                "fuchsia.system.state.SystemStateTransition",
+            ],
+            from: "self",
+        },
+    ],
+}

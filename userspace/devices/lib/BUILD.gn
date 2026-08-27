@@ -1,0 +1,31 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("lib") {
+  deps = [
+    "dev-operation",
+    "dma-buffer",
+    "driver",
+    "synchronous-executor",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    "acpi:tests",
+    "bind:tests",
+    "dev-operation:tests",
+    "dma-buffer:tests",
+    "driver:tests",
+    "driver-conformance:tests",
+    "fidl-metadata:tests",
+    "fragment-irq:tests",
+    "goldfish/pipe_io:tests",
+    "io-buffer:tests",
+    "mmio:tests",
+    "synchronous-executor:tests",
+    "thermal:tests",
+  ]
+}

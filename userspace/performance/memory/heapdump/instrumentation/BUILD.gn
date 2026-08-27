@@ -1,0 +1,90 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/cpp/sdk_shared_library.gni")
+import("//release/rust/rustc_staticlib.gni")
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":rust-tests",
+    "tests:cpp-tests",
+  ]
+}
+
+rustc_staticlib("core") {
+  visibility = [ ":*" ]
+  with_unit_tests = true
+
+  edition = "2021"
+  sources = [
+    "src/allocations_table.rs",
+    "src/hooks.rs",
+    "src/lib.rs",
+    "src/profiler.rs",
+    "src/recursion_guard.rs",
+    "src/resources_table.rs",
+    "src/waiter_list.rs",
+  ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.memory.heapdump.process:fuchsia.memory.heapdump.process_rust",
+    "//sdk/rust/zx",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-runtime",
+    "//userspace/performance/memory/heapdump/lib/heapdump_vmo",
+    "//third_party/rust_crates:lazy_static",
+  ]
+
+  test_deps = [ "//third_party/rust_crates:assert_matches" ]
+}
+
+# Processes that link to this library must call either `heapdump_bind_with_channel`
+# or `heapdump_bind_with_fdio` themselves.
+sdk_shared_library("instrumentation") {
+  category = "partner"
+  sdk_name = "heapdump_instrumentation"
+  output_name = "heapdump_instrumentation"
+  symbols_api = "heapdump_instrumentation.ifs"
+
+  sources = [ "bind_with_fdio.cc" ]
+  public_configs = [ ":include" ]
+  public = [
+    "include/heapdump/bind.h",
+    "include/heapdump/snapshot.h",
+    "include/heapdump/stats.h",
+  ]
+
+  deps = [
+    ":core",
+    "//sdk/fidl/fuchsia.memory.heapdump.process:fuchsia.memory.heapdump.process_cpp",
+    "//sdk/lib/fdio",
+    "//userspace/zircon/lib/zircon",
+  ]
+
+  runtime_deps = [ "//sdk/lib/fdio:fdio_sdk" ]
+  libcxx_linkage = "static"
+
+  # For each symbol that we want to export, tell the linker that:
+  #  - It must not be hidden (--retain-symbols-file)
+  #  - It must be included in the shared library (--undefined)
+  _exported_symbols_file = "exported_symbols.allowlist"
+  _exported_symbols = read_file(_exported_symbols_file, "list lines")
+  ldflags = [ "-Wl,--retain-symbols-file=" +
+              rebase_path(_exported_symbols_file, root_build_dir) ]
+  foreach(symbol, _exported_symbols) {
+    ldflags += [ "-Wl,--undefined=" + symbol ]
+  }
+}
+
+config("include") {
+  visibility = [ ":*" ]
+  include_dirs = [ "include" ]
+}
+
+fuchsia_unittest_package("rust-tests") {
+  package_name = "heapdump-instrumentation-rust-tests"
+  deps = [ ":core_test" ]
+}

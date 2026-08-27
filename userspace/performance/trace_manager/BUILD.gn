@@ -1,0 +1,101 @@
+# Copyright 2016 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+
+source_set("lib") {
+  sources = [
+    "app.cc",
+    "app.h",
+    "buffer_forwarder.cc",
+    "buffer_forwarder.h",
+    "config.cc",
+    "config.h",
+    "trace_manager.cc",
+    "trace_manager.h",
+    "trace_provider_bundle.cc",
+    "trace_provider_bundle.h",
+    "trace_session.cc",
+    "trace_session.h",
+    "tracee.cc",
+    "tracee.h",
+    "util.cc",
+    "util.h",
+  ]
+
+  deps = [
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//userspace/lib/fsl",
+    "//third_party/rapidjson",
+    "//zircon/system/ulib/trace-provider",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.tracing:fuchsia.tracing_hlcpp",
+    "//sdk/fidl/fuchsia.tracing.controller:fuchsia.tracing.controller_hlcpp",
+    "//sdk/fidl/fuchsia.tracing.provider:fuchsia.tracing.provider_hlcpp",
+    "//sdk/lib/async:async-cpp",
+    "//sdk/lib/fidl/hlcpp",
+    "//sdk/lib/fit",
+    "//sdk/lib/sys/cpp",
+    "//userspace/lib/fxl:fxl_cli",
+    "//zircon/system/ulib/trace-reader",
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+executable("bin") {
+  output_name = "trace_manager"
+
+  sources = [ "main.cc" ]
+
+  deps = [
+    ":lib",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/lib/fxl",
+  ]
+}
+
+resource("tracing.config") {
+  sources = [ "tracing.config" ]
+  outputs = [ "data/{{source_file_part}}" ]
+}
+
+# A version of trace manager that does not include the built in trace
+# providers. Mainly used in tests which need tracing and use their own routed
+# trace manager rather than the one in core.
+fuchsia_component("component_hermetic") {
+  component_name = "trace_manager"
+  manifest = "meta/trace_manager_hermetic.cml"
+  deps = [
+    ":bin",
+    ":tracing.config",
+  ]
+}
+
+fuchsia_package("package_hermetic") {
+  package_name = "trace_manager_hermetic"
+  deps = [ ":component_hermetic" ]
+}
+
+fuchsia_package_with_single_component("trace_manager") {
+  manifest = "meta/trace_manager.cml"
+  component_name = "trace_manager"
+  package_name = "trace_manager"
+  deps = [
+    ":bin",
+    ":tracing.config",
+  ]
+  visibility = [
+    ":*",
+    "//platform/bundles/assembly/*",
+  ]
+}
+
+group("trace_manager_pkg") {
+  testonly = true
+  deps = [ ":trace_manager" ]
+}

@@ -1,0 +1,97 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Please do not add more entries to this list. We plan to remove
+# abseil-cpp from the Fuchsia platform source tree once cobalt
+# moves out-of-tree.
+visibility = [
+  "$cobalt_root/*",
+  "//third_party/abseil-cpp/*",
+  "//third_party/tink/*",
+]
+
+source_set("random") {
+  public = [ "random.h" ]
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+  deps = [
+    ":distributions",
+    ":seed_sequences",
+    "internal:nonsecure_base",
+    "internal:pcg_engine",
+    "internal:pool_urbg",
+    "internal:randen_engine",
+  ]
+}
+
+source_set("distributions") {
+  sources = [
+    "discrete_distribution.cc",
+    "gaussian_distribution.cc",
+  ]
+  public = [
+    "bernoulli_distribution.h",
+    "beta_distribution.h",
+    "discrete_distribution.h",
+    "distributions.h",
+    "exponential_distribution.h",
+    "gaussian_distribution.h",
+    "log_uniform_int_distribution.h",
+    "poisson_distribution.h",
+    "uniform_int_distribution.h",
+    "uniform_real_distribution.h",
+    "zipf_distribution.h",
+  ]
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+  deps = [
+    "../base:base_internal",
+    "../base:config",
+    "../base:core_headers",
+    "../meta:type_traits",
+    "../numeric:bits",
+    "../strings",
+    "internal:distribution_caller",
+    "internal:fast_uniform_bits",
+    "internal:fastmath",
+    "internal:generate_real",
+    "internal:iostream_state_saver",
+    "internal:traits",
+    "internal:uniform_helper",
+    "internal:wide_multiply",
+  ]
+}
+
+source_set("seed_gen_exception") {
+  sources = [ "seed_gen_exception.cc" ]
+  public = [ "seed_gen_exception.h" ]
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+  deps = [ "../base:config" ]
+}
+
+source_set("seed_sequences") {
+  sources = [ "seed_sequences.cc" ]
+  public = [ "seed_sequences.h" ]
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+  deps = [
+    ":seed_gen_exception",
+    "../container:inlined_vector",
+    "../types:span",
+    "internal:nonsecure_base",
+    "internal:pool_urbg",
+    "internal:salted_seed_seq",
+    "internal:seed_material",
+  ]
+}
+
+source_set("bit_gen_ref") {
+  public = [ "bit_gen_ref.h" ]
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+  deps = [
+    ":random",
+    "../base:core_headers",
+    "../base:fast_type_id",
+    "../meta:type_traits",
+    "internal:distribution_caller",
+    "internal:fast_uniform_bits",
+  ]
+}

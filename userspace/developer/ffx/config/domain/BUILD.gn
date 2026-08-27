@@ -1,0 +1,76 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+import("//release/testing/host_test_data.gni")
+
+assert(is_host, "ffx_config_domain is for use with the host toolchain only")
+
+rustc_library("lib") {
+  name = "ffx_config_domain"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  visibility = [
+    "//userspace/developer/ffx/config/*",
+
+    # TODO(https://fxbug.dev/386416011): Remove fuchsia-sdk-run
+    "//tools/fuchsia-sdk-run:*",
+  ]
+
+  sources = [
+    "src/config_domain.rs",
+    "src/file_states.rs",
+    "src/fuchsia_env.rs",
+    "src/lib.rs",
+  ]
+
+  deps = [
+    "//userspace/developer/ffx/lib/sdk:lib",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:itertools",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:serde_json5",
+    "//third_party/rust_crates:sha2",
+    "//third_party/rust_crates:thiserror",
+    "//third_party/rust_crates:toml",
+    "//third_party/rust_crates:tracing",
+  ]
+
+  test_deps = [
+    ":test_data",
+    "//userspace/lib/fuchsia",
+    "//third_party/rust_crates:assert_matches",
+  ]
+
+  _test_data_path = rebase_path("//userspace/developer/ffx/config/domain/test_data",
+                                "$root_out_dir/..")
+  rustenv = [ "TEST_DATA_PATH=$_test_data_path" ]
+}
+
+host_test_data("test_data") {
+  sources = [
+    "test_data/basic_example/fuchsia_env.toml",
+    "test_data/basic_example/stuff/keep-me.txt",
+    "test_data/build_dir_path_ref/build-dir-ref",
+    "test_data/build_dir_path_ref/build-dir/build-dir-config.json",
+    "test_data/build_dir_path_ref/fuchsia_env.toml",
+    "test_data/conflicting_files/fuchsia_env.json5",
+    "test_data/conflicting_files/fuchsia_env.toml",
+    "test_data/path_refs/empty-path-ref",
+    "test_data/path_refs/path-ref-to-absolute",
+    "test_data/path_refs/path-ref-to-relative",
+    "test_data/rfc_example/.build-dir",
+    "test_data/rfc_example/fuchsia_env.toml",
+    "test_data/rfc_example/out/fuchsia_build_config.json",
+    "test_data/rfc_example/out/sdk/manifest/core",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":lib_test" ]
+}

@@ -1,0 +1,26 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("tests") {
+  testonly = true
+
+  deps = [
+    "async-helpers/cpp:tests",
+    "compat:tests",
+    "component/cpp:tests",
+    "component/rust:tests",
+    "devfs:tests",
+    "devicetree:tests",
+    "fake-bti/cpp:tests",
+    "fake-mmio-reg/cpp:tests",
+    "fake-object/cpp:tests",
+    "fake-resource/cpp:tests",
+    "metadata/cpp:tests",
+    "mock-mmio-range/cpp:tests",
+    "mock-mmio/cpp:tests",
+    "platform-device/cpp:tests",
+    "power/cpp:tests",
+    "runtime/rust:tests",
+  ]
+}

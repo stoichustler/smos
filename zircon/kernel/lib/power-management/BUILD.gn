@@ -1,0 +1,78 @@
+# Copyright 2024 The Fuchsia Authors
+#
+# Use of this source code is governed by a MIT-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/MIT
+
+import("//release/cpp/library_headers.gni")
+import("//release/test.gni")
+
+library_headers("headers") {
+  headers = [
+    "lib/power-management/energy-model.h",
+    "lib/power-management/power-state.h",
+    "lib/power-management/power-level-controller.h",
+  ]
+
+  public_deps = [
+    "//sdk/lib/stdcompat",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/zx",
+  ]
+
+  if (is_kernel) {
+    headers += [
+      "lib/power-management/port-power-level-controller.h",
+      "lib/power-management/kernel-registry.h",
+    ]
+    public_deps += [ "//zircon/kernel/object" ]
+  }
+}
+
+source_set("power-management") {
+  sources = [
+    "energy-model.cc",
+    "power-state.cc",
+  ]
+  public_deps = [ ":headers" ]
+  deps = [ "//zircon/system/ulib/fbl" ]
+  if (is_kernel) {
+    sources += [
+      "kernel-registry.cc",
+      "port-power-level-controller.cc",
+    ]
+    deps += [ "//zircon/kernel/lib/ktl" ]
+  }
+}
+
+group("tests") {
+  if (is_kernel) {
+    deps = [ ":power-management-kunittests" ]
+  } else {
+    testonly = true
+    deps = [ ":power-management-unittests($host_toolchain)" ]
+  }
+}
+
+if (is_kernel) {
+  source_set("power-management-kunittests") {
+    sources = [ "power-management-tests.cc" ]
+    deps = [
+      ":power-management",
+      "//zircon/kernel/lib/unittest",
+    ]
+  }
+}
+
+test("power-management-unittests") {
+  sources = [
+    "energy-model-test.cc",
+    "power-state-test.cc",
+    "test-helper.cc",
+  ]
+  deps = [
+    ":power-management",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//third_party/googletest:gtest",
+  ]
+}

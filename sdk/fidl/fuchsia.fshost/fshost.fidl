@@ -1,0 +1,116 @@
+// Copyright 2019 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+@available(added=HEAD)
+library fuchsia.fshost;
+
+using zx;
+using fuchsia.fxfs;
+using fuchsia.hardware.block;
+using fuchsia.io;
+using fuchsia.storage.partitions;
+
+type MountOptions = resource table {
+    1: read_only bool;
+    /// [DEPRECATED] Metrics are always enabled now.
+    // TODO(https://fxbug.dev/42172184): Remove.
+    2: collect_metrics bool;
+    3: verbose bool;
+    4: write_compression_algorithm string:32;
+};
+
+/// Manages fshost lifecycle
+@discoverable
+closed protocol Admin {
+    /// Mounts the filesystem on the block device. The filesystem will be mounted in /fs/mnt/<name>
+    /// (in fshost's outgoing directory). This may or may not be supported depending on fshost
+    /// configuration.
+    strict Mount(resource struct {
+        device client_end:fuchsia.hardware.block.Block;
+        name string:fuchsia.io.MAX_FILENAME;
+        options MountOptions;
+    }) -> () error zx.Status;
+
+    /// Unmounts a previously mounted filesystem.
+    strict Unmount(struct {
+        name string:fuchsia.io.MAX_FILENAME;
+    }) -> () error zx.Status;
+
+    /// Returns the device path for the filesystem with the given fs_id.
+    strict GetDevicePath(struct {
+        fs_id uint64;
+    }) -> (struct {
+        path fuchsia.io.Path;
+    }) error zx.Status;
+
+    /// Writes `filename` into the data partition with contents from `payload`, formatting the data
+    /// partition if it isn't already formatted.  Overwrites file if it already exists.
+    ///
+    /// This can only be called while the data partition isn't already mounted, which is typically
+    /// in recovery builds where fshost is running with the `ramdisk_image` flag set.
+    strict WriteDataFile(resource struct {
+        filename fuchsia.io.Path;
+        payload zx.Handle:VMO;
+    }) -> () error zx.Status;
+
+    /// Reprovision the first non-ramdisk FVM volume, and format/mount the blob partition.
+    /// The formatted Blobfs instance can be accessed via the client end of `blobfs_root`; if no
+    /// handle is provided, then blobfs won't be formatted.
+    ///
+    /// If fxblob is configured, blob_creator will be connected with the fxfs BlobCreator protocol,
+    /// which should be used instead of creating blobs in the `blobfs_root`. `blobfs_root` will
+    /// still be connected and can be used to read blobs. If fxblob is configured, but no handle is
+    /// provided for blob_creator or for blobfs_root, the blob volume won't be formatted. If a
+    /// handle is provided for blob_creator but fxblob is not configured, the channel will be
+    /// closed.
+    ///
+    /// This function will pause the fshost block watcher regardless of success or failure.
+    /// Requires fshost to be started with the `ramdisk_image` config option set to true.
+    ///
+    /// **WARNING**: This will cause irreversible data loss. Use with caution.
+    ///
+    /// TODO(https://fxbug.dev/42063480): This function unbinds all child drivers of the volume to be wiped.
+    /// This can race with the fshost block device manager, which attempts to bind the FVM driver
+    /// and unseal the zxcrypt volume.
+    strict WipeStorage(resource struct {
+        blobfs_root server_end:<fuchsia.io.Directory, optional>;
+        blob_creator server_end:<fuchsia.fxfs.BlobCreator, optional>;
+    }) -> () error zx.Status;
+
+    /// Wipes the data volume which will get reinitialised upon next boot.  This is not
+    /// cryptographically secure; the caller should take care to reset hardware keys.
+    strict ShredDataVolume() -> () error zx.Status;
+
+    /// Returns whether fshost is configured to use storage-host.
+    // TODO(https://fxbug.dev/339491886): Remove once storage-host is always enabled.
+    strict StorageHostEnabled() -> (struct {
+        enabled bool;
+    });
+};
+
+/// Special functionality that is only intended to be used in recovery and device bringup.  All
+/// methods require fuchsia.fshost.Netboot to be set, unless otherwise indicated.
+@discoverable
+closed protocol Recovery {
+    /// Wipes and re-initializes the system partition table.  This is a destructive operation!
+    strict InitSystemPartitionTable(struct {
+        partitions
+                vector<fuchsia.storage.partitions.PartitionInfo>:fuchsia.storage.partitions.MAX_PARTITIONS;
+    }) -> () error zx.Status;
+};
+
+/// Provides access to the volume which will be used by Starnix to store its data.
+@discoverable
+closed protocol StarnixVolumeProvider {
+    /// Mounts the main starnix volume using `crypt`, creating the volume if it does not already
+    /// exist. `exposed_dir` will be connected to the exposed directory of the mounted starnix
+    /// volume.
+    strict Mount(resource struct {
+        crypt client_end:fuchsia.fxfs.Crypt;
+        exposed_dir server_end:fuchsia.io.Directory;
+    }) -> () error zx.Status;
+
+    /// Shuts down the main starnix volume. Fails if the starnix volume was not mounted.
+    // TODO(https://fxbug.dev/392147351): Consider reusing Admin.Shutdown.
+    strict Unmount() -> () error zx.Status;
+};

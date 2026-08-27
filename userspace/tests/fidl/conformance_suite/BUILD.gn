@@ -1,0 +1,47 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("conformance_fidl") {
+  name = "test.conformance"
+
+  testonly = true
+
+  enable_hlcpp = true
+
+  sources = [
+    "//userspace/tests/fidl/conformance_suite/alignment.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/arrays_and_vectors.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/bits_flexible.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/bits_strict.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/empty_struct.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/enums_flexible.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/enums_strict.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/golden.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/handles.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/memcpy_compatibility.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/mix_and_match.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/optionals.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/padding.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/primitives.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/protocol_endpoints.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/recursive_depth.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/recursive_types.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/strings.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/structs.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/tables.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/transformer.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/union.test.fidl",
+    "//userspace/tests/fidl/conformance_suite/vectors.test.fidl",
+  ]
+
+  sources += [
+    "ported_from_walker_handles.test.fidl",
+    "ported_from_walker_strings.test.fidl",
+    "ported_from_walker_vectors.test.fidl",
+  ]
+
+  public_deps = [ "//zircon/vdso/zx" ]
+}

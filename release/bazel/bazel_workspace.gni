@@ -1,0 +1,27 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Location of the main bazel top directory that contains the workspace
+# and output_base directories, relative to the Ninja output directory.
+# See //release/bazel/config/README.md.
+#
+bazel_main_top_dir_rebased =
+    read_file("//release/bazel/config/main_workspace_top_dir", "trim string")
+
+# The Bazel main top directory, as a GN path (e.g. `//out/default/bazel`)
+# derived from bazel_main_top_dir_rebased.
+bazel_main_top_dir =
+    "//" + rebase_path(bazel_main_top_dir_rebased, "//", root_build_dir)
+
+# Location of the bazel launcher script, relative to the source root
+bazel_launcher = bazel_main_top_dir + "/bazel"
+
+# Location of the Bazel workspace, relative to the source root.
+bazel_workspace_dir = bazel_main_top_dir + "/workspace"
+
+# Location of the Bazel output base, relative to the source root.
+bazel_output_base = bazel_main_top_dir + "/output_base"
+
+# Location of the Bazel execroot, relative to the source root.
+bazel_execroot = bazel_output_base + "/execroot/main"

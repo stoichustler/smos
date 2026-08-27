@@ -1,0 +1,27 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.weave") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Unknown"
+
+  sources = [
+    "auth.fidl",
+    "bootstrap.fidl",
+    "common.fidl",
+    "overview.fidl",
+    "weavestack.fidl",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.mem",
+    "//sdk/fidl/fuchsia.net",
+    "//sdk/fidl/fuchsia.wlan.policy",
+  ]
+
+  enable_hlcpp = true
+}

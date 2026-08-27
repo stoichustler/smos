@@ -1,0 +1,41 @@
+# Copyright 2016 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.net.mdns") {
+  excluded_checks = [
+    # Some protocols are implemented by the client, so they have client-initiated events that
+    # should not be prefixed by 'On'.
+    "event-names-must-start-with-on",
+
+    # 'Service' is used in this context to refer to DNS-SD services, not FIDL services.
+    "protocol-name-includes-service",
+
+    "invalid-case-for-decl-name",
+  ]
+
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Netstack"
+
+  sources = [
+    "common.fidl",
+    "host_name_resolver.fidl",
+    "host_name_subscriber.fidl",
+    "mdns.fidl",
+    "overview.fidl",
+    "proxy_host_publisher.fidl",
+    "service_instance_publisher.fidl",
+    "service_instance_resolver.fidl",
+    "service_subscriber.fidl",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.net",
+    "//zircon/vdso/zx",
+  ]
+
+  enable_hlcpp = true
+}

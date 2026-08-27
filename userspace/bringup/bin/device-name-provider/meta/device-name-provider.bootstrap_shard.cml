@@ -1,0 +1,45 @@
+// Copyright 2024 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+    children: [
+        {
+            name: "device_name_provider",
+            url: "fuchsia-boot:///device-name-provider#meta/device-name-provider.cm",
+        },
+    ],
+    offer: [
+        {
+            config: [ "fuchsia.network.PrimaryInterface" ],
+            from: "parent",
+            to: "#device_name_provider",
+            availability: "optional",
+        },
+        {
+            dictionary: "diagnostics",
+            from: "self",
+            to: "#device_name_provider",
+        },
+        {
+            protocol: [
+                "fuchsia.boot.Arguments",
+                "fuchsia.boot.WriteOnlyLog",
+            ],
+            from: "parent",
+            to: "#device_name_provider",
+        },
+        {
+            directory: "dev-class",
+            from: "#devfs-with-pkg",
+            as: "dev-class-network",
+            to: "#device_name_provider",
+            subdir: "network",
+        },
+    ],
+    expose: [
+        {
+            protocol: "fuchsia.device.NameProvider",
+            from: "#device_name_provider",
+        },
+    ],
+}

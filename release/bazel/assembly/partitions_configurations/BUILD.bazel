@@ -1,0 +1,153 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+load(
+    "@rules_fuchsia//fuchsia:assembly.bzl",
+    "PARTITION_TYPE",
+    "SLOT",
+    "fuchsia_bootloader_partition",
+    "fuchsia_partition",
+    "fuchsia_partitions_configuration",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+fuchsia_partition(
+    name = "zircon_a",
+    partition_name = "zircon_a",
+    slot = SLOT.A,
+    type = PARTITION_TYPE.ZBI,
+)
+
+fuchsia_partition(
+    name = "zircon_b",
+    partition_name = "zircon_b",
+    slot = SLOT.B,
+    type = PARTITION_TYPE.ZBI,
+)
+
+fuchsia_partition(
+    name = "zircon_r",
+    partition_name = "zircon_r",
+    slot = SLOT.R,
+    type = PARTITION_TYPE.ZBI,
+)
+
+fuchsia_partition(
+    name = "vbmeta_a",
+    partition_name = "vbmeta_a",
+    slot = SLOT.A,
+    type = PARTITION_TYPE.VBMETA,
+)
+
+fuchsia_partition(
+    name = "vbmeta_b",
+    partition_name = "vbmeta_b",
+    slot = SLOT.B,
+    type = PARTITION_TYPE.VBMETA,
+)
+
+fuchsia_partition(
+    name = "vbmeta_r",
+    partition_name = "vbmeta_r",
+    slot = SLOT.R,
+    type = PARTITION_TYPE.VBMETA,
+)
+
+fuchsia_partition(
+    name = "fvm",
+    partition_name = "fvm",
+    type = PARTITION_TYPE.FVM,
+)
+
+fuchsia_partition(
+    name = "fxfs",
+    partition_name = "fvm",
+    type = PARTITION_TYPE.FXFS,
+)
+
+fuchsia_bootloader_partition(
+    name = "fuchsia_esp",
+    image = "@gn_targets//release/images/flash:fuchsia_esp",
+    partition_name = "fuchsia-esp",
+    # For x64 platform there is only one bootloader and thus there is no need
+    # for multiple types and default empty string is used.
+    type = "",
+)
+
+fuchsia_bootloader_partition(
+    name = "bootloader",
+    image = "@gn_targets//release/images/flash:fuchsia_esp",
+    partition_name = "bootloader",
+    # For x64 platform there is only one bootloader and thus there is no need
+    # for multiple types and default empty string is used.
+    type = "",
+)
+
+fuchsia_partitions_configuration(
+    name = "x64",
+    bootloader_partitions = [
+        ":bootloader",
+    ],
+    hardware_revision = "x64",
+    partitions = [
+        ":zircon_a",
+        ":zircon_b",
+        ":zircon_r",
+        ":vbmeta_a",
+        ":vbmeta_b",
+        ":vbmeta_r",
+        ":fvm",
+        ":fxfs",
+    ],
+)
+
+fuchsia_partitions_configuration(
+    name = "arm64",
+    bootloader_partitions = [
+        ":fuchsia_esp",
+    ],
+    hardware_revision = "arm64",
+    partitions = [
+        ":zircon_a",
+        ":zircon_b",
+        ":zircon_r",
+        ":vbmeta_a",
+        ":vbmeta_b",
+        ":vbmeta_r",
+        ":fvm",
+    ],
+)
+
+alias(
+    name = "vim3",
+    actual = "//platform/boards/partitions/vim3",
+)
+
+fuchsia_partitions_configuration(
+    name = "riscv64",
+    hardware_revision = "riscv64",
+)
+
+fuchsia_partitions_configuration(
+    name = "pkvm-x64",
+    hardware_revision = "pkvm-x64",
+    partitions = [],
+)
+
+fuchsia_partitions_configuration(
+    name = "pkvm-arm64",
+    hardware_revision = "pkvm-arm64",
+    partitions = [],
+)
+
+fuchsia_partitions_configuration(
+    name = "default",
+    hardware_revision = "",
+)
+
+alias(
+    name = "qemu-arm64",
+    actual = ":default",
+)

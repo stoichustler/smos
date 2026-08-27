@@ -1,0 +1,18 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/go/go_library.gni")
+import("//release/go/go_test.gni")
+
+go_library("jsonutil") {
+  sources = [
+    "jsonutil.go",
+    "jsonutil_test.go",
+  ]
+}
+
+go_test("tests") {
+  library = ":jsonutil"
+  deps = [ "//third_party/golibs:github.com/google/go-cmp" ]
+}

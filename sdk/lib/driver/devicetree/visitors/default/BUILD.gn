@@ -1,0 +1,43 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/cpp/sdk_source_set.gni")
+
+group("tests") {
+  deps = [
+    "boot-metadata:tests",
+    "bti:tests",
+    "mmio:tests",
+    "smc:tests",
+  ]
+  testonly = true
+}
+
+sdk_source_set("default") {
+  sdk_name = "devicetree-default"
+  category = "internal"
+
+  public = [ "default.h" ]
+  include_base = "//sdk"
+
+  non_sdk_local_deps =
+      [ "//userspace/devices/bind/fuchsia.devicetree:fuchsia.devicetree_cpp" ]
+
+  deps = [
+    "bind-property",
+    "boot-metadata",
+    "bti",
+    "mmio",
+    "smc",
+    "//sdk/lib/driver/logging/cpp",
+    "//userspace/devices/bind/fuchsia.devicetree:fuchsia.devicetree",
+  ]
+
+  public_deps = [
+    "//sdk/lib/driver/devicetree/manager:headers",
+    "//sdk/lib/driver/devicetree/visitors:multivisitor",
+    "//sdk/lib/driver/devicetree/visitors:property-parser",
+    "//zircon/system/ulib/zx",
+  ]
+}

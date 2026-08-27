@@ -1,0 +1,138 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/go/go_binary.gni")
+import("//release/go/go_library.gni")
+import("//release/go/go_test.gni")
+
+go_library("botanist_lib") {
+  sources = [
+    "common.go",
+    "common_test.go",
+    "pkg.go",
+    "pkg_test.go",
+  ]
+  deps = [
+    ":constants",
+    ":repo",
+    "//third_party/golibs:cloud.google.com/go/storage",
+    "//tools/build",
+    "//tools/lib/gcsutil",
+    "//tools/lib/logger",
+    "//tools/lib/osmisc",
+    "//tools/lib/retry",
+    "//tools/lib/streams",
+    "//tools/lib/subprocess",
+    "//tools/net/netboot",
+    "//tools/net/tftp",
+  ]
+}
+
+go_library("repo") {
+  source_dir = "repo"
+  sources = [
+    "config.go",
+    "config_test.go",
+    "repo.go",
+    "repo_test.go",
+  ]
+  deps = [
+    "//userspace/sys/pkg/lib/repo",
+    "//third_party/golibs:github.com/theupdateframework/go-tuf",
+  ]
+}
+
+go_library("targets") {
+  source_dir = "targets"
+  sources = [
+    "auxiliary.go",
+    "auxiliary_test.go",
+    "device.go",
+    "device_test.go",
+    "emulator.go",
+    "emulator_test.go",
+    "errors.go",
+    "gce.go",
+    "gce_test.go",
+    "ip.go",
+    "target.go",
+    "target_test.go",
+  ]
+  deps = [
+    ":botanist_lib",
+    ":constants",
+    "//userspace/sys/pkg/lib/repo",
+    "//third_party/golibs:github.com/creack/pty",
+    "//third_party/golibs:github.com/kr/pretty",
+    "//third_party/golibs:golang.org/x/crypto",
+    "//third_party/golibs:golang.org/x/sync",
+    "//tools/bootserver:bootserver_lib",
+    "//tools/lib/ffxutil",
+    "//tools/lib/iomisc",
+    "//tools/lib/logger",
+    "//tools/lib/osmisc",
+    "//tools/lib/retry",
+    "//tools/lib/serial",
+    "//tools/lib/serial:constants",
+    "//tools/lib/syslog",
+    "//tools/net/mdns",
+    "//tools/net/netutil",
+    "//tools/net/sshutil",
+    "//tools/qemu",
+    "//tools/testing/testrunner:constants",
+  ]
+}
+
+go_library("main") {
+  source_dir = "cmd"
+  sources = [
+    "main.go",
+    "run.go",
+  ]
+  deps = [
+    ":botanist_lib",
+    ":constants",
+    ":targets",
+    "//third_party/golibs:github.com/google/subcommands",
+    "//third_party/golibs:golang.org/x/sync",
+    "//tools/lib/color",
+    "//tools/lib/environment",
+    "//tools/lib/flagmisc",
+    "//tools/testing/runtests",
+    "//tools/testing/testrunner:constants",
+    "//tools/testing/testrunner:lib",
+  ]
+}
+
+go_binary("botanist") {
+  library = ":main"
+}
+
+go_test("botanist_lib_tests") {
+  library = ":botanist_lib"
+}
+
+go_test("botanist_repo_tests") {
+  library = ":repo"
+}
+
+go_test("botanist_targets_tests") {
+  library = ":targets"
+  deps = [ "//third_party/golibs:github.com/google/go-cmp" ]
+}
+
+go_library("constants") {
+  source_dir = "constants"
+  sources = [ "constants.go" ]
+}
+
+group("tests") {
+  testonly = true
+
+  deps = [
+    ":botanist_lib_tests",
+    ":botanist_repo_tests",
+    ":botanist_targets_tests",
+  ]
+}

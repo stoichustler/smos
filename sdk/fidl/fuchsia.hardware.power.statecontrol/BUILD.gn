@@ -1,0 +1,23 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.hardware.power.statecontrol") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Power"
+
+  api = "fuchsia.hardware.power.statecontrol.api"
+
+  sources = [
+    "admin.fidl",
+    "overview.fidl",
+    "reboot_reason.fidl",
+  ]
+
+  public_deps = [ "//zircon/vdso/zx" ]
+
+  enable_hlcpp = true
+}

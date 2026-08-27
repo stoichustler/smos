@@ -1,0 +1,214 @@
+# Copyright 2016 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/testing/cc_test_executable.gni")
+
+source_set("common") {
+  visibility = [
+    ":*",
+    "//userspace/lib/files:*",
+    "//userspace/lib/fsl/handles:*",
+    "//userspace/lib/fsl/io:*",
+    "//userspace/lib/fsl/socket:*",
+    "//userspace/lib/fsl/tasks:*",
+  ]
+
+  sources = [
+    "build_config.h",
+    "fxl_export.h",
+    "macros.h",
+  ]
+}
+
+source_set("memory") {
+  visibility = [
+    ":*",
+    "//userspace/lib/files:*",
+    "//userspace/lib/fsl/io:*",
+    "//userspace/lib/fsl/vmo:*",
+  ]
+
+  sources = [
+    "memory/ref_counted.h",
+    "memory/ref_counted_internal.h",
+    "memory/ref_ptr.h",
+    "memory/ref_ptr_internal.h",
+    "memory/unique_object.h",
+    "memory/weak_ptr.h",
+    "memory/weak_ptr_internal.cc",
+    "memory/weak_ptr_internal.h",
+  ]
+
+  public_deps = [
+    ":common",
+    "//zircon/system/public",
+  ]
+}
+
+source_set("third_party") {
+  visibility = [ ":strings" ]
+
+  sources = [
+    "third_party/icu/icu_utf.cc",
+    "third_party/icu/icu_utf.h",
+  ]
+  configs += [ "//release/config:Wno-implicit-fallthrough" ]
+}
+
+source_set("string_printf") {
+  visibility = [
+    ":*",
+    "//userspace/lib/files:*",
+    "//userspace/lib/uuid:*",
+  ]
+
+  sources = [
+    "strings/string_printf.cc",
+    "strings/string_printf.h",
+  ]
+
+  public_deps = [ ":common" ]
+}
+
+source_set("strings") {
+  visibility = [
+    ":*",
+    "//userspace/lib/files:*",
+    "//userspace/lib/uuid:*",
+  ]
+
+  sources = [
+    "strings/ascii.cc",
+    "strings/ascii.h",
+    "strings/concatenate.cc",
+    "strings/concatenate.h",
+    "strings/join_strings.h",
+    "strings/split_string.cc",
+    "strings/split_string.h",
+    "strings/string_number_conversions.cc",
+    "strings/string_number_conversions.h",
+    "strings/substitute.cc",
+    "strings/substitute.h",
+    "strings/trim.cc",
+    "strings/trim.h",
+    "strings/utf_codecs.cc",
+    "strings/utf_codecs.h",
+  ]
+
+  public_deps = [
+    ":common",
+    ":string_printf",
+    ":third_party",
+  ]
+}
+
+source_set("functional") {
+  visibility = [ ":*" ]
+
+  sources = [
+    "functional/apply.h",
+    "functional/cancelable_callback.h",
+  ]
+
+  public_deps = [
+    ":common",
+    ":memory",
+  ]
+}
+
+# Transitional target for things depending on the CLI
+# parts of fxl. Eventually CLI-specific functionality
+# will be removed from the main "fxl" target, and moved to this one.
+source_set("cli") {
+  sources = [
+    "log_settings_command_line.cc",
+    "log_settings_command_line.h",
+  ]
+
+  public_deps = [
+    ":cli_no_logging",
+    "//sdk/lib/syslog/cpp",
+  ]
+}
+
+# Command-line parsing, but without the syslog depenency.
+source_set("cli_no_logging") {
+  sources = [
+    "command_line.cc",
+    "command_line.h",
+    "observer_list.h",
+  ]
+
+  public_deps = [ ":fxl" ]
+}
+
+group("fxl_cli") {
+  public_deps = [ ":cli" ]
+}
+
+source_set("fxl") {
+  sources = [ "observer_list.h" ]
+
+  public_deps = [
+    ":common",
+    ":functional",
+    ":memory",
+    ":strings",
+    "//sdk/lib/fit",
+    "//userspace/lib/files",
+  ]
+}
+
+cc_test_executable("fxl_unittests") {
+  testonly = true
+
+  sources = [
+    "command_line_unittest.cc",
+    "functional/apply_unittest.cc",
+    "functional/cancelable_callback_unittest.cc",
+    "log_settings_command_line_unittest.cc",
+    "memory/ref_counted_unittest.cc",
+    "memory/weak_ptr_unittest.cc",
+    "observer_list_unittest.cc",
+    "strings/ascii_unittest.cc",
+    "strings/concatenate_unittest.cc",
+    "strings/join_strings_unittest.cc",
+    "strings/split_string_unittest.cc",
+    "strings/string_number_conversions_unittest.cc",
+    "strings/string_printf_unittest.cc",
+    "strings/substitute_unittest.cc",
+    "strings/trim_unittest.cc",
+    "synchronization/thread_annotations_unittest.cc",
+    "test/test_settings_unittest.cc",
+  ]
+
+  deps = [
+    ":fxl",
+    "test:gtest_main",
+    "test:test_settings",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/lib/files",
+    "//third_party/googletest:gmock",
+    "//third_party/googletest:gtest",
+  ]
+}
+
+if (is_fuchsia) {
+  import("//release/components.gni")
+
+  fuchsia_unittest_package("fxl_tests") {
+    manifest = "meta/fxl_unittests.cml"
+    deps = [ ":fxl_unittests" ]
+    test_specs = {
+      log_settings = {
+        max_severity = "FATAL"
+      }
+    }
+  }
+
+  group("tests") {
+    testonly = true
+    deps = [ ":fxl_tests" ]
+  }
+}

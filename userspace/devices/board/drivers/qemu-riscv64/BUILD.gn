@@ -1,0 +1,64 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/bind/bind.gni")
+import("//release/drivers.gni")
+
+driver_bind_rules("qemu-riscv64_bind") {
+  rules = "meta/qemu-riscv64.bind"
+  tests = "meta/bind_tests.json"
+  deps = [
+    "//sdk/fidl/fuchsia.hardware.platform.bus:fuchsia.hardware.platform.bus_bindlib",
+    "//userspace/devices/bind/fuchsia.platform",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":qemu-riscv64_bind_test" ]
+}
+
+fuchsia_cc_driver("qemu-riscv64-driver") {
+  legacy = true
+  output_name = "qemu-riscv64"
+  configs += [
+    "//release/config:all_source",
+    "//release/config/fuchsia:enable_zircon_asserts",
+  ]
+  sources = [
+    "pciroot.cc",
+    "qemu-riscv64.cc",
+    "rtc.cc",
+  ]
+  deps = [
+    ":qemu-riscv64_bind",
+    "//sdk/fidl/fuchsia.hardware.pci:fuchsia.hardware.pci_cpp",
+    "//sdk/fidl/fuchsia.hardware.platform.bus:fuchsia.hardware.platform.bus_cpp",
+    "//sdk/lib/driver/component/cpp",
+    "//sdk/lib/fit",
+    "//userspace/devices/bind/fuchsia:fuchsia_cpp",
+    "//userspace/devices/bind/fuchsia.google.platform:fuchsia.google.platform_cpp",
+    "//userspace/devices/bind/fuchsia.platform:fuchsia.platform_cpp",
+    "//userspace/devices/lib/driver",
+    "//userspace/devices/lib/driver:driver_runtime",
+    "//userspace/devices/pci/lib/pci",
+    "//userspace/lib/ddk",
+    "//userspace/lib/ddktl",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/sync:sync-cpp",
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+fuchsia_driver_component("qemu-riscv64") {
+  component_name = "qemu-riscv64"
+  deps = [ ":qemu-riscv64-driver" ]
+  info = "meta/qemu-riscv64-info.json"
+  manifest = "meta/qemu-riscv64.cml"
+}
+
+fuchsia_driver_package("package") {
+  package_name = "qemu-riscv64"
+  driver_components = [ ":qemu-riscv64" ]
+}

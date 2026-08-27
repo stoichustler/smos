@@ -1,0 +1,41 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/zircon/tools.gni")
+
+assert(is_host, "Assembly libraries are host-only")
+
+rustc_library("blobfs") {
+  edition = "2021"
+  name = "assembly_blobfs"
+  version = "0.1.0"
+  with_unit_tests = true
+
+  sources = [
+    "src/blobfs.rs",
+    "src/lib.rs",
+    "src/manifest.rs",
+  ]
+
+  deps = [
+    "//userspace/lib/assembly/tool",
+    "//userspace/lib/assembly/util",
+    "//userspace/lib/utf8_path",
+    "//userspace/sys/pkg/lib/fuchsia-hash",
+    "//userspace/sys/pkg/lib/fuchsia-merkle",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:pathdiff",
+    "//third_party/rust_crates:serde",
+  ]
+
+  test_deps = [
+    "//userspace/lib/assembly/util",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:tempfile",
+  ]
+}

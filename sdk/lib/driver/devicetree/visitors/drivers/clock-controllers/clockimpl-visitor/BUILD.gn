@@ -1,0 +1,72 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/devicetree/devicetree.gni")
+import("//release/devicetree/devicetree_visitor.gni")
+import("//release/test.gni")
+
+group("tests") {
+  deps = [ ":clockimpl-visitor-test" ]
+  testonly = true
+}
+
+devicetree_visitor("clockimpl-visitor") {
+  deps = [ ":clockimpl" ]
+}
+
+source_set("clockimpl") {
+  sources = [
+    "clockimpl-visitor.cc",
+    "clockimpl-visitor.h",
+  ]
+  deps = [
+    "//sdk/fidl/fuchsia.hardware.clock:fuchsia.hardware.clock_bindlib_cpp",
+    "//sdk/lib/driver/component/cpp:cpp",
+    "//sdk/lib/driver/devicetree/manager",
+    "//sdk/lib/driver/devicetree/visitors:registration",
+    "//sdk/lib/driver/logging/cpp",
+    "//userspace/devices/bind/fuchsia:fuchsia_cpp",
+    "//userspace/devices/bind/fuchsia.clock:fuchsia.clock_cpp",
+    "//userspace/lib/ddk",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.hardware.clockimpl:fuchsia.hardware.clockimpl_cpp",
+    "//sdk/lib/driver/devicetree/visitors:driver-visitor",
+  ]
+}
+
+test("clockimpl-visitor-test-bin") {
+  sources = [ "test/clockimpl-visitor-test.cc" ]
+  deps = [
+    ":clockimpl",
+    "//sdk/fidl/fuchsia.hardware.clock:fuchsia.hardware.clock_bindlib_cpp",
+    "//sdk/lib/driver/devicetree/testing:visitor-test-helper",
+    "//sdk/lib/driver/devicetree/visitors:registry",
+    "//sdk/lib/driver/devicetree/visitors/default/bind-property",
+    "//sdk/lib/driver/devicetree/visitors/default/mmio",
+    "//userspace/devices/bind/fuchsia:fuchsia_cpp",
+    "//userspace/devices/bind/fuchsia.clock:fuchsia.clock_cpp",
+    "//userspace/devices/bind/fuchsia.platform:fuchsia.platform_cpp",
+    "//userspace/lib/fxl/test:gtest_main",
+  ]
+}
+
+dtb("clock-dtb") {
+  sources = [ "test/dts/clock.dts.S" ]
+}
+
+resource("clock-dtb-file") {
+  sources = get_target_outputs(":clock-dtb")
+  outputs = [ "test-data/{{source_file_part}}" ]
+  deps = [ ":clock-dtb" ]
+}
+
+fuchsia_unittest_package("clockimpl-visitor-test") {
+  component_name = "clockimpl-visitor-test"
+  deps = [
+    ":clock-dtb-file",
+    ":clockimpl-visitor-test-bin",
+  ]
+}

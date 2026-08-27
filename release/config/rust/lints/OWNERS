@@ -1,0 +1,3 @@
+include /OWNERS
+include /release/OWNERS
+include /release/config/OWNERS

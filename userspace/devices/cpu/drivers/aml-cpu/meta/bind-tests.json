@@ -1,0 +1,140 @@
+[
+    {
+        "node": "power-01",
+        "tests": [
+            {
+                "name": "Match",
+                "expected": "match",
+                "device": {
+                    "fuchsia.power.POWER_DOMAIN": "fuchsia.amlogic.platform.POWER_DOMAIN.ARM_CORE_BIG",
+                    "fuchsia.hardware.power.Service": "fuchsia.hardware.power.Service.ZirconTransport"
+                }
+            }
+        ]
+    },
+    {
+        "node": "pdev",
+        "tests": [
+            {
+                "name": "Match",
+                "expected": "match",
+                "device": {
+                    "fuchsia.BIND_PROTOCOL": "fuchsia.platform.BIND_PROTOCOL.DEVICE",
+                    "fuchsia.BIND_PLATFORM_DEV_VID": "fuchsia.google.platform.BIND_PLATFORM_DEV_VID.GOOGLE",
+                    "fuchsia.BIND_PLATFORM_DEV_DID": "fuchsia.google.platform.BIND_PLATFORM_DEV_DID.GOOGLE_AMLOGIC_CPU",
+                    "fuchsia.BIND_PLATFORM_DEV_PID": "fuchsia.google.platform.BIND_PLATFORM_DEV_PID.ASTRO"
+                }
+            },
+            {
+                "name": "Match devicetree",
+                "expected": "match",
+                "device": {
+                    "fuchsia.devicetree.FIRST_COMPATIBLE": "\"amlogic,cpu\""
+                }
+            }
+        ]
+    },
+    {
+        "node": "clock-pll-div16-01",
+        "tests": [
+            {
+                "name": "Match",
+                "expected": "match",
+                "device": {
+                    "fuchsia.clock.FUNCTION": "fuchsia.clock.FUNCTION.SYS_PLL_DIV16",
+                    "fuchsia.hardware.clock.Service": "fuchsia.hardware.clock.Service.ZirconTransport"
+                }
+            }
+        ]
+    },
+    {
+        "node": "clock-cpu-div16-01",
+        "tests": [
+            {
+                "name": "Match",
+                "expected": "match",
+                "device": {
+                    "fuchsia.hardware.clock.Service": "fuchsia.hardware.clock.Service.ZirconTransport",
+                    "fuchsia.clock.FUNCTION": "fuchsia.clock.FUNCTION.SYS_CPU_DIV16"
+                }
+            }
+        ]
+    },
+    {
+        "node": "clock-cpu-scaler-01",
+        "tests": [
+            {
+                "name": "Match",
+                "expected": "match",
+                "device": {
+                    "fuchsia.hardware.clock.Service": "fuchsia.hardware.clock.Service.ZirconTransport",
+                    "fuchsia.clock.FUNCTION": "fuchsia.clock.FUNCTION.SYS_CPU_BIG_CLK"
+                }
+            }
+        ]
+    },
+    {
+        "node": "power-02",
+        "tests": [
+            {
+                "name": "Match",
+                "expected": "match",
+                "device": {
+                    "fuchsia.power.POWER_DOMAIN": "fuchsia.amlogic.platform.POWER_DOMAIN.ARM_CORE_LITTLE",
+                    "fuchsia.hardware.power.Service": "fuchsia.hardware.power.Service.ZirconTransport"
+                }
+            }
+        ]
+    },
+    {
+        "node": "clock-pll-div16-02",
+        "tests": [
+            {
+                "name": "Match",
+                "expected": "match",
+                "device": {
+                    "fuchsia.clock.FUNCTION": "fuchsia.clock.FUNCTION.SYS_PLLB_DIV16",
+                    "fuchsia.hardware.clock.Service": "fuchsia.hardware.clock.Service.ZirconTransport"
+                }
+            }
+        ]
+    },
+    {
+        "node": "clock-cpu-div16-02",
+        "tests": [
+            {
+                "name": "Match",
+                "expected": "match",
+                "device": {
+                    "fuchsia.hardware.clock.Service": "fuchsia.hardware.clock.Service.ZirconTransport",
+                    "fuchsia.clock.FUNCTION": "fuchsia.clock.FUNCTION.SYS_CPUB_DIV16"
+                }
+            }
+        ]
+    },
+    {
+        "node": "clock-cpu-scaler-02",
+        "tests": [
+            {
+                "name": "Match",
+                "expected": "match",
+                "device": {
+                    "fuchsia.hardware.clock.Service": "fuchsia.hardware.clock.Service.ZirconTransport",
+                    "fuchsia.clock.FUNCTION": "fuchsia.clock.FUNCTION.SYS_CPU_LITTLE_CLK"
+                }
+            }
+        ]
+    },
+    {
+        "node": "gpio-init",
+        "tests": [
+            {
+                "name": "Match",
+                "expected": "match",
+                "device": {
+                    "fuchsia.BIND_INIT_STEP": "fuchsia.gpio.BIND_INIT_STEP.GPIO"
+                }
+            }
+        ]
+    }
+]

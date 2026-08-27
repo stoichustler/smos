@@ -1,0 +1,118 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/devicetree/devicetree.gni")
+import("//release/devicetree/devicetree_visitor.gni")
+import("//release/test.gni")
+
+group("tests") {
+  deps = [ ":spmi-visitor-test" ]
+  testonly = true
+}
+
+devicetree_visitor("spmi") {
+  deps = [ ":spmi-visitor" ]
+}
+
+source_set("spmi-visitor") {
+  sources = [
+    "spmi-visitor.cc",
+    "spmi-visitor.h",
+  ]
+  deps = [
+    "//sdk/fidl/fuchsia.hardware.spmi:fuchsia.hardware.spmi_bindlib_cpp",
+    "//sdk/fidl/fuchsia.hardware.spmi:fuchsia.hardware.spmi_cpp",
+    "//sdk/lib/driver/component/cpp:cpp",
+    "//sdk/lib/driver/devicetree/manager",
+    "//sdk/lib/driver/devicetree/visitors:common-types",
+    "//sdk/lib/driver/devicetree/visitors:registration",
+    "//sdk/lib/driver/logging/cpp",
+    "//userspace/devices/bind/fuchsia.spmi:fuchsia.spmi_cpp",
+  ]
+  public_deps = [ "//sdk/lib/driver/devicetree/visitors:driver-visitor" ]
+}
+
+test("spmi-visitor-test-bin") {
+  sources = [ "test/spmi-visitor-test.cc" ]
+  deps = [
+    ":spmi-visitor",
+    "//sdk/fidl/fuchsia.hardware.spmi:fuchsia.hardware.spmi_bindlib_cpp",
+    "//sdk/fidl/fuchsia.hardware.spmi:fuchsia.hardware.spmi_cpp",
+    "//sdk/lib/driver/devicetree/testing:visitor-test-helper",
+    "//sdk/lib/driver/devicetree/visitors:registry",
+    "//sdk/lib/driver/devicetree/visitors/default/bind-property",
+    "//sdk/lib/driver/devicetree/visitors/default/mmio",
+    "//userspace/devices/bind/fuchsia.spmi:fuchsia.spmi_cpp",
+    "//userspace/lib/fxl/test:gtest_main",
+  ]
+}
+
+dtb("spmi-dtb") {
+  sources = [ "test/dts/spmi.dts.S" ]
+}
+
+resource("spmi-dtb-file") {
+  sources = get_target_outputs(":spmi-dtb")
+  outputs = [ "test-data/{{source_file_part}}" ]
+  deps = [ ":spmi-dtb" ]
+}
+
+dtb("spmi-sub-target-spmi-address-out-of-range-dtb") {
+  sources = [ "test/dts/spmi-sub-target-spmi-address-out-of-range.dts.S" ]
+}
+
+resource("spmi-sub-target-spmi-address-out-of-range-dtb-file") {
+  sources = get_target_outputs(":spmi-sub-target-spmi-address-out-of-range-dtb")
+  outputs = [ "test-data/{{source_file_part}}" ]
+  deps = [ ":spmi-sub-target-spmi-address-out-of-range-dtb" ]
+}
+
+dtb("spmi-reference-target-dtb") {
+  sources = [ "test/dts/spmi-reference-target.dts.S" ]
+}
+
+resource("spmi-reference-target-dtb-file") {
+  sources = get_target_outputs(":spmi-reference-target-dtb")
+  outputs = [ "test-data/{{source_file_part}}" ]
+  deps = [ ":spmi-reference-target-dtb" ]
+}
+
+dtb("spmi-two-nodes-reference-sub-target-dtb") {
+  sources = [ "test/dts/spmi-two-nodes-reference-sub-target.dts.S" ]
+}
+
+resource("spmi-two-nodes-reference-sub-target-dtb-file") {
+  sources = get_target_outputs(":spmi-two-nodes-reference-sub-target-dtb")
+  outputs = [ "test-data/{{source_file_part}}" ]
+  deps = [ ":spmi-two-nodes-reference-sub-target-dtb" ]
+}
+
+dtb("spmi-reference-has-compatible-property-dtb") {
+  sources = [ "test/dts/spmi-reference-has-compatible-property.dts.S" ]
+}
+
+resource("spmi-reference-has-compatible-property-dtb-file") {
+  sources = get_target_outputs(":spmi-reference-has-compatible-property-dtb")
+  outputs = [ "test-data/{{source_file_part}}" ]
+  deps = [ ":spmi-reference-has-compatible-property-dtb" ]
+}
+
+fuchsia_unittest_package("spmi-visitor-test") {
+  component_name = "spmi-visitor-test"
+  deps = [
+    ":spmi-dtb-file",
+    ":spmi-reference-has-compatible-property-dtb-file",
+    ":spmi-reference-target-dtb-file",
+    ":spmi-sub-target-spmi-address-out-of-range-dtb-file",
+    ":spmi-two-nodes-reference-sub-target-dtb-file",
+    ":spmi-visitor-test-bin",
+  ]
+  test_specs = {
+    environments = basic_envs
+    log_settings = {
+      max_severity = "ERROR"
+    }
+  }
+}

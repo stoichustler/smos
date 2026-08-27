@@ -1,0 +1,51 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+load("@rules_fuchsia//fuchsia:assembly.bzl", "fuchsia_legacy_bundle", "fuchsia_platform_artifacts")
+
+package(default_visibility = ["//visibility:public"])
+
+fuchsia_legacy_bundle(
+    name = "legacy_fuchsia",
+    applicable_licenses = ["@gn_targets//:all_licenses_spdx_json"],
+    files = "@gn_targets//release/images/fuchsia:fuchsia.bazel_legacy_aib",
+)
+
+fuchsia_legacy_bundle(
+    name = "legacy_bringup",
+    applicable_licenses = ["@gn_targets//:all_licenses_spdx_json"],
+    files = "@gn_targets//release/images/bringup:bringup.bazel_legacy_aib",
+)
+
+fuchsia_legacy_bundle(
+    name = "legacy_zedboot",
+    applicable_licenses = ["@gn_targets//:all_licenses_spdx_json"],
+    files = "@gn_targets//release/images/zedboot:zedboot.bazel_legacy_aib",
+)
+
+alias(
+    name = "platform_bringup",
+    actual = ":platform_eng",
+)
+
+fuchsia_platform_artifacts(
+    name = "platform_user",
+    applicable_licenses = ["@gn_targets//:all_licenses_spdx_json"],
+    directory = "@gn_targets//platform/bundles/assembly:user.bazel_inputs.directory",
+    files = "@gn_targets//platform/bundles/assembly:user.bazel_inputs",
+)
+
+fuchsia_platform_artifacts(
+    name = "platform_userdebug",
+    applicable_licenses = ["@gn_targets//:all_licenses_spdx_json"],
+    directory = "@gn_targets//platform/bundles/assembly:userdebug.bazel_inputs.directory",
+    files = "@gn_targets//platform/bundles/assembly:userdebug.bazel_inputs",
+)
+
+fuchsia_platform_artifacts(
+    name = "platform_eng",
+    applicable_licenses = ["@gn_targets//:all_licenses_spdx_json"],
+    directory = "@gn_targets//platform/bundles/assembly:eng.bazel_inputs.directory",
+    files = "@gn_targets//platform/bundles/assembly:eng.bazel_inputs",
+)

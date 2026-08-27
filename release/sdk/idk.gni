@@ -1,0 +1,229 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/config/compiler.gni")
+import("//release/python/python_action.gni")
+import("//release/sdk/config.gni")
+import("//release/sdk/idk_subbuilds.gni")
+import("//release/toolchain/rbe.gni")
+import("//sdk/config.gni")
+
+# Generate a IDK directory, which combines outputs from different arch-specific
+# sub-builds into a single one. The generated directory will include prebuilts
+# for all the given `target_cpus`. On a host Linux machine, the generated
+# archive will have host tools for both Linux/x64 and Linux/arm64.
+#
+# Either one of `sdk_collection_label` or `idk_subbuilds_label`
+# must be specified, to indicate which atoms should be part of the IDK.
+#
+# It is recommended to use `sdk_collection_subbuilds_label` in order to
+# be able to share the sub-builds for the same collection with other idk()
+# instances.
+#
+# The generated directory will go into
+# $root_build_dir/sdk/exported/{output_name}
+#
+# Arguments:
+#    target_cpus: (required)
+#      List of target cpu names. This must include the default target_cpu
+#      value for the current build configuration.
+#
+#    api_levels: (required)
+#      List of API levels, as integers, to build prebuilts for, in addition to
+#      the current (HEAD) one.
+#
+#    sdk_collection_label: (required)
+#      A single label for an sdk_collection() GN target.
+#
+#      If idk_subbuilds_label is used, this must match the sdk_collection_label
+#      value of that target.
+#
+#      Otherwise, this template will generate an implicit idk_subbuilds() set
+#      of targets, but doing so will prevent sharing the sub-build directories
+#      between different idk() instances that build the same collection for
+#      different sets of target_cpu / api_level combinations.
+#
+#    idk_subbuilds_label: (optional)
+#      A single label for an sdk_collection_subbuilds() GN target. If provided
+#      its sub-targets will be used.
+#
+#    idk_subbuilds_prefix: (optional)
+#      A build directory prefix. Only used when `idk_subbuilds_label` is provided.
+#      If provided, this must match the `subbuild_prefix` argument used to define
+#      the idk_subbuilds_target.
+#
+#    output_name: (optional)
+#      Name of the directory. Default is target_name
+#
+#    testonly, visibility
+#      Usual GN meaning.
+#
+template("idk") {
+  assert(defined(invoker.target_cpus),
+         "target_cpus must be defined for $target_name")
+  assert(defined(invoker.api_levels),
+         "api_levels must be defined for $target_name")
+  assert(defined(invoker.sdk_collection_label),
+         "sdk_collection_label must be defined for $target_name")
+
+  # Default output name.
+  _output_name = target_name
+  if (defined(invoker.output_name)) {
+    _output_name = invoker.output_name
+  }
+
+  _non_current_cpus = invoker.target_cpus + [ current_cpu ] - [ current_cpu ]
+
+  assert(
+      invoker.target_cpus != _non_current_cpus,
+      "The target_cpus argument must include the current target_cpu ($current_cpu): ${invoker.target_cpus}")
+
+  # Do the current CPU first. This may not be necessary, but it's what the old
+  # script did and I want a null-diff.
+  _target_cpus = [ current_cpu ] + _non_current_cpus
+
+  _exported_dir = root_build_dir + "/sdk/exported/${_output_name}"
+  _exported_dir_manifest = "${_exported_dir}/meta/manifest.json"
+  _exported_dir_stamp = _exported_dir + ".stamp"
+
+  _sdk_collection_name = get_label_info(invoker.sdk_collection_label, "name")
+
+  if (defined(invoker.idk_subbuilds_label)) {
+    _subbuilds_target_prefix = invoker.idk_subbuilds_label
+    if (defined(invoker.idk_subbuilds_prefix)) {
+      _subbuilds_dir_prefix = invoker.idk_subbuilds_prefix
+    } else {
+      # Same default as idk_subbuilds()
+      _subbuilds_dir_prefix = "idk_subbuild.${_sdk_collection_name}"
+    }
+  } else {
+    # Generate actions for all possible sub-builds.
+    # Only the ones matching invoker.api_levels and invoker.target_cpus will be used though.
+    _subbuilds_target = "idk_subbuild_${target_name}"
+    _subbuilds_dir_prefix = "idk_subbuild.${target_name}"
+
+    idk_subbuilds(_subbuilds_target) {
+      sdk_collection_label = invoker.sdk_collection_label
+      subbuild_prefix = _subbuilds_dir_prefix
+      forward_variables_from(invoker,
+                             [
+                               "testonly",
+                               "visibility",
+                             ])
+    }
+
+    _subbuilds_target_prefix = ":${_subbuilds_target}"
+  }
+
+  _relative_collection_build_manifest = "sdk/manifest/${_sdk_collection_name}"
+
+  # Targets that must be built before producing the final IDK.
+  _subbuild_targets = []
+
+  # Build directories for each subbuilds that contribute to the IDK, including
+  # the main build. Note that the contents of the IDK are sensitive to the order
+  # of this list.
+  _subbuild_dirs = []
+
+  # First, do subbuilds for the default API level.
+  foreach(target_cpu, _target_cpus) {
+    if (target_cpu == current_cpu) {
+      # Don't do a subbuild for the current CPU - just depend on the
+      # `sdk_collection` in the current build.
+      _subbuild_targets += [ invoker.sdk_collection_label ]
+      _subbuild_dirs += [ root_build_dir ]
+    } else {
+      _subbuild_targets += [ "${_subbuilds_target_prefix}-${target_cpu}" ]
+      _subbuild_dirs +=
+          [ "${root_build_dir}/${_subbuilds_dir_prefix}-${target_cpu}" ]
+    }
+  }
+
+  # Now do them for individual API levels.
+  foreach(api_level, invoker.api_levels) {
+    foreach(target_cpu, _target_cpus) {
+      _subbuild_targets +=
+          [ "${_subbuilds_target_prefix}-api${api_level}-${target_cpu}" ]
+      _subbuild_dirs += [ "${root_build_dir}/${_subbuilds_dir_prefix}-api${api_level}-${target_cpu}" ]
+    }
+  }
+
+  # This can happen when only building for the default API level and current target_cpu.
+  not_needed([
+               "_subbuilds_dir_prefix",
+               "_subbuilds_target_prefix",
+             ])
+
+  if (host_cpu == "x64") {
+    host_triple_cpu = "x86_64"
+  } else if (host_cpu == "arm64") {
+    host_triple_cpu = "aarch64"
+  } else {
+    assert(false, "Unrecognized host CPU: $host_cpu")
+  }
+  if (host_os == "linux") {
+    host_triple_os = "linux-gnu"
+  } else if (host_os == "mac") {
+    host_triple_os = "apple-darwin"
+  } else if (host_os == "fuchsia") {
+    host_triple_os = "fuchsia"
+  } else {
+    assert(false, "Unrecognized host OS: $host_os")
+  }
+  host_triple = "$host_triple_cpu-$host_triple_os"
+
+  # Combine all the individual sdk_collection subbuilds and put the result in
+  # the exported directory.
+  python_action(target_name) {
+    binary_label = "//release/sdk/generate_idk"
+
+    deps = _subbuild_targets
+    outputs = [
+      _exported_dir_manifest,
+      _exported_dir_stamp,
+    ]
+
+    # The exported dir is fully under our control and gets deleted by every
+    # invocation of this build rule.
+    hermetic_action_ignored_prefixes = [ _exported_dir ]
+
+    depfile = "${target_gen_dir}/${target_name}.d"
+
+    args = []
+
+    foreach(dir, _subbuild_dirs) {
+      args += [
+        "--subbuild-directory",
+        rebase_path(dir, root_build_dir),
+      ]
+    }
+    args += [
+      "--relative-manifest",
+      _relative_collection_build_manifest,
+      "--output-directory",
+      rebase_path(_exported_dir, root_build_dir),
+      "--stamp-file",
+      rebase_path(_exported_dir_stamp, root_build_dir),
+      "--depfile",
+      rebase_path(depfile, root_build_dir),
+      "--host-arch",
+      host_triple,
+      "--release-version",
+      sdk_id,
+    ]
+
+    foreach(cpu, invoker.target_cpus) {
+      args += [
+        "--target-arch",
+        cpu,
+      ]
+    }
+
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "visibility",
+                           ])
+  }
+}

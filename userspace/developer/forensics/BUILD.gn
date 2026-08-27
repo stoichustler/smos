@@ -1,0 +1,191 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/config_data_for_assembly.gni")
+import("//release/components.gni")
+import("//release/config.gni")
+import("//release/dist/renamed_binary.gni")
+
+###############################################################################
+# GROUPS
+###############################################################################
+group("forensics") {
+  testonly = true
+
+  deps = [
+    ":pkg",
+    ":tests",
+    "crasher",
+    "snapshot",
+  ]
+}
+
+group("tests") {
+  testonly = true
+
+  deps = [
+    "crash_reports/tests",
+    "exceptions/tests",
+    "feedback:tests",
+    "feedback_data/system_log_recorder/tests",
+    "feedback_data/tests",
+    "last_reboot/tests",
+    "snapshot/tests",
+    "utils/redact/tests",
+    "utils/tests",
+  ]
+}
+
+###############################################################################
+# PACKAGES
+###############################################################################
+fuchsia_package("pkg") {
+  package_name = "forensics"
+
+  deps = [
+    ":exceptions",
+    ":feedback",
+  ]
+}
+
+###############################################################################
+# COMPONENTS
+###############################################################################
+fuchsia_component_manifest("exceptions_manifest") {
+  component_name = "exceptions"
+  manifest = "exceptions/meta/exceptions.cml"
+}
+
+fuchsia_component("exceptions") {
+  cm_label = ":exceptions_manifest"
+
+  deps = [
+    ":exception_handler_exe",
+    ":exceptions_exe",
+  ]
+}
+
+fuchsia_component("feedback") {
+  manifest = "feedback/meta/feedback.cml"
+
+  deps = [
+    ":feedback_default_build_type_config",
+    ":feedback_default_product_config",
+    ":feedback_default_snapshot_config",
+    ":feedback_exe",
+    ":system_log_recorder_exe",
+  ]
+}
+
+###############################################################################
+# EXECUTABLES
+###############################################################################
+executable("unified_binary") {
+  sources = [ "unified_binary.cc" ]
+  deps = [
+    ":exceptions_config",
+    "exceptions:main",
+    "exceptions/handler:main",
+    "feedback:main",
+    "feedback_data/system_log_recorder:main",
+    "//sdk/lib/syslog/cpp",
+  ]
+}
+
+renamed_binary("exceptions_exe") {
+  dest = "bin/exceptions"
+  source = "$root_out_dir/unified_binary"
+  source_deps = [ ":unified_binary" ]
+}
+
+renamed_binary("exception_handler_exe") {
+  dest = "bin/exception_handler"
+  source = "$root_out_dir/unified_binary"
+  source_deps = [ ":unified_binary" ]
+}
+
+renamed_binary("feedback_exe") {
+  dest = "bin/feedback"
+  source = "$root_out_dir/unified_binary"
+  source_deps = [ ":unified_binary" ]
+}
+
+renamed_binary("system_log_recorder_exe") {
+  dest = "bin/system_log_recorder"
+  source = "$root_out_dir/unified_binary"
+  source_deps = [ ":unified_binary" ]
+}
+
+###############################################################################
+# CONFIGS
+###############################################################################
+resource("feedback_default_product_config") {
+  sources = [ "feedback/configs/product/default.json" ]
+
+  outputs = [ "data/product/default_config.json" ]
+}
+
+config_data_for_assembly("feedback_large_disk_product_config") {
+  for_pkg = "forensics"
+
+  sources = [ "feedback/configs/product/large_disk.json" ]
+
+  outputs = [ "product/override_config.json" ]
+}
+
+resource("feedback_default_build_type_config") {
+  sources = [ "feedback/configs/build_type/default.json" ]
+
+  outputs = [ "data/build_type/default_config.json" ]
+}
+
+config_data_for_assembly("feedback_upload_config") {
+  for_pkg = "forensics"
+
+  sources = [ "feedback/configs/build_type/eng_with_upload.json" ]
+
+  outputs = [ "build_type/override_config.json" ]
+}
+
+config_data_for_assembly("feedback_user_config") {
+  for_pkg = "forensics"
+
+  sources = [ "feedback/configs/build_type/user.json" ]
+
+  outputs = [ "build_type/override_config.json" ]
+}
+
+config_data_for_assembly("feedback_userdebug_config") {
+  for_pkg = "forensics"
+
+  sources = [ "feedback/configs/build_type/userdebug.json" ]
+
+  outputs = [ "build_type/override_config.json" ]
+}
+
+resource("feedback_default_snapshot_config") {
+  sources = [ "feedback/configs/snapshot/default.json" ]
+
+  outputs = [ "data/snapshot/default_config.json" ]
+}
+
+config_data_for_assembly("feedback_remote_device_id_provider_for_assembly") {
+  for_pkg = "forensics"
+
+  sources = [ "feedback/configs/remote_device_id_provider" ]
+
+  outputs = [ "feedback/remote_device_id_provider" ]
+}
+
+config_data("exceptions_enable_jitd_on_startup") {
+  for_pkg = "forensics"
+
+  sources = [ "exceptions/configs/jitd_on_startup.json" ]
+
+  outputs = [ "exceptions/enable_jitd_on_startup.json" ]
+}
+
+fuchsia_structured_config_cpp_elf_lib("exceptions_config") {
+  cm_label = ":exceptions_manifest"
+}

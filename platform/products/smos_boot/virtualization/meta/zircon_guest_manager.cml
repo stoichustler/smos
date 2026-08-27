@@ -1,0 +1,51 @@
+// Copyright 2026 The Fuchsia Authors.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+    include: [
+        "inspect/offer.shard.cml",
+        "syslog/client.shard.cml",
+        "trace/client.shard.cml",
+        "//userspace/sys/test_runners/tmp_storage.shard.cml",
+    ],
+    program: {
+        runner: "elf",
+        binary: "bin/guest_manager",
+    },
+    children: [
+        { name: "guest_pkg", url: "zircon_guest#meta/zircon_guest.cm" },
+        { name: "vmm", url: "#meta/vmm.cm" },
+    ],
+    capabilities: [
+        { protocol: "fuchsia.virtualization.GuestManager" },
+    ],
+    use: [
+        { directory: "pkg", from: "#guest_pkg", rights: [ "r*" ], path: "/guest_pkg" },
+        {
+            protocol: [
+                "fuchsia.virtualization.Guest",
+                "fuchsia.virtualization.GuestLifecycle",
+            ],
+            from: "#vmm",
+        },
+    ],
+    offer: [
+        {
+            protocol: [
+                "fuchsia.kernel.HypervisorResource",
+                "fuchsia.kernel.VmexResource",
+                "fuchsia.scheduler.RoleManager",
+                "fuchsia.sysinfo.SysInfo",
+            ],
+            from: "parent",
+            to: "#vmm",
+        },
+    ],
+    expose: [
+        {
+            protocol: "fuchsia.virtualization.GuestManager",
+            from: "self",
+            as: "fuchsia.virtualization.ZirconGuestManager",
+        },
+    ],
+}

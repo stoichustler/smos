@@ -1,0 +1,45 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//userspace/developer/ffx/build/ffx_plugin.gni")
+
+ffx_plugin("ffx_product_get_artifacts") {
+  sdk_category = "not-yet-specified"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  args_sources = [ "src/args.rs" ]
+  sources = [ "src/lib.rs" ]
+
+  args_deps = [
+    "//release/sdk/meta:rust",
+    "//userspace/developer/ffx/core:lib",
+    "//third_party/rust_crates:argh",
+    "//third_party/rust_crates:camino",
+  ]
+
+  deps = [
+    "//release/sdk/meta:rust",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/lib/fho:lib",
+    "//userspace/developer/ffx/lib/writer:lib",
+    "//userspace/lib/assembly/assembly_manifest",
+    "//userspace/lib/utf8_path",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:schemars",
+    "//third_party/rust_crates:serde",
+  ]
+
+  inputs = [ "//release/sdk/meta/test_data/single_vd_manifest.json" ]
+
+  test_deps = [
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/lib/assembly/partitions_config",
+    "//userspace/lib/fuchsia",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:tempfile",
+  ]
+}

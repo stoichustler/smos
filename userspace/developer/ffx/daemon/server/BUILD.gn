@@ -1,0 +1,61 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+rustc_library("lib") {
+  name = "ffx_daemon_server"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//sdk/fidl/fuchsia.developer.remotecontrol:fuchsia.developer.remotecontrol_rust",
+    "//sdk/fidl/fuchsia.overnet.protocol:fuchsia.overnet.protocol_rust",
+    "//sdk/fidl/fuchsia.sys2:fuchsia.sys2_rust",
+    "//userspace/connectivity/overnet/lib/ascendd",
+    "//userspace/connectivity/overnet/lib/core",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/daemon/core:lib",
+    "//userspace/developer/ffx/daemon/events:lib",
+    "//userspace/developer/ffx/daemon/protocols:ffx_daemon_protocols_lib",
+    "//userspace/developer/ffx/daemon/target:lib",
+    "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_rust",
+    "//userspace/developer/ffx/lib/errors:lib",
+    "//userspace/developer/ffx/lib/manual_targets:lib",
+    "//userspace/developer/ffx/lib/metrics:lib",
+    "//userspace/developer/ffx/lib/protocols:lib",
+    "//userspace/developer/ffx/lib/rcs:lib",
+    "//userspace/developer/ffx/lib/stream_util:lib",
+    "//userspace/developer/ffx/lib/target:lib",
+    "//userspace/developer/ffx/lib/version:lib",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:notify",
+    "//third_party/rust_crates:signal-hook",
+    "//third_party/rust_crates:tracing",
+  ]
+
+  test_deps = [
+    "//userspace/developer/ffx/lib/addr:lib",
+    "//userspace/lib/fuchsia",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:chrono",
+    "//third_party/rust_crates:futures-lite",
+    "//third_party/rust_crates:tempfile",
+  ]
+
+  sources = [
+    "src/daemon.rs",
+    "src/lib.rs",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":lib_test" ]
+}

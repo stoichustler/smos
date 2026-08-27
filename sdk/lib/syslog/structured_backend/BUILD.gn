@@ -1,0 +1,29 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/cpp/sdk_source_set.gni")
+
+sdk_source_set("structured_backend") {
+  category = "partner"
+
+  sdk_name = "syslog_structured_backend"
+
+  include_base = "//sdk"
+  stable = true
+
+  deps = []
+
+  public_deps = [
+    "//sdk/lib/stdcompat",
+    "//zircon/system/ulib/zx",
+  ]
+
+  sources = [
+    "cpp/fuchsia_syslog.cc",
+    "cpp/fuchsia_syslog.h",
+    "fuchsia_syslog.h",
+  ]
+
+  public_configs = [ "//sdk/config" ]
+}

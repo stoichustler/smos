@@ -1,0 +1,64 @@
+# Copyright 2026 The Fuchsia Authors.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/bootfs_files_for_assembly.gni")
+import("//release/components.gni")
+
+assert(current_cpu == "arm64",
+       "The SMOS virtualization runtime is supported on arm64 only.")
+
+fuchsia_component("vmm_component") {
+  component_name = "vmm"
+  manifest = "meta/vmm.cml"
+  deps = [
+    "//userspace/virtualization/bin/vmm:bin",
+    "//userspace/virtualization/bin/vmm:vmm-resources",
+    "//userspace/virtualization/bin/vmm/device/virtio_block:virtio_block_component",
+    "//userspace/virtualization/bin/vmm/device/virtio_console:virtio_console_component",
+    "//userspace/virtualization/bin/vmm/device/virtio_rng:virtio_rng_component",
+    "//userspace/virtualization/bin/vmm/device/virtio_vsock:virtio_vsock_cmp",
+  ]
+}
+
+fuchsia_component_manifest("vmm_launcher_manifest") {
+  component_name = "vmm_launcher"
+  manifest = "meta/vmm_launcher.cml"
+}
+
+fuchsia_structured_config_values("vmm_launcher_config") {
+  cm_label = ":vmm_launcher_manifest"
+  values = {
+    vmm_component_url = "#meta/vmm.cm"
+  }
+}
+
+fuchsia_component("vmm_launcher_component") {
+  cm_label = ":vmm_launcher_manifest"
+  deps = [
+    ":vmm_component",
+    "//userspace/virtualization/bin/vmm_launcher:vmm_launcher_bin",
+  ]
+}
+
+fuchsia_component("zircon_guest_manager_component") {
+  component_name = "zircon_guest_manager"
+  manifest = "meta/zircon_guest_manager.cml"
+  deps = [
+    ":vmm_component",
+    "//userspace/virtualization/bin/guest_manager:bin",
+  ]
+}
+
+fuchsia_package("host") {
+  package_name = "smos-virtualization-host"
+  deps = [
+    ":vmm_launcher_component",
+    ":vmm_launcher_config",
+    ":zircon_guest_manager_component",
+  ]
+}
+
+bootfs_files_for_assembly("guest_cli") {
+  deps = [ "//userspace/virtualization/bin/guest:bin" ]
+}

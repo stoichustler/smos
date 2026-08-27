@@ -1,0 +1,20 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be found
+# in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.wlan.fullmac") {
+  sdk_category = "partner"
+  stable = false
+  sdk_area = "WLAN"
+  sources = [ "fullmac.fidl" ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.wlan.common",
+    "//sdk/fidl/fuchsia.wlan.ieee80211",
+    "//sdk/fidl/fuchsia.wlan.stats",
+    "//zircon/vdso/zx",
+  ]
+  contains_drivers = true
+  enable_banjo = true
+}

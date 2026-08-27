@@ -1,0 +1,33 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+import("//release/rust/rustc_library.gni")
+
+assert(is_host, "Assembly libraries are host-only")
+
+rustc_library("base_package") {
+  edition = "2021"
+  name = "assembly_base_package"
+  version = "0.1.0"
+  with_unit_tests = true
+  deps = [
+    "//userspace/lib/assembly/constants",
+    "//userspace/lib/assembly/package_list",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:camino",
+  ]
+  test_deps = [
+    "//userspace/lib/assembly/test_util",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/sys/pkg/lib/far/rust:fuchsia-archive",
+    "//userspace/sys/pkg/lib/fuchsia-hash",
+    "//third_party/rust_crates:tempfile",
+  ]
+  sources = [
+    "src/base_package.rs",
+    "src/lib.rs",
+  ]
+}

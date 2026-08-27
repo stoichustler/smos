@@ -1,0 +1,33 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.input.report") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "HCI"
+
+  sources = [
+    "consumer_control.fidl",
+    "descriptor.fidl",
+    "device.fidl",
+    "device_ids.fidl",
+    "keyboard.fidl",
+    "led.fidl",
+    "mouse.fidl",
+    "overview.fidl",
+    "report.fidl",
+    "sensor.fidl",
+    "touch.fidl",
+    "units.fidl",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.input",
+    "//zircon/vdso/zx",
+  ]
+
+  enable_hlcpp = true
+}

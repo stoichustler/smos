@@ -1,0 +1,54 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/rust/rustc_staticlib.gni")
+import("//release/testing/environments.gni")
+
+rustc_library("fuchsia") {
+  name = "fuchsia"
+  edition = "2021"
+  deps = [
+    "macro",
+    "//sdk/fidl/fuchsia.diagnostics:fuchsia.diagnostics_rust",
+    "//userspace/lib/diagnostics/log/rust",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:argh",
+    "//third_party/rust_crates:libc",
+    "//third_party/rust_crates:log",
+  ]
+  if (is_fuchsia) {
+    deps += [ "//sdk/lib/scheduler/rust" ]
+  }
+  sources = [ "src/lib.rs" ]
+}
+
+rustc_test("fuchsia_test") {
+  name = "fuchsia_test"
+  edition = "2021"
+  deps = [
+    ":fuchsia",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:argh",
+  ]
+  source_root = "src/test.rs"
+  sources = [ "src/test.rs" ]
+}
+
+fuchsia_unittest_package("fuchsia-tests") {
+  deps = [ ":fuchsia_test" ]
+  test_specs = {
+    environments = [ emu_env ]
+  }
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":fuchsia-tests",
+    ":fuchsia_test($host_toolchain)",
+    "tests",
+  ]
+}

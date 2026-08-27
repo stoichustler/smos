@@ -1,0 +1,21 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("contrib") {
+  deps = [
+    "auto_persist",
+    "rust",
+    "self_profiles_report",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    "auto_persist:tests",
+    "rust:tests",
+    "self_profiles_report:tests",
+    "stubs:tests",
+  ]
+}

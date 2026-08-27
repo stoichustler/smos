@@ -1,0 +1,37 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/testing/cc_test_executable.gni")
+
+group("tests") {
+  testonly = true
+  deps = [ ":file-lock-unittest-package" ]
+}
+
+source_set("cpp") {
+  sources = [
+    "file-lock.cc",
+    "file-lock.h",
+  ]
+
+  deps = [ "//sdk/lib/fit" ]
+
+  public_configs = [ "//sdk/config" ]
+}
+
+cc_test_executable("file-lock-unittest") {
+  testonly = true
+
+  sources = [ "file-lock-unittest.cc" ]
+
+  deps = [
+    ":cpp",
+    "//zircon/system/ulib/zxtest",
+  ]
+}
+
+fuchsia_unittest_package("file-lock-unittest-package") {
+  deps = [ ":file-lock-unittest" ]
+}

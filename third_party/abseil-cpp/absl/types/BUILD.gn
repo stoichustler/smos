@@ -1,0 +1,132 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+visibility = [
+  "$cobalt_root/*",
+  "//third_party/abseil-cpp/*",
+  "//third_party/gvisor_syscall_tests/*",
+  "//third_party/tink/*",
+]
+
+source_set("any") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  public = [ "any.h" ]
+
+  deps = [
+    ":bad_any_cast",
+    "../base:config",
+    "../base:core_headers",
+    "../base:fast_type_id",
+    "../meta:type_traits",
+    "../utility",
+  ]
+}
+
+source_set("bad_any_cast") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  public = [ "bad_any_cast.h" ]
+
+  deps = [
+    ":bad_any_cast_impl",
+    "../base:config",
+  ]
+}
+
+source_set("bad_any_cast_impl") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [
+    "bad_any_cast.cc",
+    "bad_any_cast.h",
+  ]
+
+  deps = [
+    "../base:config",
+    "../base:raw_logging_internal",
+  ]
+}
+
+source_set("span") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "internal/span.h" ]
+  public = [ "span.h" ]
+
+  deps = [
+    "../algorithm",
+    "../base:core_headers",
+    "../base:throw_delegate",
+    "../meta:type_traits",
+  ]
+}
+
+source_set("optional") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "internal/optional.h" ]
+  public = [ "optional.h" ]
+
+  deps = [
+    ":bad_optional_access",
+    "../base:base_internal",
+    "../base:config",
+    "../base:core_headers",
+    "../memory",
+    "../meta:type_traits",
+    "../utility",
+  ]
+}
+
+source_set("bad_optional_access") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "bad_optional_access.cc" ]
+  public = [ "bad_optional_access.h" ]
+
+  deps = [
+    "../base:config",
+    "../base:raw_logging_internal",
+  ]
+}
+
+source_set("bad_variant_access") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "bad_variant_access.cc" ]
+  public = [ "bad_variant_access.h" ]
+
+  deps = [
+    "../base:config",
+    "../base:raw_logging_internal",
+  ]
+}
+
+source_set("variant") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "internal/variant.h" ]
+  public = [ "variant.h" ]
+
+  deps = [
+    ":bad_variant_access",
+    "../base:base_internal",
+    "../base:config",
+    "../base:core_headers",
+    "../meta:type_traits",
+    "../utility",
+  ]
+}
+
+source_set("compare") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  public = [ "compare.h" ]
+
+  deps = [
+    "../base:core_headers",
+    "../meta:type_traits",
+  ]
+}

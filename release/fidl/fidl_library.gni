@@ -1,0 +1,787 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/config/fuchsia/platform_version.gni")
+import("//release/config/fuchsia/target_api_level.gni")
+import("//release/fidl/fidl_ir.gni")
+import("//release/fidl/toolchain.gni")
+import("//release/json/validate_json.gni")
+import("//release/sdk/plasa/plasa_fragment_fidl.gni")
+import("//release/sdk/sdk_atom.gni")
+import("//release/testing/config.gni")
+import("//release/testing/fidl_api_compatibility_test.gni")
+import("//release/testing/golden_files.gni")
+
+if (current_build_target_api_level == "PLATFORM") {
+  # FIDL directly supports targeting multiple API levels. "PLATFORM" is a
+  # meta-level that refers to the set of all supported API levels.
+  _levels = []
+  foreach(_level, platform_version.runtime_supported_api_levels) {
+    _levels += [ "$_level" ]
+  }
+  fidl_target_api_levels = string_join(",", _levels)
+} else {
+  fidl_target_api_levels = "$current_build_target_api_level"
+}
+
+# Declares a bindings agnostic FIDL library. See //release/fidl/fidl.gni for the
+# full FIDL template which produces bindings. This template does the following:
+#
+# - Generates JSON IR for the library.
+# - Validates the JSON IR against //tools/fidl/fidlc/schema.json.
+# - Lints source files with fidl-lint.
+# - Performs SDK checks and produces an sdk_atom target (if applicable).
+# - Generates API summaries (if applicable).
+# - Runs API compatibility tests (if applicable).
+#
+# Parameters
+#
+#  * library_name
+#    - Required: The name of the FIDL library.
+#    - Type: string
+#
+#  * fidl_ir_json
+#    - Required: The path to the associated FIDL IR JSON file.
+#    - Type: path
+#
+#  * sources
+#    - Required: See //release/fidl/fidl.gni for a description.
+#    - Type: list(path)
+#
+#  * api, available, excluded_checks, experimental_checks, experimental_flags,
+#    goldens_dir, non_fidl_deps, sdk_category, sdk_area, stable, versioned
+#    - Optional: See //release/fidl/fidl.gni for a description.
+#
+#  * testonly, visibility, public_deps, applicable_licenses
+#    - Optional: Usual GN meanings.
+#
+template("fidl_library") {
+  assert(is_fidl_toolchain,
+         "This template can only be used in a FIDL toolchain.")
+
+  assert(defined(invoker.sources), "sources is required")
+  assert(defined(invoker.library_name), "library_name is required")
+  assert(defined(invoker.fidl_ir_json), "fidl_ir_json is required")
+  assert(!defined(invoker.available) ||
+             (defined(invoker.testonly) && invoker.testonly),
+         "the `available` parameter is only allowed on `testonly` libraries")
+
+  main_target_name = target_name
+  library_name = invoker.library_name
+
+  compilation_target_name = "${target_name}_compile"
+  verification_target_name = "${target_name}_verify"
+  plasa_fragment_target_name = "${target_name}_plasa"
+  lint_target_name = "${target_name}_lint"
+  lint_stamp_file = "$target_gen_dir/$target_name.linted"
+
+  # These parameters are passed to all backends and this template but are unneed
+  # here. Assert that they are correct as a way of using them.
+  # For historical reasons, "fidl_ir_target" does not reflect the actual value.
+  # TODO(https://fxbug.dev/381123422): Rename it.
+  assert(invoker.fidl_ir_target == ":${main_target_name}($fidl_toolchain)")
+  assert(invoker.fidl_gen_dir ==
+         get_label_info(":${main_target_name}", "target_gen_dir") +
+         "/${main_target_name}")
+
+  is_testonly = defined(invoker.testonly) && invoker.testonly
+
+  target_dir = get_label_info(main_target_name, "dir")
+  is_vendor_library = string_replace(target_dir, "//vendor/", "") != target_dir
+  assert(
+      !is_vendor_library || !defined(invoker.sdk_category) ||
+          invoker.sdk_category == "partner",
+      "In vendor repos, only libraries in the vendor SDK should have `sdk_category` set.")
+
+  # All libraries in an SDK category require compatibility tests.
+  requires_compatibility_tests = defined(invoker.sdk_category)
+
+  is_unversioned_vendor_sdk = false
+  is_in_internal_only_idk = false
+
+  # Validate `sdk_category` while determining `category_allowlist_deps`, which
+  # will be used later.
+  if (defined(invoker.sdk_category)) {
+    # Ensure that all libraries in an SDK category that could affect anything
+    # other than the platform build are in the appropriate allowlist targets.
+    # The same lists are also used to determine what to include in the IDK,
+    # helping ensure that libraries assigned an SDK category also appear in the
+    # appropriate artifacts.
+    category = invoker.sdk_category
+    sdk_category_string_for_assert = category
+
+    # All categories should have an allowlist, and the "${target_name}" for all
+    # libraries in that list should be deps of an SDK molecule in
+    # //sdk/fidl/BUILD.gn to ensure there are no category violations.
+    if (category == "internal_only_idk") {
+      # Libraries in this category are not included in an IDK and have no
+      # compatibility requirements. Uuse the allowlist to prevent addition of
+      # more libraries to this category.
+      # TODO(https://fxbug.dev/333907192): Remove `is_in_internal_only_idk` and
+      # this branch entirely once the allowlist is empty.
+      is_in_internal_only_idk = true
+      requires_compatibility_tests = false
+      category_allowlist_deps =
+          [ "//sdk/fidl:internal_only_idk_libs_allowlist" ]
+    } else if (category == "compat_test") {
+      # Ensures that all libraries in the "compat_test" category are in the
+      # "sdk_compat_test_libs_allowlist" target, which is used to ensure
+      # that the API compatibility tests actually run on these libraries.
+      category_allowlist_deps = [ "//sdk/fidl:sdk_compat_test_libs_allowlist" ]
+    } else if (category == "partner_internal") {
+      # Ensures that all libraries in the "partner_internal" category are in the
+      # "sdk_partner_internal_libs_allowlist" target, which is used to ensure
+      # that the API compatibility tests actually run on these libraries.
+      category_allowlist_deps =
+          [ "//sdk/fidl:sdk_partner_internal_libs_allowlist" ]
+    } else if (category == "partner") {
+      if (is_vendor_library) {
+        # Vendor SDK libraries are `is_sdk_included_publishable` but not in the
+        # "fuchsia" namespace, not intended to be compaitibility tested, and do
+        # not appear in allowlists. They specify "unversioned" for clarity.
+        assert(defined(invoker.versioned) && invoker.versioned == "unversioned")
+        category_allowlist_deps = []
+        is_unversioned_vendor_sdk = true
+      } else {
+        category_allowlist_deps = [ "//sdk/fidl:sdk_partner_libs_allowlist" ]
+      }
+    } else {
+      assert(
+          false,
+          "Unrecognized SDK category '$category'. Currently supported categories are: 'partner', 'partner_internal', and 'compat_test'. For libraries not in the IDK, do not specify `sdk_category`.")
+    }
+  } else {
+    category_allowlist_deps = []
+    sdk_category_string_for_assert = "not specified"
+    not_needed([ "is_in_internal_only_idk" ])
+  }
+
+  # All publishable libraries must have compatibility tests.
+  # Only "partner" libraries are publishable.
+  is_sdk_included_publishable =
+      requires_compatibility_tests && invoker.sdk_category == "partner"
+
+  if (is_unversioned_vendor_sdk) {
+    # Override the values set above to account for this special case as
+    # described where the variable above was set.
+    requires_compatibility_tests = false
+    is_sdk_included_publishable = true
+  }
+
+  assert(
+      category_allowlist_deps != [] || is_unversioned_vendor_sdk ||
+          !defined(invoker.sdk_category),
+      "Libraries with an SDK category must be in an allowlist to ensure they are compatibility tested and included in the IDK as appropriate.")
+
+  assert(
+      defined(invoker.sdk_category) == defined(invoker.stable),
+      "`stable` must be specified if and only if `sdk_category` is specified.")
+
+  assert(
+      !(defined(invoker.stable) && invoker.stable == false &&
+            defined(invoker.versioned) && invoker.versioned != "unversioned"),
+      "`stable` must not be `false` when `versioned` is specified")
+
+  is_stable = defined(invoker.stable) && invoker.stable
+
+  # All stable libraries must be included in an SDK [category] and require
+  # compatibility tests, but the inverse is not always true.
+  # For unstable libraries with `requires_compatibility_tests=true`, although
+  # the build targets are created, the resulting API summery file will be empty.
+  assert(!is_stable || requires_compatibility_tests)
+
+  assert(
+      is_stable || !defined(invoker.sdk_category) ||
+          invoker.sdk_category == "partner" || is_in_internal_only_idk,
+      "Libraries in category '${sdk_category_string_for_assert}' must specify `stable=true`.")
+
+  # Make sure  the same variables are forwarded to both fidl_ir() instances.
+  invoker_variables_to_forward_to_fidl_ir = [
+    "applicable_licenses",
+    "available",
+    "experimental_flags",
+    "non_fidl_deps",
+    "public_deps",
+    "sources",
+    "testonly",
+  ]
+
+  # Some IDK prebuilts depend on FIDL libraries that are currently internal and
+  # unstable. CTF tests, which target `NEXT`, similarly build code that depends
+  # on unstable libraries.
+  # Treat such libraries as unversioned until each is resolved.
+  _unversioned_libraries_used_by_sdk_prebuilts_or_ctf = [
+    # Do not add to this list without discussing with the FIDL team.
+    # It is likely that only instances of the scenarios described in
+    # https://fxbug.dev/369892217 should be added.
+
+    # TODO(https://fxbug.dev/364294648): Resolve heapdump instrumentation dependency on library.
+    "fuchsia.memory.heapdump.process",
+
+    # TODO(https://fxbug.dev/365602422): For each of these UI-related libraries,
+    # either remove the dependency from the CTF tests or make the library stable
+    # then remove the library from the list below.
+    "fuchsia.ui.observation.scope",
+    "fuchsia.ui.observation.test",
+    "fuchsia.ui.pointer.augment",
+    "fuchsia.ui.test.conformance",
+    "fuchsia.ui.test.context",
+
+    # TODO(https://fxbug.dev/365602428): For each of these libraries, either
+    # remove the dependency from the CTF tests or make the library stable then
+    # remove the library from the list below.
+    "fuchsia.examples",
+    "fuchsia.pkg.test",
+  ]
+  _is_unversioned_libraries_used_by_sdk_prebuilts_or_ctf =
+      _unversioned_libraries_used_by_sdk_prebuilts_or_ctf + [ library_name ] -
+      [ library_name ] != _unversioned_libraries_used_by_sdk_prebuilts_or_ctf
+
+  # TODO(https://fxbug.dev/364422340): Remove when the internal "zx" library is properly versioned.
+  _is_internal_zx_library =
+      get_label_info(":${main_target_name}", "label_no_toolchain") ==
+      "//zircon/vdso:zx" && !defined(invoker.sdk_category)
+
+  # //sdk/banjo/fuchsia.sysmem is the only Banjo library with versioning.
+  # Banjo libraries do not have an SDK category and are not marked stable,
+  # so it is not caught in an earlier condition.
+  # TODO(https://fxbug.dev/306258166): Determine an appropriate state for this
+  # library and remove this variable and related exceptions.
+  _is_banjo_sysmem =
+      library_name == "fuchsia.sysmem" && !defined(invoker.sdk_category)
+
+  # If `versioned` is not specified, set the default as defined in fidl.gni.
+  if (defined(invoker.versioned)) {
+    _platform_override_name = string_split(invoker.versioned, ":")
+    _platform_override_name = _platform_override_name[0]
+    assert(
+        is_sdk_included_publishable || is_testonly || _is_internal_zx_library,
+        "Non-test library '$library_name' is explicitly versioned but not included in an SDK.")
+    assert(
+        !requires_compatibility_tests || _platform_override_name == "fuchsia",
+        "Overriding `versioned` is not allowed for SDK FIDL library '$library_name', which is a Fuchsia platform API requiring compatibility tests.")
+
+    fidlc_versioned_arg = invoker.versioned
+  } else if (is_testonly && !defined(invoker.sdk_category)) {
+    fidlc_versioned_arg = "unversioned"
+  } else if (library_name ==
+             "fuchsia." + string_replace(library_name, "fuchsia.", "", 1)) {
+    # The library is in the "fuchsia" namespace and either not test-only or in
+    # an SDK category . Set `versioned` to appropriate default.
+    if (is_stable) {
+      assert(defined(invoker.sdk_category),
+             "Libraries cannot be stable but not in an SDK category.")
+
+      # Stable "fuchsia.*" library in an SDK category - must compile for all Supported API levels.
+      fidlc_versioned_arg = "fuchsia"
+    } else if (requires_compatibility_tests) {
+      assert(
+          defined(invoker.sdk_category),
+          "Libraries cannot require compatibility tests unless they are in an SDK category.")
+
+      # Unstable "fuchsia.*" library in an SDK category - can only be used at HEAD.
+      fidlc_versioned_arg = "fuchsia:HEAD"
+    } else {
+      assert(
+          !defined(invoker.sdk_category) || is_in_internal_only_idk,
+          "Libraries with an SDK category should be stable or at least require compatibility tests.")
+
+      # All libraries in the "fuchsia" namespace must be versioned. For unstable
+      # and/or internal libraries, that means specifying `@available(added=HEAD)`.
+      fidlc_versioned_arg = "fuchsia:HEAD"
+
+      # Temporary exceptions to the above rule. See the TODOs where each
+      # variable is declared. Update the comment about "temporary exceptions" in
+      # fidl.gni when removing the last one.
+      if (_is_unversioned_libraries_used_by_sdk_prebuilts_or_ctf) {
+        fidlc_versioned_arg = "unversioned"
+      } else if (_is_banjo_sysmem) {
+        fidlc_versioned_arg = "fuchsia"
+      }
+    }
+  } else {
+    assert(
+        !is_stable && !defined(invoker.sdk_category),
+        "Libraries that are stable and/or have an SDK category must be versioned. This is handled automatically for fuchsia.* libraries but must be displayed for other libraries.")
+    fidlc_versioned_arg = "unversioned"
+  }
+
+  # The examples in the documentation may not conform to the expectations
+  # for illustrative purposes, and it does not make sense to change them.
+  _is_documentation_example = library_name == "fuchsia.examples.docs"
+
+  # These are used in conditions, including within asserts, that are not always executed.
+  not_needed([
+               "_is_unversioned_libraries_used_by_sdk_prebuilts_or_ctf",
+               "_is_internal_zx_library",
+               "_is_banjo_sysmem",
+               "_is_documentation_example",
+             ])
+
+  assert(
+      (fidlc_versioned_arg == "fuchsia" && is_stable &&
+           requires_compatibility_tests &&
+           (is_sdk_included_publishable ||
+                invoker.sdk_category == "compat_test" ||
+                invoker.sdk_category == "partner_internal")) ||
+          (fidlc_versioned_arg == "fuchsia" && _is_banjo_sysmem && !is_stable &&
+               !requires_compatibility_tests && !is_sdk_included_publishable) ||
+          (fidlc_versioned_arg == "fuchsia:HEAD" && !is_stable &&
+               (requires_compatibility_tests == defined(invoker.sdk_category) ||
+                    (is_in_internal_only_idk &&
+                         !requires_compatibility_tests))) ||
+          (fidlc_versioned_arg == "unversioned" &&
+               _is_unversioned_libraries_used_by_sdk_prebuilts_or_ctf) ||
+          (fidlc_versioned_arg == "unversioned" && !is_stable &&
+               !requires_compatibility_tests &&
+               (!defined(invoker.sdk_category) || is_unversioned_vendor_sdk)) ||
+          (is_testonly && !is_stable && !defined(invoker.sdk_category) &&
+               !requires_compatibility_tests &&
+               (fidlc_versioned_arg == "unversioned" ||
+                    _is_documentation_example ||
+                    fidlc_versioned_arg == "test:1")) ||
+          (_is_internal_zx_library && fidlc_versioned_arg == "fuchsia"),
+      "Library '$library_name' has an unexpected combination of stability ('$is_stable'), versioned ('$fidlc_versioned_arg'), SDK category ('${sdk_category_string_for_assert}'),  publishable ('$is_sdk_included_publishable'), compatibility testing requirements ('$requires_compatibility_tests'), and `testonly` ('$is_testonly').")
+
+  fidl_ir(compilation_target_name) {
+    forward_variables_from(invoker, invoker_variables_to_forward_to_fidl_ir)
+
+    # Restrict visibility to targets declared in this file to prevent direct
+    # deps on this target rather than `main_target_name` because that bypasses
+    # metadata generation, linting, etc. See https://fxbug.dev/381123422.
+    visibility = [
+      ":${main_target_name}",
+      ":${plasa_fragment_target_name}",
+      ":${verification_target_name}",
+    ]
+    fidl_target_name = main_target_name
+    fidl_library_name = library_name
+    gen_dir = target_gen_dir
+    json_representation = invoker.fidl_ir_json
+    versioned = fidlc_versioned_arg
+    if (!defined(available)) {
+      available = [ "fuchsia:$fidl_target_api_levels" ]
+    }
+  }
+
+  # Note that this file name may be different from those used for compatibility
+  # tests below.
+  summary_file_json = "$target_gen_dir/$target_name.api_summary.json"
+
+  plasa_fragment_file = summary_file_json
+  plasa_fragment_fidl(plasa_fragment_target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "applicable_licenses",
+                             "testonly",
+                           ])
+    visibility = [
+      ":*",
+      "//sdk/fidl:plasa",
+    ]
+    fidl_ir = invoker.fidl_ir_json
+    output_fragment_file = plasa_fragment_file
+    dest = "fidl"
+    deps = [ ":$compilation_target_name" ]
+  }
+
+  # Additional dependencies to add when this target is published in an SDK.
+  sdk_atom_deps = [ ":$plasa_fragment_target_name" ]
+
+  action(lint_target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "applicable_licenses",
+                             "sources",
+                             "testonly",
+                           ])
+    visibility = [ ":${main_target_name}" ]
+
+    script = "//release/scripts/run_and_stamp.sh"
+    mnemonic = "LINT"
+
+    # run_and_stamp.sh runs this tool, and touches lint_stamp_file if successful
+    _tool_with_no_output = "//tools/fidl/fidlc:fidl-lint"
+
+    # Construct the host toolchain version of the tool.
+    host_tool_label = "//tools/fidl/fidlc:fidl-lint.host"
+    host_tool_path = "$root_build_dir/host-tools/fidl-lint"
+
+    deps = [ host_tool_label ]
+    if (defined(invoker.non_fidl_deps)) {
+      deps += invoker.non_fidl_deps
+    }
+
+    # Add the executable itself as an input.
+    inputs = [ host_tool_path ]
+
+    outputs = [ lint_stamp_file ]
+
+    args = [ rebase_path(lint_stamp_file, root_build_dir) ]
+
+    # Don't lint FIDL libraries used to test FIDL itself.
+    if (filter_include([ get_label_info(target_name, "dir") ],
+                       [
+                         "//sdk/lib/fidl/cpp/tests/*",
+                         "//sdk/testing/fidl/*",
+                         "//userspace/devices/tools/fidlgen_banjo/tests/fidl/*",
+                         "//userspace/lib/fidl/*",
+                         "//userspace/tests/benchmarks/fidl/benchmark_suite/*",
+                         "//userspace/tests/fidl/*",
+                         "//tools/fidl/fidlc/testdata/*",
+                       ]) != []) {
+      args += [ ":" ]  # NOOP - Nothing to lint, but touch the stamp file
+    } else if (!defined(invoker.excluded_checks) && filter_include(
+                                                        [ get_label_info(
+                                                            target_name,
+                                                            "dir") ],
+                                                        [
+                                                          # TODO(https://fxbug.dev/381096879): Fix lint warnings.
+                                                          "//examples/fidl/*",
+                                                          "//sdk/banjo/fuchsia.hardware.block.partition/*",
+                                                          "//sdk/fidl/fuchsia.bluetooth.snoop/*",
+                                                          "//sdk/fidl/fuchsia.component.internal/*",
+                                                          "//sdk/fidl/fuchsia.net.masquerade/*",
+                                                          "//sdk/fidl/zbi/*",
+                                                          "//userspace/connectivity/overnet/tests/integration/*",
+                                                          "//userspace/connectivity/wlan/tests/helpers/realm-factory/*",
+                                                          "//userspace/diagnostics/sampler/testing/fidl/*",
+                                                          "//userspace/lib/component/*",
+                                                          "//userspace/lib/diagnostics/inspect/contrib/self_profiles_report/tests/*",
+                                                          "//userspace/lib/fidl_table_validation/*",
+                                                          "//userspace/lib/process_builder/*",
+                                                          "//userspace/sys/component_manager/tests/security_policy/capability_allowlist/*",
+                                                          "//userspace/sys/component_manager/tests/utc-time/*",
+                                                          "//zircon/tools/zither/*",
+
+                                                          # TODO(https://fxbug.dev/381163466): Fix lint warnings.
+                                                          "//vendor/*",
+                                                        ]) != []) {
+      args += [ ":" ]  # NOOP - Nothing to lint, but touch the stamp file
+    } else {
+      args += [ rebase_path(host_tool_path, root_build_dir) ]
+
+      excluded_checks = []
+      if (defined(invoker.excluded_checks)) {
+        excluded_checks = invoker.excluded_checks
+      }
+
+      if (excluded_checks != []) {
+        # Add path to fidl-lint executable, and --must-find-excluded-checks option, so fidl-lint
+        # will return an error if any excluded check is no longer required. Excluded checks are only
+        # allowed if the target files still violate those checks. After updating the FIDL files to
+        # resolve a lint error, remove the check-id from the list of excluded checks in the fidl()
+        # target to prevent the same lint errors from creeping back in, in
+        # the future.
+        args += [ "--must-find-excluded-checks" ]
+
+        foreach(excluded_check, excluded_checks) {
+          args += [
+            "-e",
+            excluded_check,
+          ]
+        }
+      }
+
+      experimental_checks = []
+      if (defined(invoker.experimental_checks)) {
+        experimental_checks = invoker.experimental_checks
+      }
+
+      foreach(experimental_check, experimental_checks) {
+        args += [
+          "-x",
+          experimental_check,
+        ]
+      }
+
+      foreach(source, sources) {
+        args += [ rebase_path(source, root_build_dir) ]
+      }
+    }
+  }
+
+  # Enforce compatibility checks for all FIDL libraries included in the IDK with
+  # platform `fuchsia`.
+  if (requires_compatibility_tests) {
+    api_levels = platform_version.frozen_api_levels
+
+    # Include the next numbered API level when bumping the API level.
+    # This assumes that the highest numbered API level is frozen.
+    # Note: This only affects the per-level FIDL compilation below and does not
+    # affect the rest of the build or sub-builds.
+    if (bump_api_level) {
+      _max_frozen_api_level = 0
+      foreach(level, platform_version.frozen_api_levels) {
+        if (level > _max_frozen_api_level) {
+          _max_frozen_api_level = level
+        }
+      }
+      next_numbered_api_level = _max_frozen_api_level + 1
+
+      foreach(level, platform_version.all_numbered_api_levels) {
+        assert(
+            level < next_numbered_api_level,
+            "There is an (unfrozen) API level ${level} greater than or equal to the new API level ${next_numbered_api_level}.")
+      }
+
+      api_levels += [ next_numbered_api_level ]
+    }
+
+    api_levels += [
+      "NEXT",
+      "HEAD",
+    ]
+
+    if (defined(invoker.goldens_dir)) {
+      goldens_dir = invoker.goldens_dir
+    } else {
+      goldens_dir = "//sdk/history"
+    }
+
+    foreach(level, api_levels) {
+      # Avoid clobbering files for different levels.
+      level_gen_dir = "${target_gen_dir}/${level}"
+
+      json_summary_file = "${level_gen_dir}/${library_name}.api_summary.json"
+
+      fidl_ir_target_name_for_level = "${compilation_target_name}_${level}"
+      fidl_ir(fidl_ir_target_name_for_level) {
+        forward_variables_from(invoker, invoker_variables_to_forward_to_fidl_ir)
+        fidl_target_name = main_target_name
+        fidl_library_name = library_name
+
+        assert((fidlc_versioned_arg == "fuchsia" && is_stable) ||
+               (fidlc_versioned_arg == "fuchsia:HEAD" && !is_stable))
+        versioned = fidlc_versioned_arg
+
+        # `available` is only allowed for `testonly` libraries (asserted above). Defensively double
+        # check here where we ignore `available`.
+        assert(
+            !defined(available),
+            "Overriding `available` is not allowed for SDK FIDL library '${library_name}'.")
+
+        available = [ "fuchsia:${level}" ]
+        target_api_level = level
+        goldens_dir = goldens_dir
+
+        gen_dir = level_gen_dir
+        json_representation = "${level_gen_dir}/${main_target_name}.fidl.json"
+        out_json_summary = json_summary_file
+      }
+
+      sdk_atom_deps += [ ":${fidl_ir_target_name_for_level}" ]
+
+      if (level != "HEAD") {
+        test_target_name_for_level =
+            "${main_target_name}_${level}_compatibility_test"
+        fidl_api_compatibility_test(test_target_name_for_level) {
+          forward_variables_from(invoker, [ "testonly" ])
+          target_api_level = level
+          current = json_summary_file
+          golden = "${goldens_dir}/${level}/${library_name}.api_summary.json"
+
+          if (update_goldens) {
+            # Using this policy for every level allows generating all goldens
+            # from scratch. See https://fxbug.dev/324481114#comment5.
+            policy = "update_golden"
+          } else if (level == "NEXT") {
+            policy = "ack_changes"
+          } else {
+            policy = "no_changes"
+          }
+
+          deps = [ ":${fidl_ir_target_name_for_level}" ]
+        }
+        sdk_atom_deps += [ ":${test_target_name_for_level}" ]
+      }
+    }
+  }
+
+  validate_json(verification_target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "applicable_licenses",
+                             "testonly",
+                           ])
+    visibility = [ ":*" ]
+    data = invoker.fidl_ir_json
+    schema = "//tools/fidl/fidlc/schema.json"
+    deps = [ ":$compilation_target_name" ]
+  }
+
+  group(main_target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "applicable_licenses",
+                             "testonly",
+                             "visibility",
+                           ])
+
+    metadata = {
+      # Metadata to allow us to query all FIDL IR files.
+      fidl_json = [ rebase_path(invoker.fidl_ir_json, root_build_dir) ]
+      generated_sources = fidl_json
+    }
+
+    public_deps = [
+      ":$compilation_target_name",
+      ":$lint_target_name",
+    ]
+
+    deps = [
+             ":$plasa_fragment_target_name",
+             ":$verification_target_name",
+           ] + category_allowlist_deps
+  }
+
+  if (defined(invoker.sdk_category)) {
+    # Process sources.
+    file_base = "fidl/$library_name"
+    all_files = []
+    sdk_sources = []
+    foreach(source, invoker.sources) {
+      relative_source = rebase_path(source, ".")
+      if (string_replace(relative_source, "..", "bogus") != relative_source) {
+        # If the source file is not within the same directory, just use the file
+        # name.
+        relative_source = get_path_info(source, "file")
+      }
+      destination = "$file_base/$relative_source"
+      sdk_sources += [ destination ]
+      all_files += [
+        {
+          source = source
+          dest = destination
+        },
+      ]
+    }
+
+    # Identify metadata for dependencies.
+    sdk_metas = []
+    sdk_deps = []
+    if (defined(invoker.public_deps)) {
+      foreach(dep, invoker.public_deps) {
+        full_label = get_label_info(dep, "label_no_toolchain")
+        sdk_dep = "${full_label}_sdk"
+        sdk_deps += [ sdk_dep ]
+        gen_dir = get_label_info(sdk_dep, "target_gen_dir")
+        name = get_label_info(sdk_dep, "name")
+        sdk_metas += [ "$gen_dir/$name.meta.json" ]
+      }
+    }
+
+    # Generate the library metadata.
+    sdk_meta_file = "${target_gen_dir}/${target_name}.sdk_meta.json"
+    sdk_meta_target_name = "${target_name}_meta"
+
+    action(sdk_meta_target_name) {
+      forward_variables_from(invoker, [ "testonly" ])
+
+      script = "//release/fidl/gen_sdk_meta.py"
+
+      inputs = sdk_metas
+
+      outputs = [ sdk_meta_file ]
+
+      args = [
+        "--out",
+        rebase_path(sdk_meta_file, root_build_dir),
+        "--name",
+        library_name,
+        "--root",
+        file_base,
+      ]
+      args += [ "--specs" ] + rebase_path(sdk_metas, root_build_dir)
+      args += [ "--sources" ] + sdk_sources
+
+      if (is_stable) {
+        args += [ "--stable" ]
+      }
+
+      deps = sdk_deps
+    }
+
+    sdk_atom("${target_name}_sdk") {
+      forward_variables_from(invoker,
+                             [
+                               "sdk_area",
+                               "testonly",
+                             ])
+
+      id = "sdk://fidl/$library_name"
+
+      category = invoker.sdk_category
+
+      # TODO(https://fxbug.dev/333907192): Remove when the allowlist is removed.
+      if (is_in_internal_only_idk) {
+        category = "internal"
+      }
+
+      if (is_stable) {
+        if (defined(invoker.api)) {
+          api = invoker.api
+        } else {
+          api = "$library_name.api"
+        }
+
+        api_contents = [
+          {
+            source = summary_file_json
+            dest = "fidl/$library_name"
+          },
+        ]
+      } else {
+        assert(
+            !defined(invoker.api),
+            "Unstable libraries do not require/support modification acknowledgement.")
+      }
+
+      meta = {
+        source = sdk_meta_file
+        dest = "$file_base/meta.json"
+        schema = "fidl_library"
+        stable = is_stable
+      }
+
+      files = all_files
+
+      metadata = {
+        # Metadata to allow us to query all FIDL IR and source files.
+        fidl_json = [ rebase_path(invoker.fidl_ir_json, root_build_dir) ]
+        generated_sources = fidl_json
+
+        # For libraries included in an IDK, add the metadata to the list used to
+        # generate documentation.
+        # Historically, libraries in the  "partner_internal" SDK category have
+        # also been published, so include them as well.
+        if (is_sdk_included_publishable || category == "partner_internal") {
+          sdk_fidl_json_data = [
+            {
+              name = library_name
+              ir = rebase_path(invoker.fidl_ir_json, root_build_dir)
+              category = category
+            },
+          ]
+        }
+      }
+
+      non_sdk_deps = [
+                       ":$main_target_name",
+                       ":$sdk_meta_target_name",
+                     ] + sdk_atom_deps
+
+      deps = []
+      if (defined(invoker.public_deps)) {
+        foreach(dep, invoker.public_deps) {
+          label = get_label_info(dep, "label_no_toolchain")
+          deps += [ "${label}_sdk" ]
+        }
+      }
+    }
+  } else {  # defined(invoker.sdk_category)
+    not_needed(invoker, [ "sdk_area" ])
+    not_needed([ "sdk_atom_deps" ])
+  }
+}

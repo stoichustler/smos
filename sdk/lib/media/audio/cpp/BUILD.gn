@@ -1,0 +1,22 @@
+# Copyright 2017 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("cpp") {
+  sources = [
+    "perceived_level.cc",
+    "perceived_level.h",
+    "types.cc",
+    "types.h",
+  ]
+
+  deps = [
+    "//sdk/lib/syslog/cpp",
+    "//userspace/lib/fxl",
+  ]
+
+  public_deps = [ "//sdk/fidl/fuchsia.media:fuchsia.media_hlcpp" ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+}

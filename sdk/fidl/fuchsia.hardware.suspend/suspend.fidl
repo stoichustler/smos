@@ -1,0 +1,49 @@
+// Copyright 2024 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+@available(added=HEAD)
+library fuchsia.hardware.suspend;
+
+using zx;
+
+/// Maximum number of suspend states supported by the system.
+const MAX_SUSPEND_STATES uint32 = 256;
+
+type SuspendState = table {
+    /// The amount of time taken for the system to resume from this suspend state.
+    1: resume_latency zx.Duration;
+};
+
+type WakeReason = table {
+    /// Platform-defined physical interrupt vectors that can wake the system.
+    1: wake_vectors vector<uint64>:MAX;
+
+    /// Platform-defined software wake vectors.
+    2: soft_wake_vectors vector<uint64>:MAX;
+};
+
+open protocol Suspender {
+    /// Returns the suspend states supported by the system.
+    flexible GetSuspendStates() -> (table {
+        1: suspend_states vector<SuspendState>:MAX_SUSPEND_STATES;
+    }) error zx.Status;
+
+    /// Suspends the system until a wake event resumes it.
+    flexible Suspend(table {
+        /// Index into the vector returned by GetSuspendStates.
+        1: state_index uint64;
+    }) -> (table {
+        /// The wake reason that caused the system to resume.
+        1: reason WakeReason;
+
+        /// Time spent suspended, unset if suspend was interrupted.
+        2: suspend_duration zx.Duration;
+
+        /// Suspend/resume overhead, excluding suspended time.
+        3: suspend_overhead zx.Duration;
+    }) error zx.Status;
+};
+
+service SuspendService {
+    suspender client_end:Suspender;
+};

@@ -1,0 +1,62 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+rustc_library("diagnostics") {
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//sdk/fidl/fuchsia.diagnostics.types:fuchsia.diagnostics.types_rust",
+    "//sdk/rust/zx",
+    "//userspace/lib/diagnostics/inspect/contrib/rust",
+    "//userspace/lib/diagnostics/inspect/rust",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-runtime",
+    "//userspace/lib/fuchsia-sync",
+    "//userspace/lib/injectable-time",
+    "//userspace/sys/component_manager/lib/errors",
+    "//userspace/sys/component_manager/lib/hooks",
+    "//userspace/sys/lib/moniker",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:lazy_static",
+    "//third_party/rust_crates:log",
+  ]
+
+  test_deps = [
+    "//userspace/lib/diagnostics/hierarchy/rust",
+    "//userspace/lib/diagnostics/testing/diagnostics-assertions/rust:diagnostics-assertions",
+    "//userspace/lib/fuchsia",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:itertools",
+  ]
+
+  sources = [
+    "src/escrow.rs",
+    "src/lib.rs",
+    "src/lifecycle.rs",
+    "src/task_metrics/component_stats.rs",
+    "src/task_metrics/component_tree_stats.rs",
+    "src/task_metrics/constants.rs",
+    "src/task_metrics/measurement.rs",
+    "src/task_metrics/mod.rs",
+    "src/task_metrics/runtime_stats_source.rs",
+    "src/task_metrics/task_info.rs",
+    "src/task_metrics/testing.rs",
+  ]
+}
+
+fuchsia_unittest_component("test_component") {
+  deps = [ ":diagnostics_test" ]
+}
+
+fuchsia_test_package("tests") {
+  package_name = "diagnostics_test"
+  test_components = [ ":test_component" ]
+}

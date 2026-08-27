@@ -1,0 +1,380 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This allows code call FIDL wire table constructors and setters rather than using builders.
+config("fidl-wire-deprecated-mutable-tables") {
+  cflags_cc = [ "-DFIDL_WIRE_ALLOW_DEPRECATED_MUTABLE_TABLES" ]
+
+  # Please do not add to this list.
+  #
+  # To regenerate this list, run
+  #
+  #   scripts/gn/trim_visibility.py --target="//release/cpp:fidl-wire-deprecated-mutable-tables"
+  #
+  # and replace the contents of `visibility` with the script output.
+  visibility = [
+    #------------------
+    #------------------
+    "//examples/drivers/driver_test_realm/non_hermetic/cpp:driver_test_realm_example_non_hermetic_cpp",
+
+    #------------------
+    #------------------
+    "//sdk/lib/driver/component/cpp:cpp_test",
+
+    #------------------
+    #------------------
+    "//sdk/lib/driver/component/cpp:driver2_llcpp_test",
+
+    #------------------
+    #------------------
+    "//sdk/lib/driver_test_realm/platform:bin",
+
+    #------------------
+    #------------------
+    "//sdk/lib/driver_test_realm/simple:bin",
+
+    #------------------
+    #------------------
+    "//sdk/lib/sys/cpp/tests:component_cpp_unittests_bin",
+
+    #------------------
+    #------------------
+    "//userspace/connectivity/network/tun/network-tun:network_tun_unittest",
+
+    #------------------
+    #------------------
+    "//userspace/connectivity/network/tun/network-tun:src",
+
+    #------------------
+    #------------------
+    "//userspace/developer/forensics/crasher/cpp:crasher_exe",
+
+    #------------------
+    #------------------
+    "//userspace/devices/bin/driver_host:unittests",
+
+    #------------------
+    #------------------
+    "//userspace/devices/board/drivers/astro:astro-driver",
+
+    #------------------
+    #------------------
+    "//userspace/devices/board/drivers/nelson:nelson-module-driver",
+
+    #------------------
+    #------------------
+    "//userspace/devices/board/drivers/sherlock:sherlock-driver",
+
+    #------------------
+    #------------------
+    "//userspace/devices/board/drivers/sherlock:sherlock-factory-driver",
+
+    #------------------
+    #------------------
+    "//userspace/devices/board/lib/acpi",
+
+    #------------------
+    #------------------
+    "//userspace/devices/board/lib/acpi:acpi-test",
+
+    #------------------
+    #------------------
+    "//userspace/devices/board/lib/acpi:host-acpi",
+
+    #------------------
+    #------------------
+    "//userspace/devices/lib/fidl-metadata",
+
+    #------------------
+    #------------------
+    "//userspace/devices/nand/drivers/broker/test:nand-broker",
+
+    #------------------
+    #------------------
+    "//userspace/devices/nand/drivers/broker/test:nandpart-broker",
+
+    #------------------
+    #------------------
+    "//userspace/devices/nand/drivers/ram-nand:ram-nand-driver",
+
+    #------------------
+    #------------------
+    "//userspace/devices/nand/drivers/ram-nand:test",
+
+    #------------------
+    #------------------
+    "//userspace/devices/power/drivers/aml-pwm-regulator:aml-pwm-regulator-test-bin",
+
+    #------------------
+    #------------------
+    "//userspace/devices/serial/drivers/ftdi:common",
+
+    #------------------
+    #------------------
+    "//userspace/sysmem/drivers/sysmem:sysmem-unittest-bin",
+
+    #------------------
+    #------------------
+    "//userspace/sysmem/server:sysmem_common_srcs",
+
+    #------------------
+    #------------------
+    "//userspace/devices/tee/drivers/optee:optee-message-test-bin",
+
+    #------------------
+    #------------------
+    "//userspace/devices/tee/drivers/optee:optee_lib",
+
+    #------------------
+    #------------------
+    "//userspace/devices/tests/ddk-fallback-test-v2:test",
+
+    #------------------
+    #------------------
+    "//userspace/devices/tests/devfs",
+
+    #------------------
+    #------------------
+    "//userspace/devices/tests/fidl-protocol:test",
+
+    #------------------
+    #------------------
+    "//userspace/devices/tests/v2/composite:root_driver",
+
+    #------------------
+    #------------------
+    "//userspace/devices/tests/v2/dynamic_offers:root_driver",
+
+    #------------------
+    #------------------
+    "//userspace/devices/tests/v2/interop:root_driver",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/display/drivers/amlogic-display:common_srcs",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/display/drivers/simple:shared",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/display/lib/designware-hdmi/test:hdmi-dw",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/display/lib/mipi-dsi",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/drivers/aml-gpu:aml-gpu-test-bin",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/drivers/misc/goldfish_control:control_driver-driver",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/drivers/misc/goldfish_control:goldfish-control-device-test",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/drivers/msd-intel-gen:msd_intel_entry",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/drivers/msd-intel-gen:msd_intel_test_entry",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/drivers/msd-intel-gen/src",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/magma/lib/magma/platform/zircon:entry",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/magma/lib/magma/platform/zircon:entry_test",
+
+    #------------------
+    #------------------
+    "//userspace/graphics/magma/lib/magma/platform/zircon:sysmem_connection",
+
+    #------------------
+    #------------------
+    "//userspace/lib/fidl/llcpp/tests/conformance:*",
+
+    #------------------
+    #------------------
+    "//userspace/storage/lib/vfs/cpp",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/audio_core:audio_core_lib",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/audio_core:unittest_bin",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/aml-g12-pdm:aml-g12-pdm-driver",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/aml-g12-pdm/test:aml-g12-pdm-test-bin",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/aml-g12-tdm:aml-g12-tdm-driver",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/aml-g12-tdm/test:aml-g12-tdm-dai-test-bin",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/aml-g12-tdm/test:aml-g12-tdm-test-bin",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/intel-hda/codecs/hdmi:hdmi-audio-codec-driver",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/intel-hda/codecs/qemu:qemu-audio-codec-driver",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/intel-hda/codecs/realtek:realtek-audio-codec-driver",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/intel-hda/controller:intel-hda-stream-test-bin",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/intel-hda/controller:src",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/lib/audio-utils",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/lib/intel-hda",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/usb-audio:shared",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/usb-audio/tests:usb-audio-test-bin",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/drivers/virtual-audio-legacy:virtual-audio-legacy-driver",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/effects/test_effects:test_effects_v2",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/lib/effects_loader:test",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/lib/simple-audio-stream",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/lib/simple-audio-stream/tests:sa-unittest-bin",
+
+    #------------------
+    #------------------
+    "//userspace/media/audio/lib/simple-codec",
+
+    #------------------
+    #------------------
+    "//userspace/storage/bin/mount",
+
+    #------------------
+    #------------------
+    "//userspace/storage/blobfs/test:blobfs_unittest",
+
+    #------------------
+    #------------------
+    "//userspace/storage/blobfs/test/integration:blobfs_verifier_service",
+
+    #------------------
+    #------------------
+    "//userspace/storage/testing/driver_test_realm:bin",
+
+    #------------------
+    #------------------
+    "//userspace/tests/benchmarks/fidl/driver_cpp:*",
+
+    #------------------
+    #------------------
+    "//userspace/tests/benchmarks/fidl/driver_llcpp:*",
+
+    #------------------
+    #------------------
+    "//userspace/tests/benchmarks/fidl/llcpp:*",
+
+    #------------------
+    #------------------
+    "//userspace/tests/benchmarks/fidl/reference:benchmark_suite_reference",
+
+    #------------------
+    #------------------
+    "//userspace/tests/benchmarks/fidl/walker:*",
+
+    #------------------
+    #------------------
+    "//userspace/ui/input/drivers/hid-input-report:driver-internals",
+
+    #------------------
+    #------------------
+    "//userspace/ui/input/drivers/hid-input-report:hid-input-report-test-bin",
+
+    #------------------
+    #------------------
+    "//userspace/ui/input/drivers/virtio:virtio-input-test",
+
+    #------------------
+    #------------------
+    "//userspace/ui/input/lib/hid-input-report",
+
+    #------------------
+    #------------------
+    "//userspace/ui/input/lib/hid-input-report:lib-hid-input-report-test",
+
+    #------------------
+    #------------------
+    "//userspace/virtualization/bin/vmm/device/virtio_magma:magma_image",
+
+    #------------------
+    #------------------
+    "//zircon/system/ulib/image-format:image-format",
+
+    #------------------
+    #------------------
+    "//zircon/system/ulib/image-format/test:image-format-test",
+
+    #------------------
+    #------------------
+    "//zircon/system/ulib/sysmem-version:sysmem-version",
+
+    #------------------
+    #------------------
+    "//zircon/system/ulib/sysmem-version/test:sysmem-version-test",
+
+    #------------------
+    #------------------
+  ]
+}

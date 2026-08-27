@@ -1,0 +1,82 @@
+### General file patterns
+*~
+.*.sw?
+.build_lock
+.cargo
+.clangd
+**/.cache/clangd
+.checkstyle
+.classpath
+.config
+.ccls-cache
+.envrc
+.flutter_tool_state
+.cproject
+.DS_Store
+.gdb_history
+.gdbinit
+.jiri_manifest
+.landmines
+.local
+.packages
+.project
+.pydevproject
+.ssh
+.vscode
+*_BACKUP_*
+*_REMOTE_*
+*_LOCAL_*
+*_BASE_*
+*.dSYM
+*.fxt
+*.iml
+*.orig
+*.pyc
+*.code-workspace
+!fuchsia.code-workspace
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+Cargo.lock
+Cargo.toml
+CMakeLists.txt
+compile_commands.json
+cmake-build-debug/
+cscope.*
+default.profraw
+rls*.log
+Session.vim
+fidl-tags
+tags
+TAGS
+Thumbs.db
+tmp/
+/third_party/rust_crates/vendor/**/tmp/
+
+### Checkout generated files
+/release/checkout.gni
+/release/cipd.gni
+
+### Infra files
+# These files may exist in a checkout on an Infra VM but not locally
+/.GUARD_FILE
+
+### Directories to be ignored across the tree
+.cipd/
+.idea/
+
+# For storing local scripts and data files in a source tree.
+/out/
+/release/secondary/third_party/ffmpeg
+/release/secondary/third_party/protobuf
+
+# rust-analyzer
+/rust-project.json
+
+# Note that some of those directories not included.
+/docs
+
+__pycache__/
+
+### End of .gitignore

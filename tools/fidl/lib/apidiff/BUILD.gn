@@ -1,0 +1,42 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/go/go_library.gni")
+import("//release/go/go_test.gni")
+import("//release/host.gni")
+import("//tools/fidl/lib/fidlgentest/fidlgentest_go_test.gni")
+
+if (is_host) {
+  fidlgentest_go_test("apidiff_test") {
+    library = ":gopkg"
+  }
+
+  go_library("gopkg") {
+    sources = [
+      "apidiff.go",
+      "apidiff_test.go",
+      "diff.go",
+      "diff_test.go",
+      "report.go",
+      "report_test.go",
+    ]
+    deps = [
+      "//third_party/golibs:github.com/google/go-cmp",
+      "//tools/fidl/lib/fidlgen",
+      "//tools/fidl/lib/summarize:gopkg",
+    ]
+
+    # This library is FIDL internal only.
+    visibility = [ "//tools/fidl/*" ]
+  }
+}  # is_host
+
+group("apidiff") {
+  deps = [ ":gopkg($host_toolchain)" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":apidiff_test($host_toolchain)" ]
+}

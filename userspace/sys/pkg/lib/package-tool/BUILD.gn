@@ -1,0 +1,78 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/testing/host_test_data.gni")
+
+if (is_host) {
+  relative_root_out_dir = rebase_path(root_out_dir, root_build_dir)
+  rustc_library("package-tool") {
+    version = "0.1.0"
+    edition = "2021"
+    with_unit_tests = true
+
+    deps = [
+      "//release/sdk/meta:rust",
+      "//userspace/lib/fuchsia-async",
+      "//userspace/lib/fuchsia-lockfile:lib",
+      "//userspace/lib/tempfile-ext",
+      "//userspace/lib/versioning/version-history/rust",
+      "//userspace/lib/versioning/version-history/rust/data",
+      "//userspace/sys/pkg/lib/far/rust:fuchsia-archive",
+      "//userspace/sys/pkg/lib/fuchsia-merkle",
+      "//userspace/sys/pkg/lib/fuchsia-pkg",
+      "//userspace/sys/pkg/lib/fuchsia-repo",
+      "//third_party/rust_crates:anyhow",
+      "//third_party/rust_crates:argh",
+      "//third_party/rust_crates:async-fs",
+      "//third_party/rust_crates:camino",
+      "//third_party/rust_crates:chrono",
+      "//third_party/rust_crates:futures",
+      "//third_party/rust_crates:log",
+      "//third_party/rust_crates:serde",
+      "//third_party/rust_crates:serde_json",
+      "//third_party/rust_crates:tempfile",
+      "//third_party/rust_crates:tuf",
+    ]
+
+    test_deps = [
+      "//userspace/developer/ffx/lib/pkg:empty-repo-keys",
+      "//userspace/developer/ffx/lib/pkg:empty-repo-metadata",
+      "//userspace/lib/assembly/partitions_config",
+      "//userspace/lib/fuchsia",
+      "//userspace/lib/fuchsia-url",
+      "//userspace/sys/pkg/lib/far/rust:fuchsia-archive",
+      "//third_party/rust_crates:assert_matches",
+      "//third_party/rust_crates:pretty_assertions",
+      "//third_party/rust_crates:walkdir",
+    ]
+
+    sources = [
+      "src/args.rs",
+      "src/lib.rs",
+      "src/package_archive.rs",
+      "src/package_build.rs",
+      "src/repo_create.rs",
+      "src/repo_publish.rs",
+    ]
+
+    configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+    rustenv = [ "ROOT_OUT_DIR=$relative_root_out_dir" ]
+  }
+
+  group("tests") {
+    testonly = true
+    deps = [ ":package-tool_test" ]
+  }
+} else {
+  group("package-tool") {
+    deps = [ ":package-tool($host_toolchain)" ]
+  }
+
+  group("tests") {
+    testonly = true
+    deps = [ ":package-tool_test($host_toolchain)" ]
+  }
+}

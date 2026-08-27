@@ -1,0 +1,76 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/zircon/zx_library.gni")
+
+zx_library("svc") {
+  sdk = "source"
+  sdk_headers = [
+    "lib/svc/outgoing.h",
+    "lib/svc/service.h",
+  ]
+  sources = [ "outgoing.cc" ]
+  deps = [ "//sdk/lib/fdio" ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/async",
+    "//userspace/storage/lib/vfs/cpp",
+    "//zircon/system/ulib/zx",
+  ]
+
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # This is an allowlist of targets that use the svc library. New code should use the
+  # component::OutgoingDirectory class in //sdk/lib/sys/component/cpp instead.
+  #
+  # To remove items from the allowlist, please send a change to one of the OWNERS of
+  # this file to remove an element from the visibility list below.
+  #
+  # Please allowlist entire directories rather than individual targets as it
+  # requires less allowlist churn over time.
+  #
+  # To regenerate:
+  #   scripts/gn/trim_visibility.py --target="//zircon/system/ulib/svc"
+  visibility = [
+    "//examples/fidl/cpp/services/server/*",
+    "//sdk/lib/driver_test_realm/*",
+    "//userspace/bringup/bin/console/*",
+    "//userspace/bringup/bin/critical-services/*",
+    "//userspace/bringup/bin/device-name-provider/*",
+    "//userspace/bringup/bin/kernel_debug_broker/*",
+    "//userspace/bringup/bin/paver/*",
+    "//userspace/bringup/bin/sysinfo/*",
+    "//userspace/bringup/bin/sysmem/*",
+    "//userspace/connectivity/network/tun/network-tun/*",
+    "//userspace/connectivity/openthread/ot-stack/*",
+    "//userspace/connectivity/openthread/third_party/openthread/platform/*",
+    "//userspace/connectivity/openthread/third_party/openthread/platform/tests/*",
+    "//userspace/devices/bin/driver_manager/*",
+    "//userspace/devices/block/drivers/sdmmc/*",
+    "//userspace/devices/board/lib/acpi/*",
+    "//userspace/devices/bus/drivers/pci/*",
+    "//userspace/devices/i2c/drivers/i2c/*",
+    "//userspace/devices/testing/mock-ddk/*",
+    "//userspace/devices/tests/fidl-protocol/*",
+    "//userspace/graphics/drivers/misc/goldfish/*",
+    "//userspace/graphics/drivers/misc/goldfish_address_space/*",
+    "//userspace/graphics/drivers/misc/goldfish_sync/*",
+    "//userspace/storage/lib/paver/*",
+    "//userspace/storage/lib/paver/test/*",
+    "//userspace/sys/component_manager/tests/rights/*",
+    "//userspace/sys/component_manager/tests/security_policy/capability_allowlist/*",
+    "//userspace/virtualization/packages/*",
+    "//zircon/system/ulib/kcounter/*",
+    "//zircon/system/ulib/kernel-debug/*",
+    "//zircon/system/ulib/ktrace/*",
+    "//zircon/system/ulib/profile/*",
+  ]
+}

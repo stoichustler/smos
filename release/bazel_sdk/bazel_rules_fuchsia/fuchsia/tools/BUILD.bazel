@@ -1,0 +1,167 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Tools supporting Fuchsia Bazel rules.
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_binary(
+    name = "unbuffer",
+    srcs = ["unbuffer.py"],
+)
+
+py_library(
+    name = "pylib_elf_info",
+    srcs = ["pylib/elf_info.py"],
+)
+
+py_binary(
+    name = "elf_strip",
+    srcs = ["elf_strip.py"],
+    deps = [":pylib_elf_info"],
+)
+
+py_binary(
+    name = "generate_symbols_dir",
+    srcs = ["generate_symbols_dir.py"],
+    deps = [":pylib_elf_info"],
+)
+
+py_binary(
+    name = "publish_packages",
+    srcs = ["publish_packages.py"],
+    deps = [":fuchsia_task_lib"],
+)
+
+py_binary(
+    name = "meta_content_append",
+    srcs = ["meta_content_append.py"],
+)
+
+py_binary(
+    name = "rebase_package_manifest",
+    srcs = ["rebase_package_manifest.py"],
+)
+
+py_binary(
+    name = "create_package_manifest_list",
+    srcs = ["create_package_manifest_list.py"],
+)
+
+py_binary(
+    name = "validate_component_manifests",
+    srcs = ["validate_component_manifests.py"],
+)
+
+py_binary(
+    name = "create_platform_aibs_file",
+    srcs = ["create_platform_aibs_file.py"],
+)
+
+py_library(
+    name = "fuchsia_task_lib",
+    srcs = ["fuchsia_task_lib.py"],
+)
+
+py_binary(
+    name = "run_workflow",
+    srcs = ["run_workflow.py"],
+    deps = [":fuchsia_task_lib"],
+)
+
+py_binary(
+    name = "fuchsia_shell_task",
+    srcs = ["fuchsia_shell_task.py"],
+    deps = [":fuchsia_task_lib"],
+)
+
+py_binary(
+    name = "run_ffx",
+    srcs = ["run_ffx.py"],
+    deps = [":fuchsia_task_lib"],
+)
+
+py_binary(
+    name = "register_debug_symbols",
+    srcs = ["register_debug_symbols.py"],
+    deps = [":fuchsia_task_lib"],
+)
+
+py_binary(
+    name = "register_driver",
+    srcs = ["register_driver.py"],
+    deps = [":fuchsia_task_lib"],
+)
+
+py_binary(
+    name = "run_test_component",
+    srcs = ["run_test_component.py"],
+    deps = [":fuchsia_task_lib"],
+)
+
+py_binary(
+    name = "run_component",
+    srcs = ["run_component.py"],
+)
+
+py_binary(
+    name = "run_lacewing_test",
+    srcs = ["run_lacewing_test.py"],
+)
+
+py_binary(
+    name = "test_enumerated_components",
+    srcs = ["test_enumerated_components.py"],
+    deps = [":fuchsia_task_lib"],
+)
+
+py_binary(
+    name = "development_status",
+    srcs = ["development_status.py"],
+    deps = [
+        ":fuchsia_task_lib",
+    ],
+)
+
+py_binary(
+    name = "json_comparator",
+    srcs = ["json_comparator.py"],
+)
+
+py_binary(
+    name = "size_report_merger",
+    srcs = ["size_report_merger.py"],
+)
+
+py_binary(
+    name = "convert_size_limits",
+    srcs = ["convert_size_limits.py"],
+)
+
+py_binary(
+    name = "construct_budgets_file",
+    srcs = ["construct_budgets_file.py"],
+)
+
+py_binary(
+    name = "work_on_runner",
+    srcs = ["work_on_runner.py"],
+)
+
+py_binary(
+    name = "elf_sizes",
+    srcs = ["elf_sizes.py"],
+)
+
+py_binary(
+    name = "ensure_build_config",
+    srcs = ["ensure_build_config.py"],
+)
+
+py_binary(
+    name = "check_restricted_symbols",
+    srcs = ["check_restricted_symbols.py"],
+)

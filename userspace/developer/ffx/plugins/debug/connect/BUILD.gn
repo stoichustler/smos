@@ -1,0 +1,35 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//userspace/developer/ffx/build/ffx_plugin.gni")
+
+ffx_plugin("ffx_debug_connect") {
+  sdk_category = "not-yet-specified"
+  version = "0.1.0"
+  edition = "2021"
+
+  args_sources = [ "src/args.rs" ]
+  args_deps = [
+    "//userspace/developer/ffx/core:lib",
+    "//third_party/rust_crates:argh",
+  ]
+
+  sources = [ "src/lib.rs" ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.debugger:fuchsia.debugger_rust",
+    "//userspace/developer/debug/ffx_zxdb",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/lib/errors:lib",
+    "//userspace/developer/ffx/lib/fho:lib",
+    "//userspace/developer/ffx/lib/sdk:lib",
+    "//userspace/developer/ffx/lib/target/holders:lib",
+    "//userspace/developer/ffx/lib/writer:lib",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:signal-hook",
+  ]
+
+  data_deps = [ "//userspace/developer/debug/zxdb" ]
+}

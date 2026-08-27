@@ -1,0 +1,23 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.posix.socket.packet") {
+  sdk_category = "partner_internal"
+  sdk_area = "Unknown"
+  stable = true
+
+  sources = [ "socket.fidl" ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.net",
+    "//sdk/fidl/fuchsia.posix",
+    "//sdk/fidl/fuchsia.posix.socket",
+  ]
+
+  # TODO(https://fxbug.dev/42169676): Remove this dependency since this target does
+  # not directly depend on these libraries.
+  public_deps += [ "//sdk/fidl/fuchsia.unknown" ]
+}

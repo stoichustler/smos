@@ -1,0 +1,117 @@
+# Copyright 2020 The Fuchsia Authors
+#
+# Use of this source code is governed by a MIT-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/MIT
+
+import("//release/config/zircon/standard.gni")
+import("//release/cpp/library_headers.gni")
+import("//release/zircon/zircon_cpu.gni")
+import("//zircon/system/ulib/hwreg/hwreg_asm_header.gni")
+
+group("headers") {
+  # The per-CPU subdirectory is a separate library target but it shares (and
+  # overrides) the <lib/arch/...> header name space and users of this library
+  # need never realize it's distinct.  When building for a machine with no
+  # per-CPU subdirectory available, the rest of the library can still be used.
+  # The "host" subdirectory is a stub stand-in for a per-CPU subdirectory that
+  # provides no-op implementations of a few headers so they can be used
+  # unconditionally in various places.
+  if (smos_minimal_assembly && current_cpu == "x64") {
+    # SMOS does not build an x86 target kernel; host tools only need the
+    # architecture-independent headers.
+    public_deps = []
+  } else if ((standard_fuchsia_cpus + [ "arm" ]) + [ current_cpu ] -
+             [ current_cpu ] == (standard_fuchsia_cpus + [ "arm" ])) {
+    assert(!is_fuchsia)
+    public_deps = [ "host" ]
+  } else {
+    public_deps = [ "$zircon_cpu:headers" ]
+  }
+  public_deps += [ ":gen-asm" ]
+
+  # This comes after the arch-specific one so arch-specific headers
+  # take precedence (and can use `#include_next`).
+  public_deps += [ ":common-headers" ]
+}
+
+library_headers("common-headers") {
+  visibility = [ ":*" ]
+
+  headers = []
+  public_deps = [
+    "//sdk/lib/stdcompat",
+
+    # <lib/arch/zbi.h> has #include <lib/zbi-format/kernel.h>
+    # <lib/arch/zbi.h> has #include <lib/zbi-format/zbi.h>
+    "//sdk/lib/zbi-format",
+
+    # <lib/arch/zbi.h> has #include <fidl/zbi/data/asm/zbi.h>
+    "//sdk/fidl/zbi:zbi_zither.asm",
+
+    "//zircon/system/ulib/hwreg:headers",
+  ]
+
+  if (is_kernel) {
+    # <lib/arch/arm64/page-table.h> has #include <fbl/bits.h>
+    # <lib/arch/riscv64/page-table.h> has #include <fbl/bits.h>
+    public_deps += [ "//zircon/system/ulib/fbl:headers" ]
+  } else {
+    public_deps += [ "//zircon/system/ulib/fbl" ]
+  }
+}
+
+static_library("arch") {
+  public_deps = [ ":headers" ]
+
+  sources = [
+    "riscv64-features.cc",
+  ]
+
+  if (is_fuchsia || is_kernel) {
+    deps = [ zircon_cpu ]
+  }
+}
+
+group("tests") {
+  testonly = true
+  deps = [ "test:tests" ]
+}
+
+asm_headers = [
+  {
+    arch = "arm64"
+    name = "feature"
+  },
+  {
+    arch = "arm64"
+    name = "system"
+  },
+  {
+    arch = "riscv64"
+    name = "system"
+  },
+]
+gen_asm_deps = []
+foreach(header, asm_headers) {
+  gen_asm_deps += [ ":gen-${header.arch}-${header.name}-asm" ]
+  hwreg_asm_header("gen-${header.arch}-${header.name}-asm") {
+    visibility = [ ":*" ]
+    output_name = "lib/arch/${header.arch}/${header.name}-asm.h"
+    defines = [ "LIB_ARCH_PRINTERS" ]
+    sources = [ "$target_name.cc" ]
+    deps = [ ":arch" ]
+  }
+}
+
+group("gen-asm") {
+  visibility = [ ":*" ]
+
+  # These would be circular dependencies on the host, since that's where
+  # the generator programs are built and they need the library's headers.
+  # Since these headers are meant to be used by assembly code, they should
+  # not be needed by any host-compatible code.
+  if (!is_host) {
+    public_deps = gen_asm_deps
+  }
+}

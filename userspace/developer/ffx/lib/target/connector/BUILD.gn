@@ -1,0 +1,52 @@
+# Copyright 2025 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+assert(is_host, "target_connector is host only")
+
+rustc_library("lib") {
+  name = "target_connector"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//userspace/developer/ffx/command/error:lib",
+    "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_rust",
+    "//userspace/developer/ffx/lib/errors:lib",
+    "//userspace/developer/ffx/lib/fho:lib",
+    "//userspace/developer/ffx/lib/target:lib",
+    "//userspace/developer/ffx/lib/target/connector/network_connector:lib",
+    "//userspace/developer/ffx/lib/target/holders:lib",
+    "//userspace/developer/ffx/lib/target_errors:lib",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:tracing",
+  ]
+
+  test_deps = [
+    "//userspace/connectivity/overnet/lib/core",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-channel",
+    "//third_party/rust_crates:async-lock",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:mockall",
+  ]
+
+  sources = [ "src/lib.rs" ]
+}
+
+group("connector") {
+  deps = [ ":lib" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":lib_test($host_toolchain)" ]
+}

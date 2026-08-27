@@ -1,0 +1,128 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# AUTO-GENERATED - DO NOT EDIT!
+
+# Ensure that the same build configuration and output directory will be used
+# when there are two different transition paths to the same configured
+# target. For example, let's assume the following:
+#
+#  - transition_A sets the '//:foo' boolean build flag.
+#  - transition B sets the '//:bar' boolean build flag.
+#
+#  - the same `//:final` target is a transitive dependency of two different
+#    top-level ones using different transition paths, as in:
+#
+#       //:toplevel1 ---transition_A---> //:intermediate1 ---transition_B---> //:final
+#       //:toplevel2 ---transition_B---> //:intermediate2 ---transition_A---> //:final
+#
+# Without the flag below, the //:final target will be built twice, because by default the
+# transition path is part of the final build configuration due to a Bazel implementation
+# detail (search for 'affected_by' in the Bazel source tree).
+#
+# By using 'diff_against_baseline', Bazel will ignore the transition path, and recognize
+# that //:final only needs to be built once, at a single common location.
+#
+build --experimental_output_directory_naming_scheme=diff_against_baseline
+cquery --experimental_output_directory_naming_scheme=diff_against_baseline
+aquery --experimental_output_directory_naming_scheme=diff_against_baseline
+
+# Ensure local build actions never inherit the user's LD_LIBRARY_PATH
+# to improve hermeticity and caching.
+build --incompatible_strict_action_env=true
+
+# Do not create runfiles symlink forests for external repositories
+# under .runfiles/_main/external/repo in addition to .runfiles/repo.
+#
+# This is the default behavior in Bazel 8.0 but not in Bazel 7.x,
+# though `bazel test` implicitly disables the behavior since  Bazel 7.1
+build --legacy_external_runfiles=false
+
+# Setup the default platform.
+# We need to set them for cqueries and aqueries as well as build (and
+# everything else that inherits from it). Alas, setting them in `common`
+# breaks other things.
+cquery --platforms=//release/bazel/platforms:default
+cquery --host_platform=//release/bazel/platforms:host
+aquery --platforms=//release/bazel/platforms:default
+aquery --host_platform=//release/bazel/platforms:host
+build --platforms=//release/bazel/platforms:default
+build --host_platform=//release/bazel/platforms:host
+
+# Save workspace rule events to a log file for later analysis.
+common --experimental_workspace_rules_log_file={workspace_log_file}
+
+# Log of actions, including remote executions with cache hit/miss status.
+# This results in a zstd-compressed log file (proto: tools.protos.ExecLogEntry),
+# that appears as an invocation artifact named 'execution.log'.
+common:exec_log --execution_log_compact_file={execution_log_file}
+# Need the following to ensure the execution.log is actually uploaded to the RBE CAS.
+# Do not use =all, because that will attempt to upload locally built targets to CAS.
+common:exec_log --remote_build_event_upload=minimal
+# go/slipstream-bazel: detailed performance analysis and visualization
+common:exec_log --experimental_execution_graph_log_dep_type=all
+common:exec_log --experimental_enable_execution_graph_log
+
+# Prevent repository downloads with custom downloader config file.
+common --experimental_downloader_config=release/bazel/config/no_downloads_allowed.config
+
+# Pass local developer overrides for assembly to Bazel
+# For now, this needs to set the label_flag() in both @rules_fuchsia
+# and @fuchsia_sdk to ensure that all fuchsia_product() definitions
+# correctly support this feature. The @fuchsia_sdk one may be
+# removed when the fuchsia.git and vendor/*.git repositories no
+# longer include rules from @fuchsia_sdk.
+common --@fuchsia_sdk//fuchsia:assembly_developer_overrides_list=@assembly_developer_overrides//:in-tree_developer_overrides_list
+common --@rules_fuchsia//fuchsia:assembly_developer_overrides_list=@assembly_developer_overrides//:in-tree_developer_overrides_list
+
+# Disable verbose Bazel output with --config=quiet
+# Note that --show_result=0 is not supported by `bazel query`.
+common:quiet --noshow_loading_progress
+common:quiet --noshow_progress
+common:quiet --ui_event_filters=-info
+cquery:quiet --show_result=0
+aquery:quiet --show_result=0
+build:quiet --show_result=0
+
+# Ensure outputs are writable (umask 0755) instead of readonly (0555),
+# which prevent removing output directories with `rm -rf`.
+# See https://fxbug.dev/42072059
+build --experimental_writable_outputs
+
+# Ensure the embedded JDK that comes with Bazel is always used
+# This prevents Bazel from downloading extra host JDKs from the
+# network, even when a project never uses Java-related  rules
+# (for some still-very-mysterious reasons!)
+build --java_runtime_version=embedded_jdk
+build --tool_java_runtime_version=embedded_jdk
+
+# Set up DEFINE flags for libraries imported from @internal_sdk at a project
+# level. See https://fxbug.dev/42067010 for more information.
+build --per_file_copt=src/lib/diagnostics/accessor2logger_accessor2logger/log_message.cc@-DRAPIDJSON_HAS_STDSTRING,-DRAPIDJSON_HAS_CXX11_RANGE_FOR,-DRAPIDJSON_HAS_CXX11_RVALUE_REFS,-DRAPIDJSON_HAS_CXX11_TYPETRAITS,-DRAPIDJSON_HAS_CXX11_NOEXCEPT
+
+# Set up Pigweed configuration and module backends.
+import third_party/pigweed/configuration.bazelrc
+
+# Profiling network usage can help find unexpected uploading/downloading by RBE, BES, etc.
+# As of Bazel 8, this will be enabled by default.
+build --experimental_collect_system_network_usage
+
+# Use --config=no_sdk to ensure that the @fuchsia_sdk and @fuchsia_clang
+# repositories will be empty. This prevents generating Fuchsia binaries
+# entirely but may be useful to run Bazel commands immediately in the build.
+common:no_sdk \
+  --override_repository=fuchsia_in_tree_idk=release/bazel/local_repositories/empty \
+  --override_repository=fuchsia_internal_idk=release/bazel/local_repositories/empty \
+  --override_repository=fuchsia_sdk=release/bazel/local_repositories/empty_fuchsia_sdk \
+  --override_repository=fuchsia_clang=release/bazel/local_repositories/empty_fuchsia_clang \
+  --platforms=//release/bazel/platforms:host
+
+# Link Go binaries with PIE to avoid relocation errors.
+build --@io_bazel_rules_go//go/config:linkmode=pie
+
+# Use --config=no_gn_targets to ensure that the @gn_targets repository is empty.
+# Bazel targets built with this option cannot depend on GN target outputs at all,
+# very intentionally.
+common:no_gn_targets \
+  --override_repository=gn_targets=release/bazel/local_repositories/empty

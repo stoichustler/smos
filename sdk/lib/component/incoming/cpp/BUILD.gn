@@ -1,0 +1,38 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/cpp/sdk_source_set.gni")
+
+sdk_source_set("cpp") {
+  category = "partner"
+  sdk_name = "component_incoming_cpp"
+  include_base = "//sdk"
+  stable = true
+
+  sources = [
+    "clone.h",
+    "constants.h",
+    "directory.h",
+    "directory_watcher.cc",
+    "directory_watcher.h",
+    "internal.cc",
+    "internal.h",
+    "protocol.cc",
+    "protocol.h",
+    "service.h",
+    "service_member_watcher.h",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/fidl/fuchsia.unknown:fuchsia.unknown_cpp",
+    "//sdk/lib/async:async-cpp",
+    "//sdk/lib/async-loop",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/fdio",
+    "//zircon/system/ulib/zx",
+  ]
+
+  public_configs = [ "//sdk/config" ]
+}

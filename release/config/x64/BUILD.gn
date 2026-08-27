@@ -1,0 +1,41 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Platform baseline.
+# This tracks the minimum hardware requirements for Fuchsia on x86-64.
+config("x64") {
+  cflags = [
+    "-march=x86-64-v2",
+    "-mtune=generic",
+  ]
+
+  # TODO(https://fxbug.dev/42168336): the below is for Skylake through Cascade Lake.
+  # Not all x86-64 builds need this.
+  # Remove from baseline and apply via `board_configs` argument as needed.
+  configs = [ ":mitigate_skylake_jcc" ]
+}
+
+# Mitigate Jump Conditional Code erratum.
+# See: https://fxbug.dev/42120593
+config("mitigate_skylake_jcc") {
+  if (is_gcc) {
+    cflags = [ "-Wa,-mbranches-within-32B-boundaries" ]
+  } else {
+    cflags = [ "-mbranches-within-32B-boundaries" ]
+  }
+}
+
+# Mitigate Straight Line Speculation (CVE-2021-26341, fxrev.dev/661362) by inserting
+# INT3/fences after certain control transfer instructions. The INT3s are never
+# executed; they just confine speculative execution to valid paths in those cases.
+config("harden_sls") {
+  defines = [ "HARDEN_SLS" ]
+  cflags = [ "-mharden-sls=all" ]
+}
+
+# Optimize for Intel Haswell
+config("haswell") {
+  cflags = [ "-mcpu=haswell" ]
+  rustflags = [ "-Ctarget-cpu=haswell" ]
+}

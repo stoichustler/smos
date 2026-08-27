@@ -1,0 +1,109 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+import("//release/rust/rustc_library.gni")
+import("//userspace/developer/ffx/build/ffx_tool.gni")
+import("//userspace/developer/ffx/lib/version/build/ffx_apply_version.gni")
+
+declare_args() {
+  # The console tool is intended only for interactive use. Currently, this tool
+  # is included in the build by default, but we plan to remove it from the
+  # default build so that we do not accidentally rely on the tool in automated
+  # tests.
+  starnix_enable_console_tool = true
+}
+
+rustc_library("lib") {
+  name = "ffx_starnix"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//sdk/fidl/fuchsia.developer.remotecontrol:fuchsia.developer.remotecontrol_rust",
+    "//sdk/fidl/fuchsia.starnix.container:fuchsia.starnix.container_rust",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_rust",
+    "//userspace/developer/ffx/lib/addr:lib",
+    "//userspace/developer/ffx/lib/emulator_instance:lib",
+    "//userspace/developer/ffx/lib/fho:lib",
+    "//userspace/developer/ffx/lib/netext:lib",
+    "//userspace/developer/ffx/lib/rcs:lib",
+    "//userspace/developer/ffx/lib/target/connector:lib",
+    "//userspace/developer/ffx/lib/target/holders:lib",
+    "//userspace/developer/ffx/lib/timeout:lib",
+    "//userspace/developer/ffx/lib/writer:lib",
+    "//userspace/developer/ffx/plugins/emulator/configuration:ffx_emulator_config",
+    "//userspace/developer/ffx/plugins/emulator/engines:ffx_emulator_engines",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/sys/lib/component_debug",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:argh",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:lazy_static",
+    "//third_party/rust_crates:regex",
+    "//third_party/rust_crates:signal-hook",
+    "//third_party/rust_crates:tokio",
+    "//third_party/rust_crates:tracing",
+  ]
+
+  if (starnix_enable_console_tool) {
+    deps += [
+      "//third_party/rust_crates:blocking",
+      "//third_party/rust_crates:nix",
+      "//third_party/rust_crates:termion",
+    ]
+  }
+
+  sources = [
+    "src/adb.rs",
+    "src/common.rs",
+    "src/console.rs",
+    "src/lib.rs",
+    "src/vmo.rs",
+  ]
+
+  features = []
+  if (starnix_enable_console_tool) {
+    features += [ "enable_console_tool" ]
+  }
+}
+
+ffx_tool("ffx_starnix") {
+  # Needed for Honeydew's SDK inclusion
+  #
+  # TODO(b/330934833): Remove when IDK allows for `testonly` targets in dep
+  # tree or when we can separate the concept of data_dep from host_test_data.
+  testonly = false
+
+  edition = "2021"
+  output_name = "ffx-starnix"
+  deps = [
+    ":lib",
+    "//userspace/developer/ffx/lib/fho:lib",
+    "//userspace/lib/fuchsia-async",
+  ]
+  sources = [ "src/main.rs" ]
+
+  sdk_target_name = "sdk"
+  sdk_category = "partner"
+}
+
+group("starnix") {
+  public_deps = [
+    ":ffx_starnix",
+    ":ffx_starnix_host_tool",
+  ]
+}
+
+group("bin") {
+  public_deps = [ ":ffx_starnix_versioned" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":lib_test($host_toolchain)" ]
+}

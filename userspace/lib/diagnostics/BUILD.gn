@@ -1,0 +1,42 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
+
+group("diagnostics") {
+  deps = [
+    "accessor2logger",
+    "data",
+    "hierarchy",
+    "inspect",
+    "inspect/rust/bench:build-only",
+    "log",
+    "log/bench:build-only",
+    "reader",
+    "selectors",
+    "selectors/bench:build-only",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    "accessor2logger/integration",
+    "accessor2logger/tests",
+    "data:tests",
+    "hierarchy:tests",
+    "inspect:tests",
+    "log:tests",
+    "python:tests",
+    "reader:tests",
+    "selectors:tests",
+    "testing:tests",
+  ]
+}
+
+group("benchmarks") {
+  testonly = true
+  deps = [
+    "inspect:benchmarks",
+    "log:benchmarks",
+    "selectors:benchmarks",
+  ]
+}

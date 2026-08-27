@@ -1,0 +1,84 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+rustc_library("update-package") {
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+    "//sdk/rust/zx-status",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-fs",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/sys/pkg/lib/epoch",
+    "//userspace/sys/pkg/lib/fuchsia-hash",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:omaha_client",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:sha2",
+    "//third_party/rust_crates:thiserror",
+  ]
+  if (is_fuchsia) {
+    deps += [ "//sdk/fidl/fuchsia.mem:fuchsia.mem_rust" ]
+  }
+
+  test_deps = [
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/storage/lib/vfs/rust:vfs",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:proptest",
+    "//third_party/rust_crates:tempfile",
+  ]
+
+  sources = [
+    "src/board.rs",
+    "src/epoch.rs",
+    "src/hash.rs",
+    "src/image.rs",
+    "src/images.rs",
+    "src/lib.rs",
+    "src/name.rs",
+    "src/packages.rs",
+    "src/update_mode.rs",
+    "src/version.rs",
+  ]
+
+  if (!is_host) {
+    deps += [ "//sdk/rust/zx" ]
+  }
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+}
+
+fuchsia_component("test-component") {
+  component_name = "update-package-lib-test"
+  visibility = [ ":*" ]
+  testonly = true
+  deps = [ ":update-package_test" ]
+  manifest = "meta/update-package-lib-test.cml"
+}
+
+fuchsia_test_package("update-package-tests") {
+  test_components = [ ":test-component" ]
+}
+
+group("tests") {
+  testonly = true
+  public_deps = [
+    # While this crate builds for host, most of its tests cannot run on host
+    # without a library to serve a tempdir over fuchsia.io.Directory. Avoid
+    # adding any tests that would run only on host.
+    # For now, just ensure this crate builds for host in non-test mode.
+    #":update-package_test($host_toolchain)",
+    ":update-package($host_toolchain)",
+    ":update-package-tests",
+  ]
+}

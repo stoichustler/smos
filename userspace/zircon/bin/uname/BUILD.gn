@@ -1,0 +1,22 @@
+# Copyright 2017 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/assembly/bootfs_files_for_assembly.gni")
+
+executable("bin") {
+  output_name = "uname"
+
+  sources = [ "uname.c" ]
+
+  deps = [ "//userspace/zircon/lib/zircon" ]
+}
+
+fuchsia_package("uname") {
+  deps = [ ":bin" ]
+}
+
+bootfs_files_for_assembly("bootfs") {
+  deps = [ ":bin" ]
+}

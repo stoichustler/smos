@@ -1,0 +1,36 @@
+# Copyright 2016 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("io") {
+  visibility = [ "//userspace/lib/fsl/*" ]
+
+  sources = [
+    "device_watcher.cc",
+    "device_watcher.h",
+    "fd.cc",
+    "fd.h",
+    "redirection.cc",
+    "redirection.h",
+  ]
+
+  deps = [
+    "//sdk/lib/async-default",
+    "//sdk/lib/component/incoming/cpp",
+    "//sdk/lib/fdio",
+    "//userspace/zircon/lib/zircon",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/async:async-cpp",
+    "//sdk/lib/fit",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/lib/files",
+    "//userspace/lib/fxl:common",
+    "//userspace/lib/fxl:memory",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/fzl",
+    "//zircon/system/ulib/zx",
+  ]
+}

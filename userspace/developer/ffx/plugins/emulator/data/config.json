@@ -1,0 +1,22 @@
+{
+    "emu": {
+        "console": {
+            "enabled": false
+        },
+        "device": "",
+        "engine": "femu",
+        "gpu": "swiftshader_indirect",
+        "instance_dir": "$DATA/emu/instances",
+        "kvm_path": "/dev/kvm",
+        "name": "fuchsia-emulator",
+        "net": "auto",
+        "start": {
+            "timeout": 60
+        },
+        "upscript": "",
+        "vbmeta": {
+            "key": "",
+            "metadata": ""
+        }
+    }
+}

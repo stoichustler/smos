@@ -1,0 +1,326 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/assembled_system.gni")
+import("//release/assembly/legacy_image_metadata_overrides.gni")
+import("//release/assembly/update_package.gni")
+import("//release/board.gni")
+import("//release/images/args.gni")
+import("//release/images/filesystem_limits.gni")
+import("//release/images/vboot/vboot.gni")
+import("//release/product.gni")
+import("//release/python/python_action.gni")
+import("//release/sdk/product_bundle.gni")
+import("//release/security.gni")
+import("//release/testing/host_test_data.gni")
+import("//userspace/sys/core/build/core.gni")
+import("//zircon/kernel/phys/qemu.gni")
+
+declare_args() {
+  # Create the package and archive for the legacy assembly input bundle.  This
+  # can be a time-consuming operation, which due to limits in GN and groups,
+  # ends up being a blocking step in the build, so only enable this if we know
+  # that we want the legacy AIB packaged and archived for a given product:
+  create_legacy_aib_archive = false
+}
+
+if (is_host) {
+  host_test_data("fuchsia_zbi_for_host_tests") {
+    sources = [ "$root_build_dir/${smos_zbi_name}.zbi" ]
+    # This dep cannot be specified, because it creates a dependency cycle.  It
+    # could be added if all tests using this were not in any package set (and
+    # were just in host_labels)
+    #deps = [ ":fuchsia($default_toolchain)" ]
+  }
+}
+
+# The assembly operation should only be defined in the default (fuchsia)
+# toolchain.
+if (is_fuchsia) {
+  assert(current_toolchain == default_toolchain,
+         "//release/images/* are only valid in the Fuchsia toolchain")
+
+  # This catches inadvertent dependencies on the "fucshia" assembly implementation
+  # in bringup-only configurations.
+  assert(
+      !use_bringup_assembly,
+      "The bringup product config cannot rely on the fuchsia assembly.  Bringup has it's own in //release/images/bringup")
+
+  ##################################################
+  # Fuchsia
+  ##################################################
+
+  # The `:fuchsia` target assembles the main Fuchsia image, for the core product only.
+  #
+  # This group only provides GN metadata about the update package(s), none of
+  # packages that are included in the assembled image are present in GN metadata
+  # walks of this target.
+  #
+  # To get the list of packages in this assembly, use the
+  # `package_list_from_assembly()` GN template.
+  group("fuchsia") {
+    testonly = fuchsia_zbi_testonly
+
+    if (!use_bazel_images_only) {
+      public_deps = [
+        ":fuchsia_assembly",
+        ":product_bundle",
+        ":update",
+        ":validate_universe_config_data_entries_empty",
+      ]
+    }
+
+    metadata = {
+      package_barrier = []
+      if (!use_bazel_images_only) {
+        # Only include the update package(s) manifest(s) in metadata collection.
+        # To get a file containing a list of the base & cache packages, use the
+        # `package_list_from_assembly()` GN template.
+        package_barrier = [ ":update" ]
+      }
+    }
+  }
+
+  assembled_system("fuchsia_assembly") {
+    testonly = fuchsia_zbi_testonly
+    include_legacy_bundle = true
+    legacy_bundle_must_be_empty = true
+
+    generate_fvm = !fxfs_blob
+    generate_fxfs = fxfs_blob
+    generate_fvm_fastboot = !fxfs_blob && assembly_generate_fvm_fastboot
+    generate_fvm_nand = !fxfs_blob && assembly_generate_fvm_nand
+    generate_vbmeta = use_vbmeta
+
+    board_config_label = board_configuration_label
+
+    base_packages = [
+      "//:developer_base_packages",
+      "//:legacy_base_packages",
+    ]
+
+    cache_packages = [
+      "//:developer_cache_packages",
+      "//:legacy_cache_packages",
+    ]
+
+    if (generate_fvm) {
+      assembly_include_account_in_fvm = include_account_in_fvm
+    }
+
+    # zbi arguments
+    if (custom_signing_script != "") {
+      inputs = custom_signing_script_inputs
+      deps = [ "//release/images/custom_signing:deps" ]
+      generate_signed_zbi = true
+    } else if (use_vboot) {
+      inputs = vboot_action.inputs
+      generate_signed_zbi = true
+    }
+
+    if (fuchsia_product_assembly_config_label != false) {
+      product_assembly_config_label = fuchsia_product_assembly_config_label
+    }
+
+    output_dir = root_build_dir
+    output_name = smos_zbi_name
+    image_name = "fuchsia"
+    if (smos_platform_aib_names != []) {
+      platform_aib_names = smos_platform_aib_names
+    }
+
+    # Bazel assembly should not depend on any targets from GN assembly other
+    # than the legacy AIB.
+    legacy_bundle_only = use_bazel_images_only
+
+    create_legacy_aib_package = create_legacy_aib_archive
+    create_legacy_aib_archive = create_legacy_aib_archive
+
+    image_metadata_overrides = legacy_fuchsia_image_metadata_overrides
+    include_assembly_inputs = true
+  }
+
+  # Bazel assembly builds a product bundle, so we don't need to build product
+  # bundle and update packages in GN.
+  if (!use_bazel_images_only) {
+    files = {
+      platform_aib_dir = get_label_info("//platform/bundles/assembly", "target_out_dir")
+
+      # Outputs of assembly.
+      outdir = target_out_dir + "/fuchsia"
+      zbi = "${outdir}/fuchsia.zbi"
+      zbi_signed = "${outdir}/fuchsia.zbi.signed"
+      vbmeta = "${outdir}/fuchsia.vbmeta"
+      blobfs = "${outdir}/blob.blk"
+      fvm = "${outdir}/fvm.blk"
+      fvm_sparse = "${outdir}/fvm.sparse.blk"
+      fvm_fastboot = "${outdir}/fvm.fastboot.blk"
+      fxfs = "${outdir}/fxfs.blk"
+      fxfs_sparse = "${outdir}/fxfs.sparse.blk"
+      packages_json = "${outdir}/packages.json"
+      images_json = "${outdir}/images.json"
+
+      # Outputs of recovery.
+      recovery_name = get_label_info(recovery_label, "name")
+      recovery_outdir =
+          get_label_info(recovery_label, "target_out_dir") + "/" + recovery_name
+      recovery_zbi = "${recovery_outdir}/${recovery_name}.zbi"
+      recovery_zbi_signed = "${recovery_outdir}/${recovery_name}.zbi.signed"
+      recovery_vbmeta = "${recovery_outdir}/${recovery_name}.vbmeta"
+      recovery_blobfs = "${recovery_outdir}/blob.blk"
+      recovery_fvm = "${recovery_outdir}/fvm.blk"
+      recovery_fvm_sparse = "${recovery_outdir}/fvm.sparse.blk"
+      recovery_fvm_fastboot = "${recovery_outdir}/fvm.fastboot.blk"
+      recovery_fxfs = "${recovery_outdir}/fxfs.blk"
+      recovery_fxfs_sparse = "${recovery_outdir}/fxfs.sparse.blk"
+      recovery_images_json = "${recovery_outdir}/images.json"
+
+      esp_image_path = "${root_build_dir}/fuchsia.esp.blk"
+
+      qemu_kernel = qemu_boot_shim.path
+    }
+
+    _partitions_config = "//platform/boards/partitions:default"
+    if (has_board) {
+      assert(partitions_config_label != false,
+             "Need to define partitions_config_label")
+      _partitions_config = partitions_config_label
+    }
+    _partitions_config_file =
+        get_label_info(_partitions_config, "target_out_dir") + "/" +
+        get_label_info(_partitions_config, "name") + "/partitions_config.json"
+
+    update_epoch = update_platform_epoch + update_product_epoch
+    update_package("update") {
+      testonly = fuchsia_zbi_testonly
+      deps = [
+        ":fuchsia_assembly",
+        "//release/info:build_info_files",
+        _partitions_config,
+        recovery_label,
+      ]
+      partitions = _partitions_config_file
+      system_a = files.images_json
+      system_r = files.recovery_images_json
+      board_name = board_name
+      version_file = build_info_files.version
+      epoch = "${update_epoch}"
+    }
+
+    product_bundle_label = "product_bundle"
+    product_bundle(product_bundle_label) {
+      testonly = fuchsia_zbi_testonly
+      name = main_product_bundle_name
+      deps = [
+        ":fuchsia_assembly",
+        "//release/info:build_info_files",
+        _partitions_config,
+        recovery_label,
+      ]
+
+      update = {
+        version_file = build_info_files.version
+        epoch = "${update_epoch}"
+      }
+
+      partitions = _partitions_config_file
+      system_a = files.images_json
+      system_r = files.recovery_images_json
+
+      # Create lists of the files that are referenced by the assembly manifests.
+      _assembly_contents = [ files.qemu_kernel ]
+      if (fxfs_blob) {
+        _assembly_contents += [
+          files.fxfs,
+          files.fxfs_sparse,
+        ]
+      } else {
+        _assembly_contents += [
+          files.blobfs,
+          files.fvm,
+          files.fvm_sparse,
+        ]
+      }
+      _recovery_contents = [ files.qemu_kernel ]
+      if (files.recovery_name != "zedboot") {
+        if (fxfs_blob) {
+          _recovery_contents += [
+            files.recovery_fxfs,
+            files.recovery_fxfs_sparse,
+          ]
+        } else {
+          _recovery_contents += [
+            files.blobfs,
+            files.fvm,
+            files.fvm_sparse,
+          ]
+        }
+      }
+      if (!fxfs_blob &&
+          (assembly_generate_fvm_fastboot || assembly_generate_fvm_nand)) {
+        _assembly_contents += [ files.fvm_fastboot ]
+        if (files.recovery_name != "zedboot") {
+          _recovery_contents += [ files.recovery_fvm_fastboot ]
+        }
+      }
+      if (custom_signing_script != "" || use_vboot) {
+        _assembly_contents += [ files.zbi_signed ]
+        _recovery_contents += [ files.recovery_zbi_signed ]
+      } else {
+        _assembly_contents += [ files.zbi ]
+        _recovery_contents += [ files.recovery_zbi ]
+      }
+      if (use_vbmeta) {
+        _assembly_contents += [ files.vbmeta ]
+        _recovery_contents += [ files.recovery_vbmeta ]
+      }
+
+      # List the contents of each input so that the outputs can be calculated.
+      system_a_contents = _assembly_contents
+      system_r_contents = _recovery_contents
+
+      if (delivery_blob_type != false) {
+        delivery_blob_type = delivery_blob_type
+      }
+    }
+  }
+
+  group("assembly_inputs") {
+    testonly = fuchsia_zbi_testonly
+    public_deps = [ ":fuchsia.legacy_input_bundle_assembly_inputs.json" ]
+  }
+
+  generated_file("universe_config_data_entries") {
+    testonly = fuchsia_zbi_testonly
+    deps = [ "//:developer_universe_packages" ]
+    data_keys = [ "config_package_entries" ]
+    walk_keys = [ "config_package_barrier" ]
+    output_conversion = "json"
+    outputs = [ "${target_out_dir}/universe_config_data_entries.json" ]
+  }
+
+  python_action("validate_universe_config_data_entries_empty") {
+    testonly = fuchsia_zbi_testonly
+    binary_label = "//release/assembly/scripts:validate_config_data_is_empty"
+    args = [
+      "--package-set",
+      "universe",
+      "--metadata-walk-results",
+      rebase_path("${target_out_dir}/universe_config_data_entries.json",
+                  root_build_dir),
+      "--package-allowlist",
+      rebase_path("//release/assembly/universe_config_data.allowlist.json",
+                  root_build_dir),
+      "--output",
+      rebase_path("${target_out_dir}/universe_config_data_entries_empty.txt",
+                  root_build_dir),
+    ]
+    inputs = [
+      "${target_out_dir}/universe_config_data_entries.json",
+      "//release/assembly/universe_config_data.allowlist.json",
+    ]
+    deps = [ ":universe_config_data_entries" ]
+    outputs = [ "${target_out_dir}/universe_config_data_entries_empty.txt" ]
+  }
+}

@@ -1,0 +1,50 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+group("tests") {
+  testonly = true
+  deps = [ ":namespace-unittests" ]
+}
+
+rustc_library("namespace") {
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//sdk/fidl/fuchsia.component:fuchsia.component_rust",
+    "//sdk/fidl/fuchsia.component.runner:fuchsia.component.runner_rust",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+    "//sdk/fidl/fuchsia.process:fuchsia.process_rust",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/sys/lib/cm_types",
+    "//third_party/rust_crates:thiserror",
+  ]
+
+  test_deps = [ "//third_party/rust_crates:assert_matches" ]
+
+  if (is_fuchsia) {
+    deps += [
+      "//sdk/rust/zx",
+      "//userspace/lib/process_builder",
+      "//userspace/storage/lib/vfs/rust:vfs",
+    ]
+    test_deps += [
+      "//userspace/lib/fuchsia-async",
+      "//userspace/lib/fuchsia-fs",
+      "//userspace/storage/lib/vfs/rust:vfs",
+    ]
+  }
+
+  sources = [
+    "src/lib.rs",
+    "src/tree.rs",
+  ]
+}
+
+fuchsia_unittest_package("namespace-unittests") {
+  deps = [ ":namespace_test" ]
+}

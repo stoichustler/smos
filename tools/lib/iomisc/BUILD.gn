@@ -1,0 +1,23 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/go/go_library.gni")
+import("//release/go/go_test.gni")
+
+go_library("iomisc") {
+  sources = [
+    "doc.go",
+    "iomisc.go",
+    "match.go",
+    "match_test.go",
+    "reader.go",
+    "reader_test.go",
+  ]
+  deps = [ "//tools/lib/logger" ]
+}
+
+go_test("tests") {
+  library = ":iomisc"
+  output_name = "iomisc_tests"
+}

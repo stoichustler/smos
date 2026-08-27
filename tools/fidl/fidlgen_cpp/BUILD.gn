@@ -1,0 +1,217 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/config/clang/clang.gni")
+import("//release/go/go_binary.gni")
+import("//release/go/go_library.gni")
+import("//release/host.gni")
+import("//release/testing/golden_files.gni")
+import("//tools/fidl/fidlc/testdata/info.gni")
+
+if (is_host) {
+  golden_files("fidlgen_cpp_golden_tests") {
+    testonly = true
+
+    deps = []
+    comparisons = []
+    foreach(info, fidl_testdata_info) {
+      if (info.denylist + [ "fidlgen_cpp" ] - [ "fidlgen_cpp" ] ==
+          info.denylist) {
+        deps += [ "${info.target}_cpp_generate($fidl_toolchain)" ]
+        _gen_dir = "${info.fidl_gen_dir}/${info.target_name}/cpp"
+        _include_path = "fidl/${info.library}/cpp"
+        comparisons += [
+          {
+            golden = "goldens/${info.name}_wire.h.golden"
+            candidate = "$_gen_dir/$_include_path/wire.h"
+          },
+          {
+            golden = "goldens/${info.name}_wire_test_base.h.golden"
+            candidate = "$_gen_dir/$_include_path/wire_test_base.h"
+          },
+          {
+            golden = "goldens/${info.name}_markers.h.golden"
+            candidate = "$_gen_dir/$_include_path/markers.h"
+          },
+          {
+            golden = "goldens/${info.name}_common_types_format.h.golden"
+            candidate = "$_gen_dir/$_include_path/common_types_format.h"
+          },
+          {
+            golden = "goldens/${info.name}_common_types.h.golden"
+            candidate = "$_gen_dir/$_include_path/common_types.h"
+          },
+          {
+            golden = "goldens/${info.name}_common_types.cc.golden"
+            candidate = "$_gen_dir/$_include_path/common_types.cc"
+          },
+          {
+            golden = "goldens/${info.name}_wire_types.h.golden"
+            candidate = "$_gen_dir/$_include_path/wire_types.h"
+          },
+          {
+            golden = "goldens/${info.name}_wire_types.cc.golden"
+            candidate = "$_gen_dir/$_include_path/wire_types.cc"
+          },
+          {
+            golden = "goldens/${info.name}_wire_messaging.h.golden"
+            candidate = "$_gen_dir/$_include_path/wire_messaging.h"
+          },
+          {
+            golden = "goldens/${info.name}_wire_messaging.cc.golden"
+            candidate = "$_gen_dir/$_include_path/wire_messaging.cc"
+          },
+          {
+            golden = "goldens/${info.name}_natural_types.h.golden"
+            candidate = "$_gen_dir/$_include_path/natural_types.h"
+          },
+          {
+            golden = "goldens/${info.name}_natural_types.cc.golden"
+            candidate = "$_gen_dir/$_include_path/natural_types.cc"
+          },
+          {
+            golden = "goldens/${info.name}_natural_ostream.h.golden"
+            candidate = "$_gen_dir/$_include_path/natural_ostream.h"
+          },
+          {
+            golden = "goldens/${info.name}_natural_ostream.cc.golden"
+            candidate = "$_gen_dir/$_include_path/natural_ostream.cc"
+          },
+          {
+            golden = "goldens/${info.name}_natural_messaging.h.golden"
+            candidate = "$_gen_dir/$_include_path/natural_messaging.h"
+          },
+          {
+            golden = "goldens/${info.name}_natural_messaging.cc.golden"
+            candidate = "$_gen_dir/$_include_path/natural_messaging.cc"
+          },
+          {
+            golden = "goldens/${info.name}_test_base.h.golden"
+            candidate = "$_gen_dir/$_include_path/test_base.h"
+          },
+          {
+            golden = "goldens/${info.name}_type_conversions.h.golden"
+            candidate = "$_gen_dir/$_include_path/type_conversions.h"
+          },
+          {
+            golden = "goldens/${info.name}_type_conversions.cc.golden"
+            candidate = "$_gen_dir/$_include_path/type_conversions.cc"
+          },
+          {
+            golden = "goldens/${info.name}_hlcpp_conversion.h.golden"
+            candidate = "$_gen_dir/$_include_path/hlcpp_conversion.h"
+          },
+          {
+            golden = "goldens/${info.name}_fidl.h.golden"
+            candidate = "$_gen_dir/$_include_path/fidl.h"
+          },
+          {
+            golden = "goldens/${info.name}_driver_wire.h.golden"
+            candidate = "$_gen_dir/$_include_path/driver/wire.h"
+          },
+          {
+            golden = "goldens/${info.name}_driver_wire_messaging.h.golden"
+            candidate = "$_gen_dir/$_include_path/driver/wire_messaging.h"
+          },
+          {
+            golden = "goldens/${info.name}_driver_wire_messaging.cc.golden"
+            candidate = "$_gen_dir/$_include_path/driver/wire_messaging.cc"
+          },
+          {
+            golden = "goldens/${info.name}_driver_natural_messaging.h.golden"
+            candidate = "$_gen_dir/$_include_path/driver/natural_messaging.h"
+          },
+          {
+            golden = "goldens/${info.name}_driver_natural_messaging.cc.golden"
+            candidate = "$_gen_dir/$_include_path/driver/natural_messaging.cc"
+          },
+          {
+            golden = "goldens/${info.name}_driver_fidl.h.golden"
+            candidate = "$_gen_dir/$_include_path/driver/fidl.h"
+          },
+        ]
+      }
+    }
+  }
+}
+
+group("goldens") {
+  testonly = true
+
+  denylist_key = "device_build_denylist"
+  if (is_host) {
+    denylist_key = "host_build_denylist"
+  }
+
+  deps = []
+  foreach(info, fidl_testdata_info) {
+    if (info[denylist_key] + [ "fidlgen_cpp" ] - [ "fidlgen_cpp" ] ==
+        info[denylist_key]) {
+      deps += [ "${info.target}_cpp" ]
+      if (is_fuchsia) {
+        deps += [
+          "${info.target}_cpp",
+          "${info.target}_cpp",
+        ]
+      }
+    }
+  }
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":goldens",
+    ":goldens($host_toolchain)",
+  ]
+  deps += [ ":fidlgen_cpp_golden_tests($host_toolchain)" ]
+}
+
+## BAZEL2GN SENTINEL - DO NOT EDIT BELOW THIS LINE ##
+#
+#  ________  _________  ________  ________
+# |\   ____\|\___   ___\\   __  \|\   __  \
+# \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+#  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+#   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+#     ____\_\  \   \ \__\ \ \_______\ \__\
+#    |\_________\   \|__|  \|_______|\|__|
+#    \|_________|
+#
+#
+# AUTO-GENERATED - DO NOT EDIT
+#
+# The targets below are auto-generated based on the targets defined in the
+# BUILD.bazel file from the same directory. If you made changes to targets in
+# Bazel, instead of editing this file manually, run:
+#
+#   > fx bazel2gn
+#
+# Please do NOT edit this file directly. Instead, edit the BUILD.bazel file and
+# rerun bazel2gn.
+
+import("//release/tools/bazel2gn/bazel_migration.gni")
+
+if (is_host) {
+  go_binary("fidlgen_cpp") {
+    sources = [ "main.go" ]
+    deps = [
+      "//tools/fidl/fidlgen_cpp/codegen",
+      "//tools/fidl/lib/fidlgen_cpp",
+    ]
+  }
+}
+if (is_host) {
+  sdk_host_tool("fidlgen_cpp_sdk") {
+    category = "partner"
+    output_name = "fidlgen_cpp"
+    deps = [ ":fidlgen_cpp" ]
+  }
+}
+if (is_host) {
+  install_host_tools("host") {
+    outputs = [ "fidlgen_cpp" ]
+    deps = [ ":fidlgen_cpp" ]
+  }
+}

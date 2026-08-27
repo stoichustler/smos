@@ -1,0 +1,180 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_binary.gni")
+import("epoch/generate_epoch.gni")
+
+base_epoch_file = "$target_out_dir/epoch.json"
+rebased_epoch_file = rebase_path(base_epoch_file, root_build_dir)
+
+generate_epoch("epoch.json") {
+  output_file = "$base_epoch_file"
+}
+
+rustc_binary("bin") {
+  name = "system_updater"
+  with_unit_tests = true
+  edition = "2021"
+  rustenv = [ "EPOCH_PATH=$rebased_epoch_file" ]
+
+  deps = [
+    ":config_lib",
+    "//sdk/fidl/fuchsia.hardware.power.statecontrol:fuchsia.hardware.power.statecontrol_rust",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+    "//sdk/fidl/fuchsia.mem:fuchsia.mem_rust",
+    "//sdk/fidl/fuchsia.metrics:fuchsia.metrics_rust",
+    "//sdk/fidl/fuchsia.paver:fuchsia.paver_rust",
+    "//sdk/fidl/fuchsia.pkg:fuchsia.pkg_rust",
+    "//sdk/fidl/fuchsia.space:fuchsia.space_rust",
+    "//sdk/rust/zx",
+    "//userspace/lib/cobalt/rust/builders",
+    "//userspace/lib/diagnostics/inspect/contrib/rust",
+    "//userspace/lib/diagnostics/inspect/runtime/rust",
+    "//userspace/lib/diagnostics/inspect/rust",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fidl/rust/fidl-contrib",
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-component",
+    "//userspace/lib/fuchsia-fs",
+    "//userspace/lib/fuchsia-sync",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/lib/include_str_from_working_dir",
+    "//userspace/lib/mapped-vmo",
+    "//userspace/sys/lib/fidl-fuchsia-pkg-ext",
+    "//userspace/sys/pkg/fidl/fuchsia.update.installer:fuchsia.update.installer_rust",
+    "//userspace/sys/pkg/lib/async-generator",
+    "//userspace/sys/pkg/lib/bounded-node",
+    "//userspace/sys/pkg/lib/epoch",
+    "//userspace/sys/pkg/lib/event-queue",
+    "//userspace/sys/pkg/lib/fidl-fuchsia-update-installer-ext",
+    "//userspace/sys/pkg/lib/fuchsia-hash",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//userspace/sys/pkg/lib/metrics:cobalt_sw_delivery_registry_rustlib",
+    "//userspace/sys/pkg/lib/update-package",
+    "//third_party/cobalt/src/lib/client/rust:cobalt-client",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:chrono",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:log",
+    "//third_party/rust_crates:pin-project",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:sha2",
+    "//third_party/rust_crates:thiserror",
+    "//third_party/rust_crates:uuid",
+  ]
+  non_rust_deps = [ ":epoch.json" ]
+  test_deps = [
+    "//userspace/lib/diagnostics/testing/diagnostics-assertions/rust:diagnostics-assertions",
+    "//userspace/sys/pkg/lib/fuchsia-pkg-testing",
+    "//userspace/sys/pkg/testing/mock-paver",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:omaha_client",
+    "//third_party/rust_crates:pretty_assertions",
+    "//third_party/rust_crates:proptest",
+  ]
+
+  sources = [
+    "src/fidl.rs",
+    "src/install_manager.rs",
+    "src/main.rs",
+    "src/update.rs",
+    "src/update/config.rs",
+    "src/update/environment.rs",
+    "src/update/genutil.rs",
+    "src/update/history.rs",
+    "src/update/history/version.rs",
+    "src/update/metrics.rs",
+    "src/update/paver.rs",
+    "src/update/paver/configuration.rs",
+    "src/update/reboot.rs",
+    "src/update/resolver.rs",
+    "src/update/state.rs",
+  ]
+  inputs = [ base_epoch_file ]
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+}
+
+fuchsia_component_manifest("manifest") {
+  component_name = "system-updater"
+  manifest = "meta/system-updater.cml"
+}
+
+fuchsia_component("component") {
+  cm_label = ":manifest"
+  deps = [ ":bin" ]
+}
+
+group("production-component-and-config") {
+  public_deps = [
+    ":component",
+    ":config_values_from_gn",
+  ]
+}
+
+fuchsia_package("system-updater") {
+  deps = [ ":production-component-and-config" ]
+}
+
+fuchsia_structured_config_rust_lib("config_lib") {
+  cm_label = ":manifest"
+  name = "system_updater_config"
+  visibility = [ ":*" ]
+}
+
+structured_config_values = {
+  concurrent_package_resolves = 5
+}
+
+fuchsia_structured_config_values("config_values_from_gn") {
+  cm_label = ":manifest"
+
+  values = structured_config_values
+}
+
+fuchsia_unittest_package("system-updater-tests") {
+  manifest = "meta/system-updater-bin-test.cml"
+  test_specs = {
+    log_settings = {
+      max_severity = "ERROR"
+    }
+  }
+  deps = [ ":bin_test" ]
+}
+
+fuchsia_component_manifest("isolated-manifest") {
+  component_name = "system-updater-isolated"
+  manifest = "meta/system-updater-isolated.cml"
+}
+
+fuchsia_component("isolated-v2") {
+  cm_label = ":isolated-manifest"
+  deps = [
+    ":bin",
+    ":config_values_from_gn_isolated",
+  ]
+}
+
+fuchsia_structured_config_values("config_values_from_gn_isolated") {
+  cm_label = ":isolated-manifest"
+
+  values = structured_config_values
+}
+
+if (is_fuchsia) {
+  group("hermetic_tests") {
+    testonly = true
+    deps = [ ":system-updater-tests" ]
+  }
+}
+
+if (is_host) {
+  group("host_tests") {
+    testonly = true
+    deps = [ "epoch:host_tests" ]
+  }
+}

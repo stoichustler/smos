@@ -1,0 +1,24 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+import("//release/rust/rustc_library.gni")
+
+assert(is_host, "Assembly libraries are host-only")
+
+rustc_library("validate_package") {
+  edition = "2021"
+  name = "assembly_validate_package"
+  with_unit_tests = true
+  deps = [
+    "//userspace/lib/assembly/structured_config",
+    "//userspace/lib/assembly/validate_util",
+    "//userspace/lib/versioning/version-history/rust",
+    "//userspace/lib/versioning/version-history/rust/data",
+    "//userspace/sys/pkg/lib/far/rust:fuchsia-archive",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//third_party/rust_crates:anyhow",
+  ]
+  sources = [ "src/lib.rs" ]
+}

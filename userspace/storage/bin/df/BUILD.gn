@@ -1,0 +1,27 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/bootfs_files_for_assembly.gni")
+
+executable("df") {
+  visibility = [ ":*" ]
+  configs += [ "//release/config:all_source" ]
+  sources = [ "main.cc" ]
+  deps = [
+    "//sdk/fidl/fuchsia.fshost:fuchsia.fshost_cpp",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/component/incoming/cpp",
+    "//sdk/lib/component/outgoing/cpp",
+    "//sdk/lib/fdio",
+    "//userspace/storage/fshost:admin-client",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/fdio-caller",
+    "//zircon/system/ulib/fzl",
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+bootfs_files_for_assembly("bootfs") {
+  deps = [ ":df" ]
+}

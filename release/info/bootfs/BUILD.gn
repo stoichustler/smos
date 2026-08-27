@@ -1,0 +1,18 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/bootfs_files_for_assembly.gni")
+import("//release/dist/resource.gni")
+import("//release/info/info.gni")
+
+bootfs_files_for_assembly("bootfs") {
+  deps = [ ":minimum_utc_stamp" ]
+}
+
+resource("minimum_utc_stamp") {
+  sources = [ build_info_files.minimum_utc_stamp ]
+  outputs = [ "config/build_info/minimum_utc_stamp" ]
+  deps = [ "//release/info:latest-commit-date-and-hash" ]
+  visibility = [ ":*" ]
+}

@@ -1,0 +1,17 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+group("rustdoc") {
+  testonly = true
+  deps = [
+    "//release/rust/tests/rustdoc/cargo_transitive",
+    "//release/rust/tests/rustdoc/cargo_transitive_no_index",
+    "//release/rust/tests/rustdoc/proc_macro_link_separate",
+    "//release/rust/tests/rustdoc/proc_macro_use",
+    "//release/rust/tests/rustdoc/single_crate_baseline",
+    "//release/rust/tests/rustdoc/single_crate_constant",
+    "//release/rust/tests/rustdoc/single_crate_no_index",
+    "//release/rust/tests/rustdoc/working_dir_examples",
+    "//release/rust/tests/rustdoc/write_docs_somewhere_else",
+  ]
+}

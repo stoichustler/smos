@@ -1,0 +1,61 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("diagnostics") {
+  testonly = true
+  deps = [
+    ":tests",
+    "archivist",
+    "archivist:build-only",
+    "config",
+    "iquery",
+    "tools($host_toolchain)",
+
+    # contains persistence, sampler, and detect
+    "launcher",
+    "log_listener",
+    "triage",
+    "validator",
+    "//userspace/lib/diagnostics",
+
+    # Disabled due to lack of support in Clang and Rust toolchain;
+    # see https://fxbug.dev/325488864.
+    # "wasm",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    "archivist:build-only",
+    "archivist:tests",
+    "config:tests",
+    "detect:tests",
+    "iquery:tests",
+    "lib:tests",
+    "log_listener:tests",
+    "persistence:tests",
+    "sampler:tests",
+    "tests",
+    "tools:tests($host_toolchain)",
+    "triage:tests",
+    "validator:tests",
+    "//userspace/developer/ffx/plugins/inspect:tests($host_toolchain)",
+    "//userspace/developer/ffx/plugins/log:tests($host_toolchain)",
+    "//userspace/developer/ffx/tools/triage:tests($host_toolchain)",
+    "//userspace/lib/diagnostics:tests",
+
+    # Disabled due to lack of support in Clang and Rust toolchain;
+    # see https://fxbug.dev/325488864.
+    # "wasm:tests",
+  ]
+}
+
+group("benchmarks") {
+  testonly = true
+  deps = [
+    "archivist:benchmarks",
+    "//userspace/lib/diagnostics:benchmarks",
+  ]
+}

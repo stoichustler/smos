@@ -1,0 +1,77 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+rustc_library("fuchsia-inspect-contrib") {
+  name = "fuchsia_inspect_contrib"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//sdk/rust/zx",
+    "//userspace/lib/diagnostics/inspect/derive",
+    "//userspace/lib/diagnostics/inspect/rust",
+    "//userspace/lib/fuchsia-runtime",
+    "//userspace/lib/fuchsia-sync",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:derivative",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:log",
+    "//third_party/rust_crates:lru-cache",
+    "//third_party/rust_crates:strum",
+  ]
+
+  test_deps = [
+    "//userspace/lib/diagnostics/inspect/format/rust",
+    "//userspace/lib/diagnostics/testing/diagnostics-assertions/rust:diagnostics-assertions",
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/test_util",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:strum_macros",
+  ]
+
+  sources = [
+    "src/graph/digraph.rs",
+    "src/graph/edge.rs",
+    "src/graph/events.rs",
+    "src/graph/metadata.rs",
+    "src/graph/mod.rs",
+    "src/graph/types.rs",
+    "src/graph/vertex.rs",
+    "src/id_enum.rs",
+    "src/inspectable/mod.rs",
+    "src/lib.rs",
+    "src/log/impls.rs",
+    "src/log/mod.rs",
+    "src/log/wrappers.rs",
+    "src/nodes/list.rs",
+    "src/nodes/lru_cache.rs",
+    "src/nodes/mod.rs",
+    "src/self_profile.rs",
+  ]
+
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+}
+
+fuchsia_unittest_package("fuchsia-inspect-contrib-tests") {
+  deps = [ ":fuchsia-inspect-contrib_test" ]
+
+  test_specs = {
+    log_settings = {
+      max_severity = "ERROR"
+    }
+  }
+}
+
+group("rust") {
+  public_deps = [ ":fuchsia-inspect-contrib" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":fuchsia-inspect-contrib-tests" ]
+}

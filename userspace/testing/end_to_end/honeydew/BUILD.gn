@@ -1,0 +1,282 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/toolchain.gni")
+import("//release/images/tools/fastboot.gni")
+import("//release/python/python_library.gni")
+import("//release/testing/host_test_data.gni")
+import("//sdk/categories/compatibility.gni")
+
+group("honeydew") {
+  testonly = true
+
+  deps = [ ":honeydew_no_testonly" ]
+}
+
+python_library("honeydew_no_testonly") {
+  # In-tree-only tests should prefer ":honeydew" because that enforces that only
+  # testonly code uses regular Honeydew. This target should be used for tests or
+  # dependencies of tests that are packaged into the SDK, since they cannot be
+  # testonly.
+  visibility = [
+    ":*",
+    "//userspace/testing/end_to_end/mobly_controller:*",
+
+    # SDK-based test targets listed below.
+    "//userspace/tests/end_to_end/rtc:*",
+  ]
+
+  library_name = "honeydew"
+  source_root = "//userspace/testing/end_to_end/honeydew/honeydew"
+  sources = [
+    "__init__.py",
+    "affordances/__init__.py",
+    "affordances/affordance.py",
+    "affordances/connectivity/bluetooth/__init__.py",
+    "affordances/connectivity/bluetooth/avrcp/__init__.py",
+    "affordances/connectivity/bluetooth/avrcp/avrcp.py",
+    "affordances/connectivity/bluetooth/avrcp/avrcp_using_sl4f.py",
+    "affordances/connectivity/bluetooth/bluetooth_common/__init__.py",
+    "affordances/connectivity/bluetooth/bluetooth_common/bluetooth_common.py",
+    "affordances/connectivity/bluetooth/bluetooth_common/bluetooth_common_using_fc.py",
+    "affordances/connectivity/bluetooth/bluetooth_common/bluetooth_common_using_sl4f.py",
+    "affordances/connectivity/bluetooth/gap/__init__.py",
+    "affordances/connectivity/bluetooth/gap/gap.py",
+    "affordances/connectivity/bluetooth/gap/gap_using_fc.py",
+    "affordances/connectivity/bluetooth/le/__init__.py",
+    "affordances/connectivity/bluetooth/le/le.py",
+    "affordances/connectivity/bluetooth/le/le_using_fc.py",
+    "affordances/connectivity/bluetooth/utils/__init__.py",
+    "affordances/connectivity/bluetooth/utils/errors.py",
+    "affordances/connectivity/bluetooth/utils/fidl_servers/__init__.py",
+    "affordances/connectivity/bluetooth/utils/fidl_servers/bt_fidl_servers.py",
+    "affordances/connectivity/bluetooth/utils/types.py",
+    "affordances/connectivity/netstack/__init__.py",
+    "affordances/connectivity/netstack/errors.py",
+    "affordances/connectivity/netstack/netstack.py",
+    "affordances/connectivity/netstack/netstack_using_fc.py",
+    "affordances/connectivity/netstack/types.py",
+    "affordances/connectivity/wlan/__init__.py",
+    "affordances/connectivity/wlan/utils/errors.py",
+    "affordances/connectivity/wlan/utils/types.py",
+    "affordances/connectivity/wlan/wlan/__init__.py",
+    "affordances/connectivity/wlan/wlan/wlan.py",
+    "affordances/connectivity/wlan/wlan/wlan_using_fc.py",
+    "affordances/connectivity/wlan/wlan_policy/__init__.py",
+    "affordances/connectivity/wlan/wlan_policy/wlan_policy.py",
+    "affordances/connectivity/wlan/wlan_policy/wlan_policy_using_fc.py",
+    "affordances/connectivity/wlan/wlan_policy_ap/__init__.py",
+    "affordances/connectivity/wlan/wlan_policy_ap/wlan_policy_ap.py",
+    "affordances/connectivity/wlan/wlan_policy_ap/wlan_policy_ap_using_fc.py",
+    "affordances/location/__init__.py",
+    "affordances/location/errors.py",
+    "affordances/location/location.py",
+    "affordances/location/location_using_fc.py",
+    "affordances/power/__init__.py",
+    "affordances/power/system_power_state_controller/__init__.py",
+    "affordances/power/system_power_state_controller/system_power_state_controller.py",
+    "affordances/power/system_power_state_controller/system_power_state_controller_using_starnix.py",
+    "affordances/rtc/__init__.py",
+    "affordances/rtc/errors.py",
+    "affordances/rtc/rtc.py",
+    "affordances/rtc/rtc_using_fc.py",
+    "affordances/session/__init__.py",
+    "affordances/session/errors.py",
+    "affordances/session/session.py",
+    "affordances/session/session_using_ffx.py",
+    "affordances/tracing/__init__.py",
+    "affordances/tracing/errors.py",
+    "affordances/tracing/tracing.py",
+    "affordances/tracing/tracing_using_fc.py",
+    "affordances/ui/screenshot/__init__.py",
+    "affordances/ui/screenshot/screenshot.py",
+    "affordances/ui/screenshot/screenshot_using_ffx.py",
+    "affordances/ui/screenshot/types.py",
+    "affordances/ui/user_input/__init__.py",
+    "affordances/ui/user_input/errors.py",
+    "affordances/ui/user_input/types.py",
+    "affordances/ui/user_input/user_input.py",
+    "affordances/ui/user_input/user_input_using_fc.py",
+    "affordances_capable.py",
+    "auxiliary_devices/__init__.py",
+    "auxiliary_devices/power_switch/__init__.py",
+    "auxiliary_devices/power_switch/power_switch.py",
+    "auxiliary_devices/power_switch/power_switch_using_dmc.py",
+    "errors.py",
+    "fuchsia_device/__init__.py",
+    "fuchsia_device/fuchsia_device.py",
+    "fuchsia_device/fuchsia_device_impl.py",
+    "transports/__init__.py",
+    "transports/fastboot/__init__.py",
+    "transports/fastboot/errors.py",
+    "transports/fastboot/fastboot.py",
+    "transports/fastboot/fastboot_impl.py",
+    "transports/ffx/__init__.py",
+    "transports/ffx/config.py",
+    "transports/ffx/errors.py",
+    "transports/ffx/ffx.py",
+    "transports/ffx/ffx_impl.py",
+    "transports/ffx/types.py",
+    "transports/fuchsia_controller/__init__.py",
+    "transports/fuchsia_controller/errors.py",
+    "transports/fuchsia_controller/fuchsia_controller.py",
+    "transports/fuchsia_controller/fuchsia_controller_impl.py",
+    "transports/serial/__init__.py",
+    "transports/serial/errors.py",
+    "transports/serial/serial.py",
+    "transports/serial/serial_using_unix_socket.py",
+    "transports/sl4f/__init__.py",
+    "transports/sl4f/errors.py",
+    "transports/sl4f/sl4f.py",
+    "transports/sl4f/sl4f_impl.py",
+    "typing/__init__.py",
+    "typing/custom_types.py",
+    "utils/__init__.py",
+    "utils/common.py",
+    "utils/decorators.py",
+    "utils/host_shell.py",
+    "utils/http_utils.py",
+    "utils/properties.py",
+  ]
+  library_deps = [
+    ":honeydew_ffx_tool_deps",
+    ":honeydew_fidl_ir_and_deps",
+    "//userspace/developer/ffx/lib/fuchsia-controller:fidl_bindings",
+    "//userspace/lib/diagnostics/python/fuchsia_inspect",
+    "//third_party/pypng",
+  ]
+  if (smos_without_icu) {
+    library_deps -= [ "//third_party/pypng" ]
+  }
+
+  data_package_name = "data"
+  data_sources = [ "${prebuilt_fastboot}" ]
+
+  # Ensure all FIDL dependencies meet the compatibility and stability
+  # requirements.
+  # There are currently exceptions for host tests: https://fxbug.dev/326090508.
+  assert_no_deps = markers_partner_idk_prebuilts_must_not_depend_on
+}
+
+# FIDL dependencies that will be used in Honeydew using Fuchsia-Controller.
+group("honeydew_fidl_ir_and_deps") {
+  # Needed for SDK inclusion.
+  testonly = false
+
+  data_deps = [
+    # Required by Fuchsia Controller usage in Honeydew affordances and device classes.
+    "//sdk/fidl/fuchsia.bluetooth.gatt2:fuchsia.bluetooth.gatt2_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.bluetooth.le:fuchsia.bluetooth.le_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.bluetooth.sys:fuchsia.bluetooth.sys_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.buildinfo:fuchsia.buildinfo_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.developer.remotecontrol:fuchsia.developer.remotecontrol_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.diagnostics:fuchsia.diagnostics_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.feedback:fuchsia.feedback_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.hardware.power.statecontrol:fuchsia.hardware.power.statecontrol_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.hardware.rtc:fuchsia.hardware.rtc_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.hwinfo:fuchsia.hwinfo_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.location.namedplace:fuchsia.location.namedplace_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.net.interfaces:fuchsia.net.interfaces_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.net.root:fuchsia.net.root_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.tracing.controller:fuchsia.tracing.controller_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.ui.test.input:fuchsia.ui.test.input_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.wlan.device.service:fuchsia.wlan.device.service_host_test_data(${toolchain_variant.base})",
+    "//sdk/fidl/fuchsia.wlan.policy:fuchsia.wlan.policy_host_test_data(${toolchain_variant.base})",
+
+    # Required by Fuchsia Controller itself.
+    "//userspace/developer/ffx/lib/fuchsia-controller/tests:fuchsia_controller_test_data",
+  ]
+}
+
+# FFX tools that will be used in Honeydew.
+group("honeydew_ffx_tool_deps") {
+  # Needed for SDK inclusion.
+  testonly = false
+
+  deps = [
+    "//userspace/developer/ffx/plugins/inspect:ffx_inspect_tool_test_data",
+    "//userspace/developer/ffx/plugins/log:ffx_log_tool_test_data",
+    "//userspace/developer/ffx/plugins/session:ffx_session_tool_test_data",
+    "//userspace/developer/ffx/plugins/test:ffx_test_tool_test_data",
+    "//userspace/developer/ffx/tools/starnix:ffx_starnix_test_data",
+  ]
+}
+
+# SL4F packages
+group("sl4f_packages") {
+  testonly = true
+  public_deps = [
+    "//userspace/sys/bin/start_sl4f",
+    "//userspace/testing/sl4f",
+  ]
+}
+
+# Honeydew unit tests
+# Command to run unit tests:
+# fx set core.x64 --with-host //userspace/testing/end_to_end/honeydew:unit_tests
+# fx test //userspace/testing/end_to_end/honeydew --host --output
+group("unit_tests") {
+  testonly = true
+  public_deps = []
+
+  if (host_os != "mac") {
+    public_deps += [
+      "honeydew/affordances/connectivity/bluetooth/avrcp/tests/unit_tests:tests",
+      "honeydew/affordances/connectivity/bluetooth/bluetooth_common/tests/unit_tests:tests",
+      "honeydew/affordances/connectivity/bluetooth/gap/tests/unit_tests:tests",
+      "honeydew/affordances/connectivity/bluetooth/le/tests/unit_tests:tests",
+      "honeydew/affordances/connectivity/bluetooth/utils/tests/unit_tests:tests",
+      "honeydew/affordances/connectivity/netstack/tests/unit_tests:tests",
+      "honeydew/affordances/connectivity/wlan/utils/tests/unit_tests:tests",
+      "honeydew/affordances/connectivity/wlan/wlan/tests/unit_tests:tests",
+      "honeydew/affordances/connectivity/wlan/wlan_policy/tests/unit_tests:tests",
+      "honeydew/affordances/connectivity/wlan/wlan_policy_ap/tests/unit_tests:tests",
+      "honeydew/affordances/location/tests/unit_tests:tests",
+      "honeydew/affordances/power/system_power_state_controller/tests/unit_tests:tests",
+      "honeydew/affordances/rtc/tests/unit_tests:tests",
+      "honeydew/affordances/session/tests/unit_tests:tests",
+      "honeydew/affordances/tracing/tests/unit_tests:tests",
+      "honeydew/affordances/ui/screenshot/tests/unit_tests:tests",
+      "honeydew/affordances/ui/user_input/tests/unit_tests:tests",
+      "honeydew/auxiliary_devices/power_switch/tests/unit_tests:tests",
+      "honeydew/fuchsia_device/tests/unit_tests:tests",
+      "honeydew/transports/fastboot/tests/unit_tests:tests",
+      "honeydew/transports/ffx/tests/unit_tests:tests",
+      "honeydew/transports/fuchsia_controller/tests/unit_tests:tests",
+      "honeydew/transports/serial/tests/unit_tests:tests",
+      "honeydew/transports/sl4f/tests/unit_tests:tests",
+      "tests/unit_tests:tests",
+    ]
+  }
+}
+
+# Honeydew functional tests
+group("functional_tests") {
+  testonly = true
+  public_deps = []
+
+  if (host_os != "mac") {
+    public_deps += [
+      "honeydew/affordances/connectivity/bluetooth/avrcp/tests/functional_tests:tests",
+      "honeydew/affordances/connectivity/bluetooth/gap/tests/functional_tests:tests",
+      "honeydew/affordances/connectivity/netstack/tests/functional_tests:tests",
+      "honeydew/affordances/connectivity/wlan/wlan/tests/functional_tests:tests",
+      "honeydew/affordances/connectivity/wlan/wlan_policy/tests/functional_tests:tests",
+      "honeydew/affordances/connectivity/wlan/wlan_policy_ap/tests/functional_tests:tests",
+      "honeydew/affordances/location/tests/functional_tests:tests",
+      "honeydew/affordances/power/system_power_state_controller/tests/functional_tests/test_system_power_state_controller:tests",
+      "honeydew/affordances/rtc/tests/functional_tests:tests",
+      "honeydew/affordances/session/tests/functional_tests:tests",
+      "honeydew/affordances/tracing/tests/functional_tests:tests",
+      "honeydew/affordances/ui/screenshot/tests/functional_tests:tests",
+      "honeydew/affordances/ui/user_input/tests/functional_tests:tests",
+      "honeydew/auxiliary_devices/power_switch/tests/functional_tests:tests",
+      "honeydew/fuchsia_device/tests/functional_tests:tests",
+      "honeydew/transports/fastboot/tests/functional_tests:tests",
+      "honeydew/transports/ffx/tests/functional_tests:tests",
+      "honeydew/transports/serial/tests/functional_tests:tests",
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/product.gni")
+
+assert(current_toolchain == default_toolchain,
+       "Boards are only defined in the default toolchain")
+
+group("boards") {
+  deps = [ ":$target_cpu" ]
+}
+
+if (target_cpu == "arm64") {
+  group("arm64") {
+    if (smos_minimal_assembly) {
+      deps = [ "//platform/boards/smos-qemu-arm64" ]
+    } else {
+      deps = [
+        "//platform/boards/arm64",
+        "//platform/boards/pkvm:arm64",
+        "//platform/boards/qemu-arm64",
+        "//platform/boards/vim3",
+      ]
+    }
+  }
+} else if (target_cpu == "riscv64") {
+  group("riscv64") {
+    if (smos_minimal_assembly) {
+      deps = [ "//platform/boards/smos-qemu-riscv64" ]
+    } else {
+      deps = [ "//platform/boards/riscv64" ]
+    }
+  }
+}
+import("//release/product.gni")

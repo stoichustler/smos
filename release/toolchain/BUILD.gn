@@ -1,0 +1,60 @@
+# Copyright 2016 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/toolchain/clang_toolchain_suite.gni")
+
+clang_host_toolchain_suite("host_x64") {
+  toolchain_cpu = "x64"
+}
+clang_host_toolchain_suite("host_arm64") {
+  toolchain_cpu = "arm64"
+}
+clang_host_toolchain_suite("host_riscv64") {
+  toolchain_cpu = "riscv64"
+}
+
+clang_toolchain_suite("linux_x64") {
+  toolchain_cpu = "x64"
+  toolchain_os = "linux"
+  use_strip = true
+}
+
+clang_toolchain_suite("win_x64") {
+  toolchain_cpu = "x64"
+  toolchain_os = "win"
+  use_strip = true
+
+  # For now, do not allow instrumentation variants since they require
+  # a valid sysroot which is not available yet.
+  # TODO(haowei): Remove this once we have a proper Windows sysroot.
+  exclude_variant_tags = [ "instrumented" ]
+}
+
+clang_toolchain_suite("linux_arm64") {
+  toolchain_cpu = "arm64"
+  toolchain_os = "linux"
+  use_strip = true
+}
+
+clang_toolchain_suite("linux_arm") {
+  toolchain_cpu = "arm"
+  toolchain_os = "linux"
+  use_strip = true
+
+  # TODO(https://fxbug.dev/380297204): Work around LTO bug preventing linking
+  # in some cases.
+  exclude_variant_tags = [ "lto" ]
+}
+
+clang_toolchain_suite("linux_riscv64") {
+  toolchain_cpu = "riscv64"
+  toolchain_os = "linux"
+  use_strip = true
+}
+
+clang_toolchain_suite("unknown_wasm32") {
+  toolchain_cpu = "wasm32"
+  toolchain_os = "unknown"
+  use_strip = false
+}

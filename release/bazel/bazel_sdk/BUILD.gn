@@ -1,0 +1,87 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/bazel/bazel_build_action.gni")
+import("//release/bazel/bazel_fuchsia_sdk.gni")
+import("//release/bazel/bazel_inputs.gni")
+import("//release/bazel/generate_prebuilt_dir_content_hash.gni")
+import("//release/bazel/logging.gni")
+import("//release/bazel/remote_services.gni")
+import("//release/config/fuchsia/platform_version.gni")
+import("//release/config/fuchsia/target_api_level.gni")
+import("//release/sdk/config.gni")
+import("//release/sdk/idk.gni")
+import("//release/sdk/sdk_collection.gni")
+
+# The list of target cpu architectures supported by @fuchsia_sdk.
+if (bazel_fuchsia_sdk_all_cpus) {
+  _bazel_in_tree_idk_cpus = idk_target_cpus
+} else {
+  _bazel_in_tree_idk_cpus = [ target_cpu ]
+}
+
+# Generate a Bazel SDK directly from the content of ://sdk:bazel_in_tree_idk
+# and verify that it matches the content of @fuchsia_sdk. This is performed
+# using Bazel actions, to verify that there are no differences between
+# the Starlark and Python executions of generated_sdk_build_rules.{bzl,py}.
+
+bazel_input_directory("bazel_in_tree_idk.bazel_input") {
+  generator = "//sdk:bazel_in_tree_idk"
+  output_directory = "$root_build_dir/sdk/exported/bazel_in_tree_idk"
+}
+
+# Generate the in-tree @fuchsia_sdk by performing a silent query
+# on @fuchsia_sdk//:BUILD.bazel. This will trigger the repository rule.
+bazel_build_action("in_tree_fuchsia_sdk") {
+  deps = [ ":bazel_in_tree_idk.bazel_input" ]
+  bazel_target = ":in_tree_fuchsia_sdk"
+  copy_outputs = [
+    {
+      bazel = "{{BAZEL_TARGET_OUT_DIR}}/stamp"
+      ninja = "$target_name.stamp"
+    },
+  ]
+}
+
+bazel_build_action("verify_fuchsia_sdk_repository") {
+  bazel_target = ":verify_fuchsia_sdk_repository"
+  deps = [ ":bazel_in_tree_idk.bazel_input" ]
+  copy_outputs = [
+    {
+      bazel = "{{BAZEL_TARGET_OUT_DIR}}/{{BAZEL_TARGET_NAME}}"
+      ninja = "$target_name.verified"
+    },
+  ]
+}
+
+# Run the Bazel SDK test suite against the content of the @fuchsia_sdk
+# repository. This launches in a separate Bazel workspace, as many
+# times as the number of CPU architectures used to populate the
+# //sdk:bazel_in_tree_idk target.
+run_fuchsia_bazel_sdk_tests("bazel_sdk_tests") {
+  target_cpus = _bazel_in_tree_idk_cpus
+}
+
+# Run the Bazel SDK test suite against the content of the Bazel
+# //release/bazel/bazel_sdk:final_fuchsia_in_tree_sdk target, which
+# is the SDK usable directly in external Bazel workspaces (unlike
+# the content of @fuchsia_sdk, see README.md in this directory for
+# more details). This is called as many times as the number of CPU
+# architectures supported by //sdk:bazel_in_tree_idk target.
+#
+# NOTE: This is not incrementally correct at the moment!!
+#
+run_fuchsia_bazel_sdk_tests("final_fuchsia_in_tree_sdk.validation") {
+  target_cpus = _bazel_in_tree_idk_cpus
+  fuchsia_sdk_path = "$target_gen_dir/../fuchsia_sdk"
+  fuchsia_sdk_target = "//release/bazel:final_fuchsia_in_tree_sdk"
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":bazel_sdk_tests",
+    ":final_fuchsia_in_tree_sdk.validation",
+  ]
+}

@@ -1,0 +1,16 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.url") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Web"
+
+  sources = [ "url.fidl" ]
+
+  enable_hlcpp = true
+  enable_rust_next = true
+}

@@ -1,0 +1,68 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/cpp/sdk_shared_library.gni")
+import("//release/cpp/sdk_source_set.gni")
+import("//release/test.gni")
+
+sdk_source_set("cpp") {
+  category = "partner"
+  sdk_name = "vfs_cpp"
+  include_base = "//sdk"
+  stable = true
+
+  sources = [
+    "composed_service_dir.h",
+    "lazy_dir.h",
+    "node.h",
+    "pseudo_dir.h",
+    "pseudo_file.h",
+    "remote_dir.h",
+    "service.h",
+    "vmo_file.h",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_hlcpp",
+    "//sdk/lib/async",
+    "//sdk/lib/fdio",
+    "//sdk/lib/fidl/hlcpp",
+    "//zircon/system/ulib/zx",
+  ]
+
+  deps = [ "//sdk/lib/vfs/internal:vfs_internal" ]
+
+  public_configs = [ "//sdk/config" ]
+}
+
+test("vfs_cpp_unittests") {
+  sources = [
+    "tests/composed_service_dir_test.cc",
+    "tests/lazy_dir_test.cc",
+    "tests/pseudo_dir_test.cc",
+    "tests/pseudo_file_test.cc",
+    "tests/remote_dir_test.cc",
+    "tests/service_test.cc",
+    "tests/vmo_file_test.cc",
+  ]
+
+  deps = [
+    ":cpp",
+    "//sdk/lib/fdio",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/lib/testing/loop_fixture",
+    "//userspace/testing/fidl:placeholders_cpp",
+  ]
+}
+
+fuchsia_unittest_package("vfs_cpp_tests") {
+  deps = [ ":vfs_cpp_unittests" ]
+}
+
+group("tests") {
+  testonly = true
+  public_deps = [ ":vfs_cpp_tests" ]
+}

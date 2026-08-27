@@ -1,0 +1,35 @@
+# Copyright 2017 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/host.gni")
+import("//release/sdk/sdk_host_tool.gni")
+
+executable("bin") {
+  output_name = "far"
+
+  sources = [ "main.cc" ]
+
+  deps = [
+    "//userspace/lib/fxl:fxl_cli",
+    "//userspace/sys/pkg/lib/far/cpp:far",
+  ]
+}
+
+if (is_host) {
+  sdk_host_tool("bin_sdk") {
+    category = "partner"
+    output_name = "far"
+    deps = [ ":bin" ]
+  }
+} else {
+  fuchsia_package("far") {
+    deps = [ ":bin" ]
+  }
+}
+
+install_host_tools("host") {
+  deps = [ ":bin" ]
+  outputs = [ "far" ]
+}

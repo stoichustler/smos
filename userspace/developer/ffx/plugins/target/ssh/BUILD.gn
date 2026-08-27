@@ -1,0 +1,69 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//userspace/developer/ffx/build/ffx_plugin.gni")
+import("//userspace/developer/ffx/build/ffx_tool.gni")
+import("//userspace/developer/ffx/lib/e2e_emu/ffx_e2e_test.gni")
+
+ffx_plugin("ffx_target_ssh") {
+  sdk_category = "not-yet-specified"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+  args_with_unit_tests = true
+  deps = [
+    "//sdk/fidl/fuchsia.net:fuchsia.net_rust",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_rust",
+    "//userspace/developer/ffx/lib/addr:lib",
+    "//userspace/developer/ffx/lib/fho:lib",
+    "//userspace/developer/ffx/lib/ssh:lib",
+    "//userspace/developer/ffx/lib/target/holders:lib",
+    "//userspace/developer/ffx/lib/timeout:lib",
+    "//userspace/developer/ffx/lib/writer:lib",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:nix",
+    "//third_party/rust_crates:tracing",
+  ]
+  test_deps = [
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_rust",
+    "//userspace/developer/ffx/lib/timeout:lib",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:itertools",
+    "//third_party/rust_crates:pretty_assertions",
+    "//third_party/rust_crates:serde_json",
+  ]
+
+  args_sources = [ "src/args.rs" ]
+  args_deps = [
+    "//userspace/developer/ffx/core:lib",
+    "//third_party/rust_crates:argh",
+  ]
+
+  sources = [ "src/lib.rs" ]
+}
+
+if (is_host) {
+  group("host_tests") {
+    testonly = true
+    if (has_board) {
+      deps = [ ":ffx_target_ssh_e2e_tests" ]
+    }
+  }
+
+  if (has_board) {
+    ffx_e2e_test("ffx_target_ssh_e2e_tests") {
+      edition = "2021"
+      source_root = "tests/e2e.rs"
+      sources = [ source_root ]
+      deps = [
+        "//userspace/lib/fuchsia",
+        "//third_party/rust_crates:anyhow",
+        "//third_party/rust_crates:pretty_assertions",
+      ]
+    }
+  }
+}

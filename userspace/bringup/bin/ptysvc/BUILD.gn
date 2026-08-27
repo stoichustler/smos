@@ -1,0 +1,76 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/dist/component_manifest_resources.gni")
+import("//release/test.gni")
+
+executable("ptysvc") {
+  sources = [ "main.cc" ]
+  deps = [
+    ":common",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/component/outgoing/cpp",
+    "//userspace/sys/lib/stdout-to-debuglog/cpp",
+  ]
+}
+
+source_set("common") {
+  visibility = [ ":*" ]
+  sources = [
+    "fifo.cc",
+    "fifo.h",
+    "pty-client.cc",
+    "pty-client.h",
+    "pty-server.cc",
+    "pty-server.h",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.hardware.pty:fuchsia.hardware.pty_cpp",
+    "//zircon/system/ulib/zx",
+  ]
+
+  deps = [ "//sdk/fidl/fuchsia.io:fuchsia.io_cpp" ]
+}
+
+test("ptysvc-test") {
+  sources = [ "pty-tests.cc" ]
+  deps = [
+    ":common",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/async:async-cpp",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/fit",
+    "//zircon/system/ulib/sync",
+    "//zircon/system/ulib/zxtest",
+  ]
+}
+
+fuchsia_component("component") {
+  component_name = "ptysvc"
+  manifest = "meta/ptysvc.cml"
+  deps = [ ":ptysvc" ]
+
+  # ptysvc uses the boot log.
+  # The includes checker wants the syslog shard because ptysvc gets the
+  # injected dep on the legacy syslog backend.
+  check_includes = false
+}
+
+fuchsia_package("package") {
+  package_name = "ptysvc"
+  deps = [ ":component" ]
+}
+
+fuchsia_unittest_package("ptysvc-test-pkg") {
+  package_name = "ptysvc-test"
+  deps = [ ":ptysvc-test" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":ptysvc-test-pkg" ]
+}

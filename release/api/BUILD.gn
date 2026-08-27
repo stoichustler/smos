@@ -1,0 +1,26 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/testing/python_build_time_tests.gni")
+
+python_build_time_tests("tests") {
+  tests = [
+    "build_api_filter_test.py",
+    "client_test.py",
+    "gn_labels_test.py",
+    "gn_ninja_outputs_test.py",
+    "ninja_artifacts_test.py",
+  ]
+  inputs = [
+    "build_api_filter.py",
+    "client",
+    "client.py",
+    "gn_labels.py",
+    "gn_ninja_outputs.py",
+    "ninja_artifacts.py",
+
+    # Ninja is accessed implicitly by the test now.
+    "${smos_prebuilt_root}/third_party/ninja/${host_os}-${host_cpu}/ninja",
+  ]
+}

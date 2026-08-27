@@ -1,0 +1,107 @@
+// Copyright 2021 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+    include: [
+        "inspect/client.shard.cml",
+        "syslog/client.shard.cml",
+        "trace/client.shard.cml",
+    ],
+    program: {
+        runner: "elf",
+        binary: "bin/fshost",
+        lifecycle: { stop_event: "notify" },
+    },
+    children: [
+        {
+            name: "tmpfs",
+            url: "fuchsia-boot:///memfs#meta/memfs.cm",
+        },
+    ],
+    capabilities: [
+        {
+            directory: "data",
+            rights: [ "rw*" ],
+            path: "/fs/data/root",
+        },
+        {
+            directory: "factory",
+            rights: [ "r*" ],
+            path: "/fs/factory",
+        },
+        {
+            protocol: [
+                "fuchsia.fshost.Admin",
+                "fuchsia.fshost.Recovery",
+            ],
+        },
+    ],
+    use: [
+        {
+            directory: "dev-topological",
+            rights: [ "r*" ],
+            path: "/dev",
+        },
+        {
+            directory: "boot",
+            rights: [ "rx*" ],
+            path: "/boot",
+        },
+        {
+            protocol: [
+                "fuchsia.boot.Arguments",
+                "fuchsia.boot.Items",
+                "fuchsia.boot.WriteOnlyLog",
+                "fuchsia.process.Launcher",
+            ],
+        },
+
+        // This service doesn't really exist, the route is here to tell component manager that
+        // fshost should get the signal to shut down before anything in the collection. Using this,
+        // fshost shuts down components here in the proper order, and anything that happens to be
+        // left can be shut down by component manager.
+        {
+            service: "fs-collection.shutdown-order",
+            from: "#fs-collection",
+        },
+    ],
+    offer: [
+        {
+            protocol: [ "fuchsia.scheduler.RoleManager" ],
+            from: "parent",
+            to: [
+                "#fs-collection",
+                "#tmpfs",
+            ],
+            availability: "optional",
+        },
+    ],
+    expose: [
+        {
+            directory: [
+                "data",
+                "factory",
+            ],
+            from: "self",
+        },
+        {
+            directory: "memfs",
+            from: "#tmpfs",
+            as: "tmp",
+        },
+        {
+            protocol: [
+                "fuchsia.fshost.Admin",
+                "fuchsia.fshost.Recovery",
+            ],
+            from: "self",
+        },
+
+        // TODO(https://fxbug.dev/391474592): Remove after per-container volumes land.
+        {
+            protocol: "fuchsia.fxfs.CryptManagement",
+            from: "void",
+            availability: "optional",
+        },
+    ],
+}

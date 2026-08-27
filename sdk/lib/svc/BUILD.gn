@@ -1,0 +1,33 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/cpp/sdk_shared_library.gni")
+import("//release/test.gni")
+
+sdk_shared_library("svc") {
+  category = "partner"
+  sdk_name = "svc"
+
+  sources = [
+    "dir.cc",
+    "dir.h",
+  ]
+
+  public_deps = [ "//sdk/lib/async" ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//userspace/storage/lib/vfs/cpp",
+    "//zircon/system/ulib/fbl",
+  ]
+
+  symbols_api = "svc.ifs"
+
+  include_base = "//sdk"
+
+  libcxx_linkage = "static"
+
+  public_configs = [ "//sdk/config" ]
+}

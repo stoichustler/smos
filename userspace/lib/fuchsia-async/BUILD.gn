@@ -1,0 +1,167 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/product.gni")
+import("//release/rust/rustc_binary.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/rust/rustc_staticlib.gni")
+import("//release/testing/environments.gni")
+import("//release/testing/host_test.gni")
+
+rustc_library("fuchsia-async") {
+  name = "fuchsia_async"
+  edition = "2021"
+  with_unit_tests = true
+
+  # TODO(https://fxbug.dev/42179953) Remove --nocapture when this flake is found and fixed.
+  if (is_host) {
+    args = [ "--nocapture" ]
+  }
+  deps = [
+    "//userspace/lib/fuchsia-async-macro",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:pin-project-lite",
+  ]
+  sources = [
+    "src/atomic_future.rs",
+    "src/condition.rs",
+    "src/handle/mod.rs",
+    "src/lib.rs",
+    "src/net/mod.rs",
+    "src/runtime/mod.rs",
+    "src/runtime/stub.rs",
+    "src/runtime/task_group.rs",
+    "src/test_support.rs",
+  ]
+  test_deps = [ "//third_party/rust_crates:futures-test" ]
+  if (is_fuchsia) {
+    deps += [
+      "//sdk/lib/fdio",
+      "//sdk/rust/zx",
+      "//userspace/lib/fuchsia-sync",
+      "//third_party/rust_crates:crossbeam",
+      "//third_party/rust_crates:libc",
+      "//third_party/rust_crates:rustc-hash",
+      "//third_party/rust_crates:socket2",
+      "//third_party/rust_crates:thiserror",
+      "//third_party/rust_crates:zerocopy",
+    ]
+    sources += [
+      "src/handle/zircon/channel.rs",
+      "src/handle/zircon/fifo.rs",
+      "src/handle/zircon/mod.rs",
+      "src/handle/zircon/on_signals.rs",
+      "src/handle/zircon/rwhandle.rs",
+      "src/handle/zircon/socket.rs",
+      "src/net/fuchsia/mod.rs",
+      "src/net/fuchsia/tcp.rs",
+      "src/net/fuchsia/udp.rs",
+      "src/runtime/fuchsia/executor/common.rs",
+      "src/runtime/fuchsia/executor/local.rs",
+      "src/runtime/fuchsia/executor/mod.rs",
+      "src/runtime/fuchsia/executor/packets.rs",
+      "src/runtime/fuchsia/executor/scope.rs",
+      "src/runtime/fuchsia/executor/send.rs",
+      "src/runtime/fuchsia/executor/time.rs",
+      "src/runtime/fuchsia/mod.rs",
+      "src/runtime/fuchsia/task.rs",
+      "src/runtime/fuchsia/timer.rs",
+    ]
+    test_deps += [
+      "//third_party/rust_crates:assert_matches",
+      "//third_party/rust_crates:rand",
+    ]
+  } else {
+    deps += [
+      "//sdk/rust/zx-status",
+      "//sdk/rust/zx-types",
+      "//third_party/rust_crates:bitflags",
+      "//third_party/rust_crates:lazy_static",
+    ]
+    if (current_toolchain != unknown_wasm32_toolchain) {
+      deps += [
+        "//third_party/rust_crates:futures-lite",
+        "//third_party/rust_crates:thiserror",
+        "//third_party/rust_crates:tokio",
+      ]
+      sources += [ "src/net/portable/udp.rs" ]
+    }
+    sources += [
+      "src/handle/emulated/channel.rs",
+      "src/handle/emulated/mod.rs",
+      "src/handle/emulated/socket.rs",
+      "src/net/portable/mod.rs",
+      "src/runtime/portable.rs",
+      "src/runtime/portable/scope.rs",
+    ]
+  }
+}
+
+rustc_staticlib("fuchsia-async-staticlib") {
+  edition = "2021"
+  deps = [
+    ":fuchsia-async",
+    "//sdk/rust/zx-status",
+    "//sdk/rust/zx-types",
+    "//userspace/lib/fuchsia-sync",
+    "//third_party/rust_crates:futures",
+  ]
+  if (is_fuchsia) {
+    deps += [ "//sdk/rust/zx" ]
+  }
+  source_root = "src/ffi.rs"
+
+  sources = [ "src/ffi.rs" ]
+}
+
+fuchsia_unittest_package("fuchsia-async-tests") {
+  manifest = "meta/fuchsia_async_lib_test.cml"
+  deps = [
+    ":fuchsia-async_test",
+    "//userspace/connectivity/network:netstack-for-tests",
+  ]
+  test_specs = {
+    environments = [ emu_env ]
+  }
+
+  if (current_cpu == "riscv64") {
+    # TODO(https://fxbug.dev/299143724): Make this target depend on netstack3 on RISC-V
+    # and remove these lines.
+    test_specs = {
+    }
+    test_specs = {
+      environments = []
+    }
+  }
+}
+
+if (is_host) {
+  rustc_binary("fuchsia-async-shutdown-test-bin") {
+    edition = "2021"
+    with_unit_tests = false
+    deps = [
+      ":fuchsia-async",
+      "//sdk/rust/zx-status",
+      "//third_party/rust_crates:futures",
+    ]
+    source_root = "src/handle/emulated/shutdown_test.rs"
+    sources = [ "src/handle/emulated/shutdown_test.rs" ]
+  }
+
+  host_test("fuchsia-async-shutdown-test") {
+    binary_path = "$root_out_dir/fuchsia-async-shutdown-test-bin"
+    deps = [ ":fuchsia-async-shutdown-test-bin" ]
+  }
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":fuchsia-async-shutdown-test($host_toolchain)",
+    ":fuchsia-async-tests",
+    ":fuchsia-async_test($host_toolchain)",
+    "cpp:tests",
+  ]
+}

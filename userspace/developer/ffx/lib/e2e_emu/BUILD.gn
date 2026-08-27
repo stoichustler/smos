@@ -1,0 +1,147 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+import("//userspace/sys/pkg/repositories/devhost/devhost.gni")
+
+# For this library's own tests we need to make something available in the universe package
+# set without relying on the overall build system to do so via dependencies. Most test packages
+# are put in the base package set on infra builders so if we want continuous validation of
+# universe package resolution (which is how most developers work locally) then we need to make
+# our own isolated package repository for a package that's not in the base/cache set of the
+# overall build graph.
+_package_for_test_name = "ffx_e2e_emu_resolve_from_universe_for_own_tests"
+
+if (is_host && has_board) {
+  _package_for_test_label = ":${_package_for_test_name}($default_toolchain)"
+  _package_for_test_outdir =
+      get_label_info(_package_for_test_label, "target_out_dir")
+  _package_for_test_manifest_path = "${_package_for_test_outdir}/${_package_for_test_name}/package_manifest.json"
+
+  _package_manifests_list = "$target_out_dir/package_manifests.list"
+  generated_file("package_manifests.list") {
+    testonly = true
+    outputs = [ _package_manifests_list ]
+    output_conversion = "json"
+    contents = {
+      version = "1"
+      content = {
+        manifests =
+            [ rebase_path(_package_for_test_manifest_path, root_build_dir) ]
+      }
+    }
+
+    # Prevent packages in this list from making it into the overall system image via our deps.
+    metadata = {
+      package_barrier = []
+    }
+    deps = [ _package_for_test_label ]
+  }
+
+  _test_amber_files_path = "$target_out_dir/amber-files"
+  devhost_repository_publish("test_repo_publish") {
+    testonly = true
+
+    output_repository_dir = _test_amber_files_path
+
+    deps = [ ":package_manifests.list" ]
+    package_list_manifests = [ _package_manifests_list ]
+  }
+  host_test_data("test_package_repo_data") {
+    sources = [ _test_amber_files_path ]
+    deps = [ ":test_repo_publish" ]
+  }
+} else if (is_fuchsia) {
+  fuchsia_package(_package_for_test_name) {
+    testonly = true
+    visibility = [ ":*" ]
+  }
+} else {
+  not_needed([ "_package_for_test_name" ])
+}
+
+if (is_host && has_board) {
+  group("host_tests") {
+    testonly = true
+    deps = [ ":e2e_emu_test" ]
+  }
+
+  _common_deps = [
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/lib/executor:lib",
+    "//userspace/developer/ffx/lib/isolate:lib",
+    "//userspace/lib/diagnostics/data/rust",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-url",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-stream",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:tempfile",
+    "//third_party/rust_crates:tracing",
+  ]
+
+  # Exported SDK with ffx binary.
+  _sdk_label = "//sdk:exported_idk_for_ffx_tests($default_toolchain)"
+  _sdk_outdir = get_label_info(_sdk_label, "root_out_dir")
+  _sdk_path = _sdk_outdir + "/sdk/exported/core"
+
+  # Product bundle containing emulator image.
+  _pb_label = "//release/images/fuchsia:product_bundle($default_toolchain)"
+  _pb_outdir = get_label_info(_pb_label, "target_out_dir")
+  _product_bundle = "$_pb_outdir/product_bundle"
+
+  # Package repository inputs from the main build, so that `fx set ... --with //foo` will work.
+  _amber_files_label = "//release/images/updates:publish($default_toolchain)"
+  _amber_files_path = "$root_build_dir/amber-files"
+
+  # This test uses non-public interfaces from e2e_emu, it cannot use `ffx_e2e_test` template
+  # as the template includes e2e_emu as a dependency.
+  rustc_test("e2e_emu_test") {
+    edition = "2021"
+
+    sources = [ "src/lib.rs" ]
+    deps = _common_deps + [ "//userspace/lib/fuchsia" ]
+
+    data_deps = [
+      ":isolated_emulator_data",
+
+      # Put this in the main data_deps since rustc_library doesn't have test_data_deps
+      ":test_package_repo_data",
+      "//userspace/developer/ffx:suite_test_data",
+    ]
+
+    args = [
+      "env PRODUCT_BUNDLE_PATH=" + rebase_path(_product_bundle, root_build_dir),
+      "env TEST_PACKAGE_NAME=${_package_for_test_name}",
+      "env TEST_PACKAGE_REPOSITORY_PATH=" +
+          rebase_path(_test_amber_files_path, root_build_dir),
+      "env PACKAGE_REPOSITORY_PATH=" +
+          rebase_path(_amber_files_path, root_build_dir),
+    ]
+  }
+
+  host_test_data("isolated_emulator_data") {
+    sources = [
+      _amber_files_path,
+      _product_bundle,
+      _sdk_path,
+    ]
+    deps = [
+      _amber_files_label,
+      _pb_label,
+      _sdk_label,
+    ]
+  }
+
+  rustc_library("e2e_emu") {
+    testonly = true
+    name = "ffx_e2e_emu"
+    edition = "2021"
+    sources = [ "src/lib.rs" ]
+    deps = _common_deps
+  }
+}

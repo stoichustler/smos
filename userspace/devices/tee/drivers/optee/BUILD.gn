@@ -1,0 +1,199 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/bind/bind.gni")
+import("//release/components.gni")
+import("//release/drivers.gni")
+import("//release/test.gni")
+
+assert(current_cpu == "arm64",
+       "The OP-TEE driver requires an arm64 secure-world target.")
+
+driver_bind_rules("optee-bind") {
+  rules = "meta/optee.bind"
+  bind_output = "optee.bindbc"
+  tests = "meta/optee-bind-test.json"
+  deps = [
+    "//sdk/fidl/fuchsia.hardware.rpmb:fuchsia.hardware.rpmb_bindlib",
+    "//userspace/devices/bind/fuchsia.platform",
+  ]
+}
+
+source_set("tee_smc") {
+  sources = [ "tee-smc.h" ]
+}
+
+source_set("optee_lib") {
+  sources = [
+    "optee-client.cc",
+    "optee-controller.cc",
+    "optee-message.cc",
+    "optee-util.cc",
+    "shared-memory.cc",
+  ]
+
+  public_deps = [
+    ":tee_smc",
+    "//sdk/fidl/fuchsia.hardware.rpmb:fuchsia.hardware.rpmb_cpp",
+    "//sdk/fidl/fuchsia.hardware.tee:fuchsia.hardware.tee_cpp",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/driver/component/cpp:cpp",
+    "//sdk/lib/driver/runtime:driver_runtime",
+    "//sdk/lib/driver/runtime:driver_runtime_cpp",
+    "//sdk/lib/fit-promise",
+    "//userspace/devices/bus/lib/device-protocol-pdev",
+    "//userspace/devices/lib/driver:driver_runtime",
+    "//userspace/devices/lib/mmio",
+    "//userspace/lib/ddktl",
+    "//userspace/security/lib/tee/tee-client-api:tee-client-api-headers",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/region-alloc",
+    "//zircon/system/ulib/zircon-internal",
+    "//zircon/system/ulib/zx",
+  ]
+
+  deps = [
+    ":optee-bind",
+    "//sdk/fidl/fuchsia.tee:fuchsia.tee_cpp",
+    "//sdk/fidl/fuchsia.tee.manager:fuchsia.tee.manager_cpp",
+    "//sdk/lib/fidl",
+    "//userspace/devices/lib/driver",
+  ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+
+  # TODO(https://fxbug.dev/42176699): This target uses mutable tables which are deprecated,
+  # rather than builders.
+  configs += [ "//release/cpp:fidl-wire-deprecated-mutable-tables" ]
+}
+
+fuchsia_cc_driver("optee-driver") {
+  legacy = true
+  output_name = "optee"
+  configs += [
+    "//release/config:all_source",
+    "//release/config/fuchsia:enable_zircon_asserts",
+  ]
+  deps = [ ":optee_lib" ]
+}
+
+fuchsia_driver_component("optee") {
+  info = "meta/optee-info.json"
+  component_name = "optee"
+  deps = [ ":optee-driver" ]
+  manifest = "meta/optee.cml"
+}
+
+fuchsia_driver_package("package") {
+  package_name = "optee"
+  driver_components = [ ":optee" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":optee-bind_test",
+    ":optee-unittest",
+  ]
+}
+
+test("optee-message-test-bin") {
+  output_name = "optee-message-test"
+  include_dirs = [ "." ]
+  sources = [ "test/optee-message-test.cc" ]
+  deps = [
+    ":optee_lib",
+    "//zircon/system/ulib/zxtest",
+  ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+
+  # TODO(https://fxbug.dev/42176699): This target uses mutable tables which are deprecated,
+  # rather than builders.
+  configs += [ "//release/cpp:fidl-wire-deprecated-mutable-tables" ]
+}
+
+test("optee-controller-test-bin") {
+  sources = [ "test/optee-controller-test.cc" ]
+  include_dirs = [ "." ]
+  output_name = "optee-controller-test"
+  deps = [
+    ":optee_lib",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/async_patterns/testing/cpp",
+    "//sdk/lib/component/outgoing/cpp",
+    "//sdk/lib/driver/runtime:driver_runtime_env",
+    "//sdk/lib/driver/runtime/testing/cpp",
+    "//userspace/devices/bus/testing/fake-pdev",
+    "//userspace/devices/lib/driver:driver_runtime",
+    "//userspace/devices/testing/fake-bti",
+    "//userspace/devices/testing/fake-resource",
+    "//userspace/devices/testing/mock-ddk",
+    "//zircon/system/ulib/zxtest",
+  ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+}
+
+test("optee-client-test-bin") {
+  sources = [ "test/optee-client-test.cc" ]
+  include_dirs = [ "." ]
+  output_name = "optee-client-test"
+  deps = [
+    ":optee_lib",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/fidl/hlcpp",
+    "//userspace/devices/testing/fake-bti",
+    "//userspace/devices/testing/fake-resource",
+    "//userspace/devices/testing/mock-ddk",
+    "//zircon/system/ulib/zxtest",
+  ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+}
+
+test("optee-uuid-test-bin") {
+  sources = [ "test/optee-uuid-test.cc" ]
+  include_dirs = [ "." ]
+  output_name = "optee-uuid-test"
+  deps = [
+    ":optee_lib",
+    "//sdk/fidl/fuchsia.tee:fuchsia.tee_cpp",
+    "//zircon/system/ulib/zxtest",
+  ]
+}
+
+fuchsia_unittest_component("optee-client-test") {
+  deps = [ ":optee-client-test-bin" ]
+}
+
+fuchsia_unittest_component("optee-controller-test") {
+  deps = [ ":optee-controller-test-bin" ]
+}
+
+fuchsia_unittest_component("optee-message-test") {
+  deps = [ ":optee-message-test-bin" ]
+}
+
+fuchsia_unittest_component("optee-uuid-test") {
+  deps = [ ":optee-uuid-test-bin" ]
+}
+
+fuchsia_test_package("optee-unittest") {
+  test_components = [
+    ":optee-client-test",
+    ":optee-controller-test",
+    ":optee-message-test",
+    ":optee-uuid-test",
+  ]
+  test_specs = {
+    log_settings = {
+      max_severity = "ERROR"
+    }
+  }
+}

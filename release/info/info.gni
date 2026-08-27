@@ -1,0 +1,42 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/board.gni")
+
+declare_args() {
+  # LINT.IfChange
+  # Product configuration of the current build
+  build_info_product = ""
+
+  # Board configuration of the current build
+  build_info_board = board_name
+
+  # Logical version of the current build. If not set, defaults to the timestamp
+  # of the most recent update.
+  build_info_version = ""
+
+  # LINT.ThenChange(//release/bazel/gn_build_args.txt)
+}
+
+build_info_files = {
+  product = "$root_build_dir/product.txt"
+  board = "$root_build_dir/board.txt"
+  version = "$root_build_dir/version.txt"
+
+  # LINT.IfChange
+  jiri_snapshot = "//.jiri_root/update_history/latest"
+
+  # LINT.ThenChange(//release/bazel/scripts/workspace_utils.py)
+
+  latest_commit_hash = "$root_build_dir/latest-commit-hash.txt"
+  latest_commit_date = "$root_build_dir/latest-commit-date.txt"
+  minimum_utc_stamp = "$root_build_dir/minimum-utc-stamp.txt"
+}
+
+default_product_build_info = {
+  name = build_info_product
+  version = "version.txt"
+  jiri_snapshot = "../../.jiri_root/update_history/latest"
+  latest_commit_date = "latest-commit-date.txt"
+}

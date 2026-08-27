@@ -1,0 +1,530 @@
+# Copyright 2017 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/compiled_action.gni")
+import("//release/config/fuchsia/target_api_level.gni")
+import("//release/json/validate_json.gni")
+import("//release/python/python_action.gni")
+import("//release/sdk/plasa/config.gni")
+import("//release/testing/golden_files.gni")
+import("config.gni")
+
+_types_supporting_unstable_atoms = [
+  "fidl_library",
+  "cc_source_library",
+]
+_types_not_requiring_compatibility = [
+  "bind_library",
+  "companion_host_tool",
+  "dart_library",
+  "data",
+  "documentation",
+  "experimental_python_e2e_test",
+  "ffx_tool",
+  "host_tool",
+  "package",
+  "rust_3p_library",
+  "version_history",
+]
+
+# Defines an SDK element.
+#
+# Outputs
+#
+#   $target_gen_dir/$target_name.sdk
+#     A manifest describing what files pertain to the atom and which other atoms
+#     are required by this atom.
+#
+#   $target_gen_dir/$target_name.meta.json
+#     A metadata file describing the atom.
+#     This file is included in the final SDK and used to e.g. drive the
+#     inclusion of the atom in a different build system.
+#
+# Parameters
+#
+#   id
+#     Identifier of this element within SDKs.
+#     The identifier should represent the canonical base path of the element
+#     within SDKs according to the standard layout (https://fuchsia.dev/fuchsia-src/development/sdk/layout.md).
+#     For an element at $ROOT/pkg/foo, the id should be "sdk://pkg/foo".
+#
+#   category
+#     Describes the availability of the element.
+#     Possible values, from most restrictive to least restrictive:
+#       - internal         : the atom is exposed in-tree to the Bazel SDK build via `@internal_sdk`.
+#       - compat_test      : May be used in CTF realm proxies to enable tests to configure the target.
+#       - partner_internal : The atom may be used internally by other atoms in SDKs for partners.
+#       - partner          : The atom may be included in SDKs for partners.
+#
+#   sdk_area (optional)
+#     The API area responsible for maintaining this SDK atom. See
+#     docs/contribute/governance/areas/_areas.yaml for the list of areas.
+#     "Unknown" is also a valid option. By default, the area will be `null` in
+#     the build manifest.
+#
+#   meta
+#     Scope describing the element's metadata file.
+#     See the "Metadata scope" section for how to populate this attribute.
+#
+#   files
+#     List of scopes describing the contents of this element.
+#     See the "File scopes" section for how to describe files.
+#
+#   file_list
+#     Path to a file containing file mappings.
+#     Each line in the file should contain a "dest=source" mapping, similarly to
+#     file scopes.
+#
+#   api (optional)
+#     Path to the file representing the API canonically exposed by this atom.
+#     This file is used to ensure modifications to the API are explicitly
+#     acknowledged.
+#     If this attribute is set, one of "current_api" and "api_contents" must be
+#     set as well.
+#
+#   current_api (optional)
+#     Path to the file representing the API locally exposed by this atom.
+#     This file is used to verify that the API has not changed locally.
+#     Only relevant when "api" is set, and mutually exclusive with
+#     "api_contents".
+#
+#   api_contents (optional)
+#     List of scopes for the files making up the atom's API.
+#     This list will be used to verify that the API has not changed locally.
+#     This is very roughly approximated by checking whether the files themselves
+#     have changed at all.
+#     See the "File scopes" section for how to describe files.
+#     Only relevant when "api" is set, and mutually exclusive with
+#     "current_api".
+#
+#   deps (optional)
+#     List of GN labels for other SDK elements this element depends on at build
+#     time.
+#     These labels must point to "sdk_atom" targets.
+#
+#   non_sdk_deps (optional)
+#     List of GN labels which this target needs built.
+#
+# Metadata scope
+#
+# This scope describes a metadata file to be added to the SDK element. Its
+# supported attributes are:
+#
+#   source (optional)
+#     Path to the metadata file.
+#
+#   value (optional)
+#     Scope representing the metadata contents.
+#
+#     NOTE: Exactly one of `source` or `value` must be set.
+#
+#   dest (required)
+#     The path of the metadata file (usually `meta.json`) in the final IDK,
+#     relative to the IDK root.
+#
+#   schema (required)
+#     Name of the schema for this file, ignoring the extension.
+#     Metadata files are hosted under //release/sdk/meta.
+#     If the metadata file conforms to //release/sdk/meta/foo.json, the
+#     present attribute should have a value of "foo".
+#
+#   additional_schema_files (optional)
+#     Additional schema files referenced by the main schema file specified by
+#     the `schema` variable.
+#
+#   stable (optional)
+#     Whether this sdk_atom is stabilized.
+#     Must be specified for types "fidl_library" and "cc_source_library" and
+#     otherwise unspecified.
+#     This is only informative. The value must match the `stable` value in the
+#     atom metadata specified by `source`/`value`. (That metadata is what
+#     controls whether the atom is marked as unstable in the final IDK.)
+#
+#   type (optional)
+#     Type of the atom. Defaults to schema.
+#
+# File scopes
+#
+# Each scope describes a file to be added to the SDK element. The supported
+# attributes are:
+#
+#   source (required)
+#     Path to the original file.
+#     This path may be absolute or relative to the target's directory.
+#
+#   dest (required)
+#     Destination path of the file relative to the SDK root.
+
+template("sdk_atom") {
+  assert(defined(invoker.id), "Must define an SDK ID")
+
+  assert(defined(invoker.meta), "Must specify some metadata")
+  meta = invoker.meta
+
+  # TODO(https://fxbug.dev/42165942): Read the type from the schema file.
+  if (defined(meta.type)) {
+    type = meta.type
+  } else {
+    type = meta.schema
+  }
+
+  assert(defined(invoker.category), "Must define an SDK category")
+  category = invoker.category
+
+  _allowed_categories = [
+    # "internal" is deprecated; only specific legacy cases below are allowed.
+    "compat_test",
+    "partner_internal",
+    "partner",
+  ]
+
+  assert(
+      _allowed_categories + [ category ] - [ category ] !=
+          _allowed_categories ||
+          # TODO(https://fxbug.dev/372986936): Remove once all exceptions in the
+          # assert below have been removed.
+          category == "internal",
+      "'${target_name}' has unsupported SDK category '${category}'. Must be one of ${_allowed_categories}.")
+
+  # Atom types other than FIDL must be in the "partner" SDK category because
+  # they are exposed directly to developers. If you have a use case for another
+  # type in a different category, contact the Platform Versioning team.
+  assert(
+      category == "partner" || type == "fidl_library" ||
+          # TODO(https://fxbug.dev/372986936): Remove once all exceptions in the
+          # assert below have been removed.
+          category == "internal",
+      "Atoms of type '${type}' must be in the 'partner' SDK category ('${category}').")
+
+  if (category == "internal" &&
+      # `sdk_source_set()` enforces an allowlist.
+      type != "cc_source_library") {
+    # Handle individual exceptions for types with only one "internal" instance.
+    target_label = get_label_info(target_name, "label_no_toolchain")
+    assert(
+        (type == "cc_prebuilt_library" &&
+             # TODO(https://fxbug.dev/366517646): Remove these once all uses of
+             # `fake-bti` are migrated to the //sdk target.
+             (target_label == "//userspace/devices/testing/fake-bti/fake-bti_sdk_manifest:fake-bti_sdk_manifest" || target_label == "//userspace/devices/testing/fake-object/fake-object_sdk_manifest:fake-object_sdk_manifest" ||
+                  # TODO(https://fxbug.dev/343059325): Remove once devicetree is in "partner".
+                  target_label == "//zircon/kernel/lib/devicetree/devicetree_sdk_manifest:devicetree_sdk_manifest")) ||
+            # TODO(https://fxbug.dev/42070500): Remove once shard is in "partner".
+            (type == "data" && target_label == "//sdk/lib/sys/component/realm_builder_shard:realm_builder_shard") ||
+            # TODO(https://fxbug.dev/331991540): Remove once a different
+            # solution for the Firmware SDK is implemented.
+            (type == "documentation" &&
+                 target_label == "//sdk/docs/firmware:firmware") ||
+            # TODO(https://fxbug.dev/333907192): Remove once in "partner".
+            (type == "fidl_library" && target_label == "//sdk/fidl/fuchsia.boot/fuchsia.boot_sdk:fuchsia.boot_sdk") ||
+            # TODO(https://fxbug.dev/343059325): Remove once devicetree is in "partner".
+            (type == "loadable_module" &&
+                 target_label !=
+                     string_replace(target_label, "devicetree", "", 1)),
+        "`${target_label}` of type `${type}` is not allowed to use the \"internal\" SDK category. No new uses are allowed.")
+  }
+
+  # Ensure that we only want write `stable` in the manifest for types that
+  # support unstable atoms. For those types, ensure that `meta.stable`is always
+  # specified and either it is true and an `api` file was specified or the
+  # category supports unstable atoms.
+  is_type_supporting_unstable = _types_supporting_unstable_atoms + [ type ] -
+                                [ type ] != _types_supporting_unstable_atoms
+  assert(
+      is_type_supporting_unstable == defined(meta.stable),
+      "`meta.stable` must be set if and only if the type ('${type}') is one of ${_types_supporting_unstable_atoms}.")
+  if (defined(meta.stable)) {
+    if (meta.stable) {
+      # TODO(https://fxbug.dev/372986936): Remove when no more uses.
+      assert(category != "internal",
+             "Atoms in SDK category '${category}' cannot be `stable`.")
+      add_stable_property = true
+
+      # For types that specify stable, ensure the `api` file was specified for stable atoms.
+      assert(defined(invoker.api))
+    } else {
+      # Categories other than "partner" exist only to ensure stability and thus
+      # should not have unstable atoms. If you have a use case for unstable
+      # atoms in another category, contact the Platform Versioning team.
+      assert(
+          category == "partner" ||
+              # TODO(https://fxbug.dev/372986936): Remove when no more uses.
+              category == "internal",
+          "`meta.stable` must be true unless the SDK category ('${category}') is 'partner'.")
+      add_stable_property = false
+    }
+  } else {
+    add_stable_property = false
+  }
+
+  is_type_not_requiring_compatibility =
+      _types_not_requiring_compatibility + [ type ] - [ type ] !=
+      _types_not_requiring_compatibility
+  if ((type == "cc_prebuilt_library" &&
+       (target_name == "driver_runtime_sdk_manifest" ||
+        target_name == "libvulkan_sdk_manifest")) ||
+      (type == "loadable_module" && target_name == "vulkan_layers")) {
+    # These few targets specify `no_headers` (or would if using a template).
+    # Since this list is unlikely to change much, just exempt them by name.
+    is_type_not_requiring_compatibility = true
+  }
+
+  assert(
+      defined(invoker.api) || category == "internal" ||
+          (defined(meta.stable) && !meta.stable) ||
+          is_type_not_requiring_compatibility,
+      "All atoms with types ('${type}') and categories ('${category}') requiring compatibility must specify an `api` file unless explicitly unstable.")
+  not_needed([ "is_type_not_requiring_compatibility" ])
+
+  if (defined(invoker.api)) {
+    if (!defined(invoker.current_api) && !defined(invoker.api_contents)) {
+      assert(false, "Must set one of 'current_api' and 'api_contents'")
+    } else if (defined(invoker.current_api) && defined(invoker.api_contents)) {
+      assert(false, "Must set only one of 'current_api' and 'api_contents'")
+    }
+  }
+
+  _default_forward_from_invoker = [
+    "assert_no_deps",
+    "testonly",
+  ]
+
+  gn_deps = []
+  if (defined(invoker.non_sdk_deps)) {
+    gn_deps = invoker.non_sdk_deps
+  }
+
+  dep_manifests = []
+  if (defined(invoker.deps)) {
+    gn_deps += invoker.deps
+    foreach(dep, invoker.deps) {
+      gen_dir = get_label_info(dep, "target_gen_dir")
+      name = get_label_info(dep, "name")
+      dep_manifests += [ "$gen_dir/$name.sdk" ]
+    }
+  }
+
+  # Some elements contain only the metadata.
+  if (!defined(invoker.files)) {
+    files = []
+  } else {
+    files = invoker.files
+  }
+  file_args = []
+  file_inputs = []
+  foreach(file, files) {
+    assert(defined(file.source), "File $file does not specify a source.")
+    assert(defined(file.dest), "File $file does not specify a destination.")
+    file_inputs += [ file.source ]
+    file_args += [
+      "--file",
+      file.dest,
+      rebase_path(file.source, root_build_dir),
+    ]
+  }
+
+  meta_target_name = "${target_name}_meta"
+
+  # The generated file containing the metadata for the atom that will be
+  # included in the final IDK as its `meta.json` at `meta.dest`.
+  meta_file_for_idk = "$target_gen_dir/$target_name.meta.json"
+
+  assert(defined(meta.source) != defined(meta.value),
+         "Exactly one of `meta.source` and `meta.value` must be set.")
+  if (defined(meta.value)) {
+    meta_generated_file_target = "${target_name}_meta_generated_file"
+    generated_file(meta_generated_file_target) {
+      forward_variables_from(invoker, _default_forward_from_invoker)
+      outputs = [ meta_file_for_idk ]
+      contents = meta.value
+      output_conversion = "json"
+      deps = gn_deps
+    }
+    target_providing_meta_file_for_idk = [ ":$meta_generated_file_target" ]
+  } else {
+    meta_copy_target_name = "${target_name}_meta_copy"
+
+    # Copy the file to a canonical location for access by other rules.
+    # TODO(https://fxbug.dev/42131074): instead, make sure that all atoms generate their metadata
+    # file in the right location.
+    copy(meta_copy_target_name) {
+      forward_variables_from(invoker, _default_forward_from_invoker)
+
+      sources = [ meta.source ]
+
+      outputs = [ meta_file_for_idk ]
+
+      deps = gn_deps
+    }
+
+    target_providing_meta_file_for_idk = [ ":$meta_copy_target_name" ]
+  }
+
+  # Verify that the metadata complies with the specified schema.
+  validate_json(meta_target_name) {
+    forward_variables_from(invoker, _default_forward_from_invoker)
+    data = meta_file_for_idk
+    schema = "//release/sdk/meta/${meta.schema}.json"
+    sources = [
+      # This file is imported by all schemas.
+      "//release/sdk/meta/common.json",
+    ]
+    if (defined(meta.additional_schema_files)) {
+      sources += meta.additional_schema_files
+    }
+    public_deps = target_providing_meta_file_for_idk
+  }
+
+  # Add the metadata file to the set of files to include in SDKs.
+  file_args += [
+    "--file",
+    meta.dest,
+    rebase_path(meta_file_for_idk, root_build_dir),
+  ]
+
+  # api files are only valid for the PLATFORM API level. When the
+  # current_build_target_api_level is not "PLATFORM", some of them will fail to
+  # reflect the API of the atom being built. Skip api verification when this is
+  # the case.
+  _verify_api =
+      defined(invoker.api) && current_build_target_api_level == "PLATFORM"
+
+  if (_verify_api) {
+    if (defined(invoker.api_contents)) {
+      assert(invoker.api_contents != [], "api_contents cannot be empty")
+
+      generate_api_target_name = "${target_name}_generate_api"
+      current_api_file = "$target_gen_dir/$target_name.api"
+
+      action(generate_api_target_name) {
+        forward_variables_from(invoker, _default_forward_from_invoker)
+
+        script = "//release/sdk/compute_atom_api.py"
+
+        inputs = []
+
+        outputs = [ current_api_file ]
+
+        args = [
+          "--output",
+          rebase_path(current_api_file, root_build_dir),
+        ]
+        deps = gn_deps
+
+        foreach(file, invoker.api_contents) {
+          inputs += [ file.source ]
+          args += [
+            "--file",
+            file.dest,
+            rebase_path(file.source, root_build_dir),
+          ]
+        }
+      }
+    } else {
+      current_api_file = invoker.current_api
+    }
+
+    verify_api_target_name = "${target_name}_verify_api"
+    golden_files(verify_api_target_name) {
+      forward_variables_from(invoker, _default_forward_from_invoker)
+      comparisons = [
+        {
+          candidate = current_api_file
+          golden = invoker.api
+        },
+      ]
+      warn_on_changes = warn_on_sdk_changes
+
+      if (defined(invoker.api_contents)) {
+        deps = [ ":$generate_api_target_name" ]
+      }
+    }
+  } else {
+    not_needed(invoker,
+               [
+                 "api",
+                 "api_contents",
+                 "current_api",
+               ])
+  }
+
+  # Builds a manifest representing this atom.
+  # This manifest is only used at build time to generate the IDK. The actual
+  # manifest for this atom in the IDK is `meta_file_for_idk`.
+  python_action(target_name) {
+    forward_variables_from(invoker,
+                           _default_forward_from_invoker + [ "metadata" ])
+
+    manifest = "$target_gen_dir/$target_name.sdk"
+    areas_file = "//docs/contribute/governance/areas/_areas.yaml"
+    depfile = "$manifest.d"
+
+    binary_label = "//release/sdk:create_atom_manifest"
+
+    public_deps = gn_deps + [ ":$meta_target_name" ]
+    if (_verify_api) {
+      public_deps += [ ":$verify_api_target_name" ]
+    }
+
+    inputs = dep_manifests + file_inputs
+
+    outputs = [ manifest ]
+
+    args = [
+             "--id",
+             invoker.id,
+             "--out",
+             rebase_path(manifest, root_build_dir),
+             "--depfile",
+             rebase_path(depfile, root_build_dir),
+             "--gn-label",
+             get_label_info(":$target_name", "label_with_toolchain"),
+             "--category",
+             category,
+             "--meta",
+             meta.dest,
+             "--type",
+             type,
+             "--deps",
+           ] + rebase_path(dep_manifests, root_build_dir) + file_args
+
+    if (path_exists(areas_file)) {
+      inputs += [ areas_file ]
+      args += [
+        "--areas-file-path",
+        rebase_path(areas_file, root_build_dir),
+      ]
+    }
+
+    if (add_stable_property) {
+      # This is only informational and does not affect the build. It should
+      # match the value in `meta_file_for_idk`.
+      args += [ "--stable" ]
+    }
+
+    if (defined(invoker.sdk_area)) {
+      args += [
+        "--area",
+        invoker.sdk_area,
+      ]
+    }
+
+    if (generate_plasa_artifacts && defined(meta.plasa_manifest)) {
+      args += [
+        "--plasa",
+        rebase_path(meta.plasa_manifest, root_build_dir),
+      ]
+    }
+
+    if (defined(invoker.file_list)) {
+      inputs += [ invoker.file_list ]
+      args += [
+        "--file-list",
+        rebase_path(invoker.file_list, root_build_dir),
+      ]
+    }
+
+    # The manifest output contains the output directory.
+    no_output_dir_leaks = false
+  }
+}

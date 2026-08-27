@@ -1,0 +1,578 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+load("@bazel_skylib//lib:selects.bzl", "selects")
+load(
+    "@rules_fuchsia//fuchsia:defs.bzl",
+    "COMPATIBILITY",
+    "fuchsia_cpu_filter_dict",
+    "fuchsia_cpu_select",
+    "fuchsia_debug_symbols",
+    "fuchsia_package_resource_group",
+)
+load(
+    "//common:toolchains/clang/feature_flag.bzl",
+    "feature_flag",
+)
+load(
+    "//common:toolchains/clang/repository_utils.bzl",
+    "setup_clang_repository",
+)
+load(
+    ":cc_toolchain_config.bzl",
+    "cc_toolchain_config",
+)
+load("//:generated_constants.bzl", clang_constants = "constants")
+
+licenses(["notice"])
+
+package(default_visibility = ["//visibility:public"])
+
+setup_clang_repository(clang_constants)
+
+# This is the set of CPUs that the Fuchsia SDK provides sysroots for. These
+# sysroots are guaranteed to exist in an official release of the SDK but they
+# may not be present in custom builds of the SDK. It is up to the user to ensure
+# that they are not building against a CPU that is not present in the SDK if they
+# are doing a custom build.
+# It is safe to register these toolchains if they are not used even if the paths
+# don't exist because the paths and targets are only resolved if they are used.
+_SDK_SUPPORTED_TARGET_CPUS = ["x64", "arm64", "riscv64"]
+
+_FUCHSIA_SYSROOT_HEADERS_FILEGROUPS = {
+    "aarch64": "%{SYSROOT_HEADERS_AARCH64}",
+    "riscv64": "%{SYSROOT_HEADERS_RISCV64}",
+    "x86_64": "%{SYSROOT_HEADERS_X86_64}",
+}
+
+_FUCHSIA_SYSROOT_LIBS_FILEGROUPS = {
+    "aarch64": "%{SYSROOT_LIBS_AARCH64}",
+    "riscv64": "%{SYSROOT_LIBS_RISCV64}",
+    "x86_64": "%{SYSROOT_LIBS_X86_64}",
+}
+
+cc_toolchain_suite(
+    name = "toolchain",
+    toolchains = fuchsia_cpu_filter_dict(
+        {
+            "arm64": {
+                "aarch64|llvm": ":cc-compiler-aarch64",
+                "aarch64": ":cc-compiler-aarch64",
+            },
+            "x64": {
+                "x86_64|llvm": ":cc-compiler-x86_64",
+                "x86_64": ":cc-compiler-x86_64",
+            },
+            "riscv64": {
+                "riscv64|llvm": ":cc-compiler-riscv64",
+                "riscv64": ":cc-compiler-riscv64",
+            },
+        },
+        _SDK_SUPPORTED_TARGET_CPUS,
+    ),
+)
+
+_TO_BAZEL_CPU_MAP = {
+    "x64": "x86_64",
+    "arm64": "aarch64",
+}
+
+TARGET_CPUS = [_TO_BAZEL_CPU_MAP.get(cpu, cpu) for cpu in _SDK_SUPPORTED_TARGET_CPUS]
+
+exports_files([
+    "bin/clang-format",
+    "bin/clang-tidy",
+    "bin/llvm-readelf",
+])
+
+[
+    filegroup(
+        name = "libcxx-headers-" + cpu,
+        srcs = glob([
+            "include/c++/v1/**",
+        ]) + glob([
+            # TODO(https://fxbug.dev/42172715): Try not to hard code this path.
+            "lib/clang/%{CLANG_VERSION}/include/**",
+        ]) + glob([
+            "include/%s-unknown-fuchsia/c++/v1/*" % cpu,
+            "include/%s-unknown-fuchsia/*/c++/v1/*" % cpu,
+        ]),
+    )
+    for cpu in TARGET_CPUS
+]
+
+[
+    filegroup(
+        name = "libcxx-libraries-" + cpu,
+        srcs = glob([
+            "lib/%s-unknown-fuchsia/libc++.*" % cpu,
+            "lib/%s-unknown-fuchsia/libc++abi.*" % cpu,
+            "lib/%s-unknown-fuchsia/libunwind.*" % cpu,
+            # covers variants like {asan,asan+noexcept,noexcept,hwasan,hwasan+noexcept,compat}
+            "lib/%s-unknown-fuchsia/*/libc++.*" % cpu,
+            "lib/%s-unknown-fuchsia/*/libc++abi.*" % cpu,
+            "lib/%s-unknown-fuchsia/*/libunwind.*" % cpu,
+        ]),
+    )
+    for cpu in TARGET_CPUS
+]
+
+[
+    filegroup(
+        name = "compile-" + cpu,
+        srcs = [
+            ":cc-compiler-prebuilts",
+            ":libunwind-headers",
+            ":libcxx-headers-" + cpu,
+            # Adding :libcxx-libraries-* here is a workaround for b/360235447, b/354016617.
+            # The clang driver became sensitive to the existence of runtime
+            # libdirs for compiling -- there is now logic that probes for
+            # the existence of libdirs when computing the set of include dirs.
+            # Including the runtime libdirs allows the driver to select
+            # the correct multilib variant of include dirs.
+            # If when the toolchain reverts this behavior, this workaround
+            # can be removed.
+            ":libcxx-libraries-" + cpu,
+        ] + [
+            _FUCHSIA_SYSROOT_HEADERS_FILEGROUPS[cpu],
+        ],
+    )
+    for cpu in TARGET_CPUS
+]
+[
+    filegroup(
+        name = "every-file-" + cpu,
+        srcs = [
+            ":compile-" + cpu,
+            ":runtime-" + cpu,
+            ":link-" + cpu,
+            ":ar",
+            ":nm",
+            ":objcopy",
+            ":objdump",
+        ],
+    )
+    for cpu in TARGET_CPUS
+]
+
+[
+    filegroup(
+        name = "link-" + cpu,
+        srcs = [
+            ":cc-linker-prebuilts",
+            ":libcxx-libraries-" + cpu,
+            ":runtime-" + cpu,
+        ] + [
+            _FUCHSIA_SYSROOT_LIBS_FILEGROUPS[cpu],
+        ],
+    )
+    for cpu in TARGET_CPUS
+]
+
+[
+    filegroup(
+        name = "runtime-" + cpu,
+        srcs = [
+            # TODO(https://fxbug.dev/42172715): Don't hard code this path.
+            "//:lib/clang/%{CLANG_VERSION}/lib/%s-unknown-fuchsia/libclang_rt.builtins.a" % cpu,
+        ] + [
+            # TODO(b/325505298): Only add these when the Asan sanitizer is enabled.
+            #
+            # Right now, it is impossible to use a select({":asan_variant": [...], ...}) expression
+            # here because it creates a circular dependency, where Bazel complains with:
+            #
+            # ERROR: ..../output_base/external/fuchsia_clang/BUILD.bazel:226:17: in cc_toolchain rule @fuchsia_clang//:cc-compiler-x86_64: cycle in dependency graph:
+            # //fuchsia/cpp_variants:cc_20_all (a678e6e6bfc73a8f721fea3bfa0e9d627d5e47c4a8e47004ab6f334d7e0876ba)
+            #     //fuchsia/cpp_variants:cc_20_all_variant_test (506c6d7aa0811ba7b20143e66fdb0c286ec4cf232a5d959198c85b75fa28174f)
+            # .-> @fuchsia_clang//:cc-compiler-x86_64 (506c6d7aa0811ba7b20143e66fdb0c286ec4cf232a5d959198c85b75fa28174f)
+            # |   @fuchsia_clang//:runtime-x86_64 (506c6d7aa0811ba7b20143e66fdb0c286ec4cf232a5d959198c85b75fa28174f)
+            # |   @fuchsia_clang//:asan_variant (506c6d7aa0811ba7b20143e66fdb0c286ec4cf232a5d959198c85b75fa28174f)
+            # |   @fuchsia_clang//:asan_flag (506c6d7aa0811ba7b20143e66fdb0c286ec4cf232a5d959198c85b75fa28174f)
+            # `-- @fuchsia_clang//:cc-compiler-x86_64 (506c6d7aa0811ba7b20143e66fdb0c286ec4cf232a5d959198c85b75fa28174f)
+            #
+            # The root of the problem is that a feature_flag() cannot be select()-ed properly within the toolchain
+            # definition. An alternative would be to use a custom build_setting() target to set the sanitizer mode
+            # instead, and use transitions to change it whenever needed.
+            #
+            # asan runtime libraries
+            "//:lib/clang/%{CLANG_VERSION}/lib/%s-unknown-fuchsia/libclang_rt.asan.so" % cpu,
+            "//:lib/clang/%{CLANG_VERSION}/lib/%s-unknown-fuchsia/libclang_rt.asan_static.a" % cpu,
+            "//:lib/clang/%{CLANG_VERSION}/lib/%s-unknown-fuchsia/libclang_rt.asan-preinit.a" % cpu,
+
+            # hwasan runtime libraries
+            "//:lib/clang/%{CLANG_VERSION}/lib/%s-unknown-fuchsia/libclang_rt.hwasan.so" % cpu,
+            "//:lib/clang/%{CLANG_VERSION}/lib/%s-unknown-fuchsia/libclang_rt.hwasan-preinit.a" % cpu,
+
+            # coverage and profiling runtime libraries
+            "//:lib/clang/%{CLANG_VERSION}/lib/%s-unknown-fuchsia/libclang_rt.profile.a" % cpu,
+        ],
+    )
+    for cpu in TARGET_CPUS
+]
+
+[
+    cc_toolchain_config(
+        name = "crosstool-1.x.x-llvm-fuchsia-config-" + cpu,
+        cpu = cpu,
+    )
+    for cpu in TARGET_CPUS
+]
+
+[
+    cc_toolchain(
+        name = "cc-compiler-" + cpu,
+        all_files = ":every-file-" + cpu,
+        ar_files = ":ar",
+        compiler_files = ":compile-" + cpu,
+        dwp_files = ":empty",
+        dynamic_runtime_lib = ":runtime-" + cpu,
+        linker_files = ":link-" + cpu,
+        objcopy_files = ":objcopy",
+        static_runtime_lib = ":runtime-" + cpu,
+        strip_files = ":strip",
+        supports_param_files = 1,
+        toolchain_config = "crosstool-1.x.x-llvm-fuchsia-config-" + cpu,
+        toolchain_identifier = "crosstool-1.x.x-llvm-fuchsia-" + cpu,
+    )
+    for cpu in TARGET_CPUS
+]
+
+[
+    toolchain(
+        name = "cc-" + cpu,
+        target_compatible_with = [
+            "@platforms//cpu:" + cpu,
+            "@platforms//os:fuchsia",
+        ],
+        toolchain = ":cc-compiler-" + cpu,
+        toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+    )
+    for cpu in TARGET_CPUS
+]
+
+cc_library(
+    name = "sources",
+    srcs = glob(["src/**"]),
+    visibility = ["//visibility:public"],
+)
+
+fuchsia_debug_symbols(
+    name = "debug_symbols",
+    build_dir = "//:BUILD.bazel",
+    build_id_dirs = ["//:lib/debug/.build-id"],
+)
+
+fuchsia_package_resource_group(
+    name = "dist",
+    srcs = fuchsia_cpu_select(
+        {
+            "arm64": {
+                ":arm64_novariant": [
+                    "//:lib/aarch64-unknown-fuchsia/libc++.so.2",
+                    "//:lib/aarch64-unknown-fuchsia/libc++abi.so.1",
+                    "//:lib/aarch64-unknown-fuchsia/libunwind.so.1",
+                ],
+                ":arm64_asan_variant": [
+                    "//:lib/aarch64-unknown-fuchsia/asan/libc++.so.2",
+                    "//:lib/aarch64-unknown-fuchsia/asan/libc++abi.so.1",
+                    "//:lib/aarch64-unknown-fuchsia/asan/libunwind.so.1",
+                    "//:lib/aarch64-unknown-fuchsia/asan+noexcept/libc++.so.2",
+                    "//:lib/aarch64-unknown-fuchsia/asan+noexcept/libc++abi.so.1",
+                    "//:lib/aarch64-unknown-fuchsia/asan+noexcept/libunwind.so.1",
+                ],
+                ":arm64_hwasan_variant": [
+                    "//:lib/aarch64-unknown-fuchsia/hwasan/libc++.so.2",
+                    "//:lib/aarch64-unknown-fuchsia/hwasan/libc++abi.so.1",
+                    "//:lib/aarch64-unknown-fuchsia/hwasan/libunwind.so.1",
+                    "//:lib/aarch64-unknown-fuchsia/hwasan+noexcept/libc++.so.2",
+                    "//:lib/aarch64-unknown-fuchsia/hwasan+noexcept/libc++abi.so.1",
+                    "//:lib/aarch64-unknown-fuchsia/hwasan+noexcept/libunwind.so.1",
+                ],
+            },
+            "x64": {
+                ":x64_novariant": [
+                    "//:lib/x86_64-unknown-fuchsia/libc++.so.2",
+                    "//:lib/x86_64-unknown-fuchsia/libc++abi.so.1",
+                    "//:lib/x86_64-unknown-fuchsia/libunwind.so.1",
+                ],
+                ":x64_asan_variant": [
+                    "//:lib/x86_64-unknown-fuchsia/asan/libc++.so.2",
+                    "//:lib/x86_64-unknown-fuchsia/asan/libc++abi.so.1",
+                    "//:lib/x86_64-unknown-fuchsia/asan/libunwind.so.1",
+                    "//:lib/x86_64-unknown-fuchsia/asan+noexcept/libc++.so.2",
+                    "//:lib/x86_64-unknown-fuchsia/asan+noexcept/libc++abi.so.1",
+                    "//:lib/x86_64-unknown-fuchsia/asan+noexcept/libunwind.so.1",
+                ],
+                ":x64_hwasan_variant": [
+                    "//:lib/x86_64-unknown-fuchsia/hwasan/libc++.so.2",
+                    "//:lib/x86_64-unknown-fuchsia/hwasan/libc++abi.so.1",
+                    "//:lib/x86_64-unknown-fuchsia/hwasan/libunwind.so.1",
+                ],
+            },
+            "riscv64": {
+                ":riscv64_novariant": [
+                    "//:lib/riscv64-unknown-fuchsia/libc++.so.2",
+                    "//:lib/riscv64-unknown-fuchsia/libc++abi.so.1",
+                    "//:lib/riscv64-unknown-fuchsia/libunwind.so.1",
+                ],
+                ":riscv64_asan_variant": [
+                    "//:lib/riscv64-unknown-fuchsia/asan/libc++.so.2",
+                    "//:lib/riscv64-unknown-fuchsia/asan/libc++abi.so.1",
+                    "//:lib/riscv64-unknown-fuchsia/asan/libunwind.so.1",
+                    "//:lib/riscv64-unknown-fuchsia/asan+noexcept/libc++.so.2",
+                    "//:lib/riscv64-unknown-fuchsia/asan+noexcept/libc++abi.so.1",
+                    "//:lib/riscv64-unknown-fuchsia/asan+noexcept/libunwind.so.1",
+                ],
+                ":riscv64_hwasan_variant": [
+                    "//:lib/riscv64-unknown-fuchsia/hwasan/libc++.so.2",
+                    "//:lib/riscv64-unknown-fuchsia/hwasan/libc++abi.so.1",
+                    "//:lib/riscv64-unknown-fuchsia/hwasan/libunwind.so.1",
+                    "//:lib/riscv64-unknown-fuchsia/hwasan+noexcept/libc++.so.2",
+                    "//:lib/riscv64-unknown-fuchsia/hwasan+noexcept/libc++abi.so.1",
+                    "//:lib/riscv64-unknown-fuchsia/hwasan+noexcept/libunwind.so.1",
+                ],
+            },
+        },
+        _SDK_SUPPORTED_TARGET_CPUS,
+    ),
+    dest = "lib" + select({
+        ":asan_variant": "/asan",
+        "//conditions:default": "",
+    }),
+    strip_prefix = fuchsia_cpu_select(
+        {
+            "arm64": {
+                ":arm64_novariant": "lib/aarch64-unknown-fuchsia",
+                ":arm64_asan_variant": "lib/aarch64-unknown-fuchsia/asan",
+                ":arm64_hwasan_variant": "lib/aarch64-unknown-fuchsia/hwasan",
+            },
+            "x64": {
+                ":x64_novariant": "lib/x86_64-unknown-fuchsia",
+                ":x64_asan_variant": "lib/x86_64-unknown-fuchsia/asan",
+                ":x64_hwasan_variant": "lib/x86_64-unknown-fuchsia/hwasan",
+            },
+            "riscv64": {
+                ":riscv64_novariant": "lib/riscv64-unknown-fuchsia",
+                ":riscv64_asan_variant": "lib/riscv64-unknown-fuchsia/asan",
+                ":riscv64_hwasan_variant": "lib/riscv64-unknown-fuchsia/hwasan",
+            },
+        },
+        _SDK_SUPPORTED_TARGET_CPUS,
+    ),
+    target_compatible_with = COMPATIBILITY.FUCHSIA_CONDITION,
+    visibility = ["//visibility:public"],
+)
+
+fuchsia_package_resource_group(
+    name = "runtime",
+    srcs = fuchsia_cpu_select(
+        {
+            "arm64": {
+                ":arm64_asan_variant": [
+                    "//:lib/clang/%{CLANG_VERSION}/lib/aarch64-unknown-fuchsia/libclang_rt.asan.so",
+                ],
+                ":arm64_hwasan_variant": [
+                    "//:lib/clang/%{CLANG_VERSION}/lib/aarch64-unknown-fuchsia/libclang_rt.hwasan.so",
+                ],
+            },
+            "x64": {
+                ":x64_asan_variant": [
+                    "//:lib/clang/%{CLANG_VERSION}/lib/x86_64-unknown-fuchsia/libclang_rt.asan.so",
+                ],
+                ":x64_hwasan_variant": [
+                    "//:lib/clang/%{CLANG_VERSION}/lib/x86_64-unknown-fuchsia/libclang_rt.hwasan.so",
+                ],
+            },
+            "riscv64": {
+                ":riscv64_asan_variant": [
+                    "//:lib/clang/%{CLANG_VERSION}/lib/riscv64-unknown-fuchsia/libclang_rt.asan.so",
+                ],
+                ":riscv64_hwasan_variant": [
+                    "//:lib/clang/%{CLANG_VERSION}/lib/riscv64-unknown-fuchsia/libclang_rt.hwasan.so",
+                ],
+            },
+        },
+        _SDK_SUPPORTED_TARGET_CPUS,
+        default = [],
+    ),
+    dest = "lib" + select({
+        ":asan_variant": "/asan",
+        ":hwasan_variant": "/hwasan",
+        "//conditions:default": "",
+    }),
+    strip_prefix = fuchsia_cpu_select(
+        {
+            "arm64": {
+                ":arm64_build": "lib/clang/%{CLANG_VERSION}/lib/aarch64-unknown-fuchsia",
+            },
+            "x64": {
+                ":x64_build": "lib/clang/%{CLANG_VERSION}/lib/x86_64-unknown-fuchsia",
+            },
+            "riscv64": {
+                ":riscv64_build": "lib/clang/%{CLANG_VERSION}/lib/riscv64-unknown-fuchsia",
+            },
+        },
+        _SDK_SUPPORTED_TARGET_CPUS,
+    ),
+    target_compatible_with = COMPATIBILITY.FUCHSIA_CONDITION,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "aarch64_cpu_build",
+    values = {"cpu": "aarch64"},
+)
+
+selects.config_setting_group(
+    name = "arm64_build",
+    match_any = [
+        "@platforms//cpu:arm64",
+        ":aarch64_cpu_build",
+    ],
+)
+
+config_setting(
+    name = "x86_64_cpu_build",
+    values = {"cpu": "x86_64"},
+)
+
+config_setting(
+    name = "k8_cpu_build",
+    values = {"cpu": "k8"},
+)
+
+selects.config_setting_group(
+    name = "x64_build",
+    match_any = [
+        "@platforms//cpu:x86_64",
+        ":x86_64_cpu_build",
+        ":k8_cpu_build",
+    ],
+)
+
+config_setting(
+    name = "riscv64_cpu_build",
+    values = {"cpu": "riscv64"},
+)
+
+selects.config_setting_group(
+    name = "riscv64_build",
+    match_any = [
+        "@platforms//cpu:riscv64",
+        ":riscv64_cpu_build",
+    ],
+)
+
+feature_flag(
+    name = "asan_flag",
+    feature_name = "asan",
+    visibility = ["//visibility:private"],
+)
+
+feature_flag(
+    name = "hwasan_flag",
+    feature_name = "hwasan",
+    visibility = ["//visibility:private"],
+)
+
+config_setting(
+    name = "novariant",
+    flag_values = {
+        ":asan_flag": "False",
+        ":hwasan_flag": "False",
+    },
+    visibility = ["//visibility:public"],
+)
+
+# IMPORTANT: The hwasan feature takes precedence over the asan one.
+# Keep this in sync with the definition of sanitizer_features in
+# //common:toolchains/clang/sanitizer.bzl
+config_setting(
+    name = "asan_variant",
+    flag_values = {
+        ":asan_flag": "True",
+        ":hwasan_flag": "False",
+    },
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "hwasan_variant",
+    flag_values = {
+        ":hwasan_flag": "True",
+    },
+    visibility = ["//visibility:public"],
+)
+
+selects.config_setting_group(
+    name = "arm64_novariant",
+    match_all = [
+        ":arm64_build",
+        ":novariant",
+    ],
+)
+
+selects.config_setting_group(
+    name = "arm64_asan_variant",
+    match_all = [
+        ":arm64_build",
+        ":asan_variant",
+    ],
+)
+
+selects.config_setting_group(
+    name = "arm64_hwasan_variant",
+    match_all = [
+        ":arm64_build",
+        ":hwasan_variant",
+    ],
+)
+
+selects.config_setting_group(
+    name = "x64_novariant",
+    match_all = [
+        ":x64_build",
+        ":novariant",
+    ],
+)
+
+selects.config_setting_group(
+    name = "x64_asan_variant",
+    match_all = [
+        ":x64_build",
+        ":asan_variant",
+    ],
+)
+
+selects.config_setting_group(
+    name = "x64_hwasan_variant",
+    match_all = [
+        ":x64_build",
+        ":hwasan_variant",
+    ],
+)
+
+selects.config_setting_group(
+    name = "riscv64_novariant",
+    match_all = [
+        ":riscv64_build",
+        ":novariant",
+    ],
+)
+
+selects.config_setting_group(
+    name = "riscv64_asan_variant",
+    match_all = [
+        ":riscv64_build",
+        ":asan_variant",
+    ],
+)
+
+selects.config_setting_group(
+    name = "riscv64_hwasan_variant",
+    match_all = [
+        ":riscv64_build",
+        ":hwasan_variant",
+    ],
+)

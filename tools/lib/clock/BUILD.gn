@@ -1,0 +1,18 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/go/go_library.gni")
+import("//release/go/go_test.gni")
+
+go_library("clock") {
+  sources = [
+    "clock.go",
+    "clock_test.go",
+    "doc.go",
+  ]
+}
+
+go_test("clock_tests") {
+  library = ":clock"
+}

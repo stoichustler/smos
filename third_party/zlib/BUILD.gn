@@ -1,0 +1,177 @@
+# Copyright 2017 The Fuchsia Authors. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are
+# met:
+#
+#    * Redistributions of source code must retain the above copyright
+# notice, this list of conditions and the following disclaimer.
+#    * Redistributions in binary form must reproduce the above
+# copyright notice, this list of conditions and the following disclaimer
+# in the documentation and/or other materials provided with the
+# distribution.
+#    * Neither the name of Google Inc. nor the names of its
+# contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+# OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+config("zlib_config") {
+  include_dirs = [ "." ]
+}
+
+config("zlib_warnings") {
+  visibility = [ ":*" ]
+
+  cflags = [
+    "-Wno-implicit-function-declaration",
+    "-Wno-conversion",
+    "-Wno-implicit-fallthrough",
+    "-Wno-strict-prototypes",
+  ]
+}
+
+# TODO(https://fxbug.dev/321109569): Remove once the build issue in zlib is resolved.
+config("zlib_mac_config") {
+  if (host_os == "mac") {
+    cflags = [ "-fno-define-target-os-macros" ]
+  }
+}
+
+# TODO(36315): Remove workaround for Rust host_toolchain
+config("zlib_config_for_rust_host") {
+  # Without `-fPIC`, we get the error:
+  # > ld.lld: error: can't create dynamic relocation R_X86_64_64 against local symbol in readonly
+  # > segment
+  cflags = [ "-fPIC" ]
+}
+
+if (is_fuchsia) {
+  shared_library("zlib") {
+    output_name = "z"
+    deps = [ ":zlib_static" ]
+
+    public_configs = [ ":zlib_config" ]
+  }
+} else {
+  group("zlib") {
+    deps = [ ":zlib_static" ]
+
+    public_configs = [ ":zlib_config" ]
+  }
+}
+
+template("zlib_library") {
+  target(invoker.library_type, target_name) {
+    forward_variables_from(invoker, "*")
+
+    if (!defined(rust_host)) {
+      rust_host = false
+    }
+
+    sources = [
+      "adler32.c",
+      "compress.c",
+      "crc32.c",
+      "crc32.h",
+      "deflate.c",
+      "deflate.h",
+      "gzclose.c",
+      "gzguts.h",
+      "gzlib.c",
+      "gzread.c",
+      "gzwrite.c",
+      "infback.c",
+      "inffast.c",
+      "inffast.h",
+      "inffixed.h",
+      "inflate.c",
+      "inflate.h",
+      "inftrees.c",
+      "inftrees.h",
+      "trees.c",
+      "trees.h",
+      "uncompr.c",
+      "zconf.h",
+      "zlib.h",
+      "zutil.c",
+      "zutil.h",
+    ]
+
+    configs += [
+      ":zlib_warnings",
+      ":zlib_mac_config",
+    ]
+    configs -= [ "//release/config:symbol_visibility_hidden" ]
+
+    public_configs = [ ":zlib_config" ]
+    if (rust_host) {
+      public_configs += [ ":zlib_config_for_rust_host" ]
+    }
+  }
+}
+
+zlib_library("zlib_static") {
+  library_type = "source_set"
+}
+
+zlib_library("zlib_for_rust_host") {
+  library_type = "static_library"
+  rust_host = true
+}
+
+config("minizip_warnings") {
+  visibility = [ ":*" ]
+
+  cflags = [ "-Wno-implicit-function-declaration" ]
+
+  if (is_clang) {
+    # minizip uses `if ((a == b))` for some reason.
+    cflags += [
+      "-Wno-parentheses-equality",
+      "-Wno-unknown-warning-option",
+      "-Wno-misleading-indentation",
+      "-Wno-conversion",
+      "-Wno-unused-but-set-variable",
+      "-Wno-strict-prototypes",
+    ]
+  }
+}
+
+target(default_library_type, "minizip") {
+  sources = [
+    "contrib/minizip/crypt.h",
+    "contrib/minizip/ioapi.c",
+    "contrib/minizip/ioapi.h",
+    "contrib/minizip/unzip.c",
+    "contrib/minizip/unzip.h",
+    "contrib/minizip/zip.c",
+    "contrib/minizip/zip.h",
+  ]
+
+  deps = [ ":zlib" ]
+  configs += [ ":minizip_warnings" ]
+  configs -= [ "//release/config:symbol_visibility_hidden" ]
+  public_configs = [ ":zlib_config" ]
+}
+
+source_set("zfstream") {
+  sources = [
+    "contrib/iostream3/zfstream.cc",
+    "contrib/iostream3/zfstream.h",
+  ]
+
+  deps = [ ":zlib" ]
+  configs += [ ":zlib_warnings" ]
+  public_configs = [ ":zlib_config" ]
+}

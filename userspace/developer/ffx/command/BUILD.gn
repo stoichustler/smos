@@ -1,0 +1,84 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+# TODO(b/394964930): Enable assert for ffx_command is host only
+# assert(is_host, "ffx_command is for host tools only.")
+rustc_library("lib") {
+  name = "ffx_command"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  visibility = [
+    ":*",
+    "//userspace/developer/ffx/frontends/*",
+
+    # TODO(b/386792198) Move ToolSuite to internal crate.
+    "//userspace/developer/ffx/lib/fho:*",
+
+    # TODO(b/287862487) TestEnv should be refactored
+    # to be more like FhoEnv
+    "//userspace/developer/ffx/lib/fho/testing:*",
+
+    # E2E tests that parse the JSON ArgsInfo
+    "//userspace/developer/ffx/tests/cli-goldens:*",
+    "//userspace/developer/ffx/tests/help-json:*",
+
+    # Reference doc generation based on JSON
+    "//tools/clidoc:*",
+
+    # TODO(b/386416011): Deprecate fuchsia-sdk-run.
+    "//tools/fuchsia-sdk-run:*",
+  ]
+
+  deps = [
+    "//userspace/developer/ffx/command/error:lib",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/lib/errors:lib",
+    "//userspace/developer/ffx/lib/fho/metadata:lib",
+    "//userspace/developer/ffx/lib/metrics:lib",
+    "//userspace/developer/ffx/lib/netext:lib",
+    "//userspace/developer/ffx/lib/timeout:lib",
+    "//userspace/developer/lib/writer:lib",
+    "//userspace/lib/analytics/rust:lib",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:argh",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:itertools",
+    "//third_party/rust_crates:regex",
+    "//third_party/rust_crates:schemars",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:thiserror",
+    "//third_party/rust_crates:tracing",
+  ]
+
+  test_deps = [
+    "//userspace/lib/fuchsia",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:tempfile",
+  ]
+
+  sources = [
+    "src/args_info.rs",
+    "src/describe.rs",
+    "src/ffx.rs",
+    "src/lib.rs",
+    "src/metrics.rs",
+    "src/subcommand.rs",
+    "src/tools.rs",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":lib_test",
+    "error:tests",
+  ]
+}

@@ -1,0 +1,32 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/zircon/zx_library.gni")
+
+group("tests") {
+  testonly = true
+  deps = [ "test:fake-bti-test" ]
+}
+
+zx_library("fake-bti") {
+  sdk = "static"
+  sdk_headers = [ "lib/fake-bti/bti.h" ]
+  sdk_publishable = "internal"
+
+  sources = [ "fake-bti.cc" ]
+  public_deps = [
+    "//sdk/lib/fdio",
+
+    # The following line is required in order to ensure that the metadata in the
+    # @internal_sdk contains the `fake-bti` --> `fake-object` dependency.
+    # Without it, use of this library in the Bazel SDK fails to find
+    # `fake_object::FakeHandleTable()` and others during linking.
+    "//userspace/devices/testing/fake-object",
+  ]
+  deps = [
+    "//userspace/devices/testing/fake-object",
+    "//zircon/system/ulib/zircon-internal",
+    "//zircon/system/ulib/zx",
+  ]
+}

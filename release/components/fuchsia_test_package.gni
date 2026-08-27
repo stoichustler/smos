@@ -1,0 +1,370 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/compiled_action.gni")
+import("//release/testing/test_spec.gni")
+import("fuchsia_package.gni")
+import("fuchsia_test_component.gni")
+import("fuchsia_test_component_manifest.gni")
+
+_log_severity_allowed_val = [
+  "FATAL",
+  "ERROR",
+  "WARN",
+  "INFO",
+  "DEBUG",
+  "TRACE",
+]
+
+# Defines a Fuchsia package that contains one or more components, some of which
+# implement one or more tests, and specifies how to run tests.
+# See: https://fuchsia.dev/fuchsia-src/development/components/build
+#
+# Example:
+# ```
+# fuchsia_component("fonts-service") { ... }
+# fuchsia_component("fonts-service-test") {
+#   testonly = true
+#   ...
+# }
+#
+# fuchsia_test_package("fonts-service-test-package") {
+#   test_components = [ ":fonts-service-test" ]
+#   deps = [ ":fonts-service" ],
+# }
+#
+# fuchsia_component("fonts-ui") { ... }
+# fuchsia_component("fonts-ui-test") {
+#   testonly = true
+#   ...
+# }
+#
+# fuchsia_test_package("fonts-ui-test-package") {
+#   test_components = [ ":fonts-ui-test" ]
+#   deps = [ ":fonts-ui" ],
+#   test_specs = {
+#     environments = [
+#       astro_env,
+#       sherlock_env,
+#     ]
+#   }
+# }
+#
+# fuchsia_package("fonts-ui-package") {
+#   deps = [ ":fonts-ui" ],
+# }
+#
+# # Defining dependencies via subpackages:
+# fuchsia_test_package("fonts-ui-test-with-subpackage") {
+#   test_components = [ ":fonts-ui-test" ]
+#   subpackages = [ ":fonts-ui-package" ],
+#   test_specs = {
+#     environments = [
+#       astro_env,
+#       sherlock_env,
+#     ]
+#   }
+# }
+# ```
+#
+# Parameters
+#
+#   test_components (required)
+#     `fuchsia_component()` targets to include in the package and also register
+#     as entry points for tests.
+#     Additional non-test components can be included via `deps`.
+#     Type: list(labels)
+#
+#   test_specs (optional)
+#     Additional test specifications to apply to tests defined above.
+#     See `test_spec.gni`.
+#     Type: scope
+#
+#   package_name (optional)
+#     The name of the package.
+#     Type: string
+#     Default: target_name
+#
+#   renameable_subpackages (optional)
+#      A list of subpackages defined by scoped variables `package` (a
+#     `fuchsia_package()` target) and an optional `name`. See
+#     `fuchsia_package()` for more details.
+#     Type: list of scopes
+#
+#   subpackages (optional)
+#     A list of `fuchsia_package` targets. See `fuchsia_package()` for more
+#     details.
+#     Type: list of targets
+#
+#   is_bootfs (optional)
+#     ONLY to be used by |fuchsia_bootfs_test_package| to indicate a bootfs based package.
+#
+#   data_deps
+#   deps
+#   visibility
+template("fuchsia_test_package") {
+  if (current_toolchain == default_toolchain) {
+    assert(
+        defined(invoker.test_components) && invoker.test_components != [],
+        "`test_components` must be specified when calling fuchsia_test_package($target_name)")
+
+    package_name = target_name
+    package_label = get_label_info(":$target_name", "label_with_toolchain")
+    package_manifest =
+        rebase_path("$target_out_dir/$target_name/package_manifest.json",
+                    root_build_dir)
+    if (defined(invoker.package_name)) {
+      package_name = invoker.package_name
+    }
+    test_specs = {
+    }
+    if (defined(invoker.test_specs)) {
+      test_specs = invoker.test_specs
+    }
+
+    if (defined(invoker.is_bootfs) && invoker.is_bootfs) {
+      test_specs.build_rule = "fuchsia_bootfs_test_package"
+      test_specs.expects_ssh = false
+    }
+
+    # test packages won't be configured by assembly tools, so we can check their config earlier
+    _validate_structured_config = true
+    if (defined(invoker.validate_structured_config)) {
+      _validate_structured_config = invoker.validate_structured_config
+    }
+
+    host_test_component_target =
+        "//tools/host_test_component:test_deps($host_toolchain)"
+    host_tool_dir = get_label_info(host_test_component_target, "root_out_dir")
+    host_executable = "$host_tool_dir/host_test_component"
+    host_executable_rebased = rebase_path(host_executable, root_build_dir)
+
+    test_pilot_target = "//tools/test_pilot:test_deps($host_toolchain)"
+    test_pilot_dir = get_label_info(test_pilot_target, "root_out_dir")
+    test_pilot_executable = "$test_pilot_dir/test_pilot"
+    test_pilot_executable_rebased =
+        rebase_path(test_pilot_executable, root_build_dir)
+
+    test_deps = []
+
+    foreach(test, invoker.test_components) {
+      test_target_name = get_label_info(test, "name")
+      component_label = get_label_info(test, "label_with_toolchain")
+      test_target = "${target_name}_test_" + test_target_name
+      manifest_path = []
+      manifest_path = get_target_outputs(test)
+      manifest_name = get_path_info(manifest_path[0], "file")
+
+      if (defined(invoker.is_bootfs) && invoker.is_bootfs) {
+        test_url = "fuchsia-boot:///$package_name#meta/$manifest_name"
+      } else {
+        test_url = "fuchsia-pkg://fuchsia.com/$package_name#meta/$manifest_name"
+      }
+
+      _max_severity_logs = "WARN"
+
+      if (defined(test_specs.log_settings)) {
+        _log_settings = {
+        }
+        _log_settings = test_specs.log_settings
+        if (defined(_log_settings.max_severity)) {
+          assert(
+              _log_severity_allowed_val + [ _log_settings.max_severity ] -
+                  [ _log_settings.max_severity ] != _log_severity_allowed_val,
+              "Invalid 'log_settings.max_severity': ${_log_settings.max_severity}, valid values are ${_log_severity_allowed_val}")
+          _max_severity_logs = _log_settings.max_severity
+        }
+        if (defined(_log_settings.min_severity)) {
+          assert(
+              _log_severity_allowed_val + [ _log_settings.min_severity ] -
+                  [ _log_settings.min_severity ] != _log_severity_allowed_val,
+              "Invalid 'log_settings.min_severity': ${_log_settings.min_severity}, valid values are ${_log_severity_allowed_val}")
+          _min_severity_logs = _log_settings.min_severity
+        }
+      }
+      _test_config = {
+      }
+      _test_config = {
+        version = "0.1"
+        host_test_binary = host_executable_rebased
+        requested_vars = {
+          KNOWN_VARS = [ "FUCHSIA_TARGETS" ]
+        }
+
+        # TODO(https://fxbug.dev/327640651): Add common tags for the test.
+        execution = {
+          test_url = test_url
+          if (defined(test_specs.parallel)) {
+            parallel = test_specs.parallel
+          }
+          max_severity_logs = _max_severity_logs
+          if (defined(_min_severity_logs)) {
+            min_severity_logs = _min_severity_logs
+          }
+        }
+      }
+      test_component_output_label =
+          "$package_name.$manifest_name.test_component_config"
+      test_component_output =
+          "$root_out_dir/test_configs_partial/$test_component_output_label.json"
+
+      generated_file(test_component_output_label) {
+        testonly = true
+        data_keys = [ "test_components" ]
+        walk_keys = [ "test_components_barrier" ]
+        outputs = [ test_component_output ]
+        output_conversion = "json"
+        deps = [ test ]
+        visibility = [ ":*" ]
+      }
+
+      config_file_label = "$package_name.$manifest_name.test_config_partial"
+      output_config =
+          "$root_out_dir/test_configs_partial/$config_file_label.json"
+      generated_file(config_file_label) {
+        outputs = [ output_config ]
+        contents = _test_config
+        output_conversion = "json"
+      }
+
+      final_test_config_name = "$package_name.$manifest_name.test_config"
+      final_output_config_path =
+          "$root_out_dir/test_configs/$final_test_config_name.json"
+      script_output_path =
+          "${root_out_dir}/${package_name}_${manifest_name}_test.sh"
+      script_output_path_rebased =
+          rebase_path(script_output_path, root_build_dir)
+      final_output_config_path_rebased =
+          rebase_path(final_output_config_path, root_build_dir)
+
+      compiled_action("${test_target}_script_gen") {
+        testonly = true
+        tool = "//release/components:test_component_host_helper"
+        outputs = [
+          script_output_path,
+          final_output_config_path,
+        ]
+        args = [
+          "--bin_path",
+          host_executable_rebased,
+          "--test_pilot",
+          test_pilot_executable_rebased,
+          "--component_manifest_path",
+          rebase_path(manifest_path[0], root_build_dir),
+          "--partial_test_config",
+          rebase_path(output_config, root_build_dir),
+          "--test_component_config",
+          rebase_path(test_component_output, root_build_dir),
+          "--script_output_filename",
+          script_output_path_rebased,
+          "--test_config_output_filename",
+          final_output_config_path_rebased,
+        ]
+        inputs = [
+          test_component_output,
+          output_config,
+          manifest_path[0],
+        ]
+        deps = [
+          ":$config_file_label",
+          ":$test_component_output_label",
+          test,
+        ]
+      }
+      script_outputs = []
+      script_outputs = get_target_outputs(":${test_target}_script_gen")
+
+      group("${test_target}_runtime_deps_group") {
+        testonly = true
+        data_deps = [
+          ":${test_target}_script_gen",
+          host_test_component_target,
+          test_pilot_target,
+        ]
+        metadata = {
+          test_runtime_deps = script_outputs
+
+          # avoid adding unintended entries to the test package due to
+          # dependency on ffx.
+          distribution_entries_barrier = []
+        }
+      }
+
+      test_spec(test_target) {
+        forward_variables_from(test_specs, "*")
+        if (!defined(build_rule)) {
+          build_rule = "fuchsia_test_package"
+        }
+        target = get_label_info(package_label, "label_with_toolchain")
+        package_label = package_label
+        component_label = component_label
+        package_manifests = [ package_manifest ]
+        package_url = test_url
+
+        # Adding new_path for transition period. We will later replace this with path.
+        new_path = script_outputs[0]
+        if (!defined(data_deps)) {
+          data_deps = []
+        }
+        data_deps += [ ":${test_target}_runtime_deps_group" ]
+      }
+
+      test_deps += [ ":$test_target" ]
+    }
+
+    fuchsia_package(target_name) {
+      forward_variables_from(invoker,
+                             [
+                               "data_deps",
+                               "deps",
+                               "disable_elf_binaries_checks",
+                               "metadata",
+                               "visibility",
+                             ])
+      package_name = package_name
+      if (!defined(deps)) {
+        deps = []
+      }
+      deps += invoker.test_components
+      deps += test_deps
+
+      testonly = true
+      if (!defined(invoker.metadata)) {
+        metadata = {
+        }
+      }
+      metadata.test_components_barrier = invoker.test_components
+
+      # Pass subpackages through a different parameter than the documented one,
+      # so that the fuchsia_package() can identify these as from a test package.
+      # This is only for allow-list enforcement
+      if (defined(invoker.subpackages)) {
+        test_pkg__subpackages = invoker.subpackages
+      }
+      if (defined(invoker.renameable_subpackages)) {
+        test_pkg__renameable_subpackages = invoker.renameable_subpackages
+      }
+
+      validate_structured_config = _validate_structured_config
+    }
+  } else {
+    group(target_name) {
+      testonly = true
+      forward_variables_from(invoker, [ "visibility" ])
+      deps = [ ":$target_name($default_toolchain)" ]
+    }
+    not_needed(invoker, "*")
+  }
+}
+
+# Identical to |fuchsia_test_package| with the exceptions that:
+#  - The generated url will be a bootfs "fuchsia-boot:///" url.
+#  - The 'build_rule' in the test specs metadata will be "fuchsia_bootfs_test_package".
+#  - The 'expects_ssh' field in the test specs metadata is set to false.
+template("fuchsia_bootfs_test_package") {
+  fuchsia_test_package(target_name) {
+    forward_variables_from(invoker, "*")
+    is_bootfs = true
+  }
+}

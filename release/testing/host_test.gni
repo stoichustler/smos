@@ -1,0 +1,141 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/testing/host_test_data.gni")
+import("//release/testing/test_spec.gni")
+
+# Declares a host test.
+#
+# Since the testing infrastructure doesn't handle tests with arguments, this
+# template will generate a script that encapsulates the arguments and build the
+# relevant test_spec target. This can be used to build data driven tests by
+# invoking a host tool with a test specification.
+#
+# Note: The tool and any data dependencies it has (including files referred to
+# by the arguments) MUST be declared by using the host_test_data template.
+#
+# Parameters
+#
+#   binary_path (required)
+#     [path]: Path to the binary the test should invoke.
+#
+#   args (optional)
+#     [list of strings]: Arguments to pass to the tool.
+#
+#   target (optional)
+#     [label]: The test target. Defaults to target_name.
+#
+#   timeout_secs (optional)
+#     [int] The infra timeout in seconds for the test.
+#
+#   deps, environments, data_deps, public_deps, visibility
+#     Forwarded from invoker.
+#
+template("host_test") {
+  assert(defined(invoker.binary_path), "Requires a binary_path")
+  assert(
+      is_host,
+      "host_test should only be used on host, to fix this, wrap your target with `if (is_host) { ... }`")
+
+  _test_path = invoker.binary_path
+
+  if (defined(invoker.args)) {
+    _test_data_target = "${target_name}_script_data"
+    _script_file = "${target_out_dir}/${target_name}.sh"
+    _test_path = _script_file
+    _test_script_target = "${target_name}_script"
+
+    host_test_data(_test_data_target) {
+      sources = [
+        _script_file,
+        invoker.binary_path,
+      ]
+      visibility = [ ":*" ]
+    }
+
+    action(_test_script_target) {
+      testonly = true
+      script = "//release/testing/create_test.sh"
+      args = [
+        rebase_path(_script_file, root_build_dir),
+        rebase_path(invoker.binary_path, root_build_dir),
+      ]
+      args += invoker.args
+      outputs = [ "${_script_file}" ]
+      visibility = [ ":*" ]
+
+      # The infra currently uses ninja to build host tests, specifying the
+      # test_spec.path field as the target. Thus we have to ensure that
+      # this target has all the dependencies neede to actually build the test.
+      forward_variables_from(invoker,
+                             [
+                               "data_deps",
+                               "deps",
+                               "public_deps",
+                             ])
+      deps += [ ":${_test_data_target}" ]
+    }
+  }
+
+  # Some e2e tests depend on target tests which they run on the target
+  # so get the paths to the package_manifests of those target
+  # test dependencies to attach to the test_spec of the host test
+  # so we know what blobs it depends on.
+  pkg_manifest_deps_file = ""
+  if ((defined(invoker.deps) && invoker.deps != []) ||
+      (defined(invoker.data_deps) && invoker.data_deps != []) ||
+      (defined(invoker.public_deps) && invoker.public_deps != [])) {
+    pkg_manifest_deps_file = "$target_gen_dir/${target_name}.pkg_manifests.json"
+    pkg_manifest_deps_target_name = "${target_name}_pkg_manifest_deps"
+
+    generated_file(pkg_manifest_deps_target_name) {
+      testonly = true
+      forward_variables_from(invoker,
+                             [
+                               "data_deps",
+                               "deps",
+                               "public_deps",
+                             ])
+      outputs = [ pkg_manifest_deps_file ]
+      data_keys = [ "package_manifests" ]
+      output_conversion = "json"
+    }
+  }
+
+  test_spec(target_name) {
+    if (defined(invoker.target)) {
+      target = invoker.target
+    } else {
+      target = get_label_info(":${target_name}", "label_with_toolchain")
+    }
+    path = _test_path
+
+    forward_variables_from(invoker,
+                           [
+                             "environments",
+                             "metadata",
+                             "visibility",
+                             "isolated",
+                             "timeout_secs",
+                             "product_bundle",
+                           ])
+
+    # If we have args, we put most deps on the script target,
+    # and here just depend on that.
+    if (defined(invoker.args)) {
+      deps = [ ":${_test_script_target}" ]
+    } else {
+      forward_variables_from(invoker,
+                             [
+                               "data_deps",
+                               "deps",
+                               "public_deps",
+                             ])
+    }
+    if (pkg_manifest_deps_file != "") {
+      package_manifest_deps = pkg_manifest_deps_file
+      deps += [ ":$pkg_manifest_deps_target_name" ]
+    }
+  }
+}

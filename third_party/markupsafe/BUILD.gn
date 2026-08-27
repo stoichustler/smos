@@ -1,0 +1,15 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/python/python_library.gni")
+
+python_library("markupsafe") {
+  enable_mypy = false
+  sources = [
+    "__init__.py",
+    "_compat.py",
+    "_constants.py",
+    "_native.py",
+  ]
+}

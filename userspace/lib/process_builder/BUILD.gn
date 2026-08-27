@@ -1,0 +1,140 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/fidl/fidl.gni")
+import("//release/rust/rustc_binary.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/testing/cc_test_executable.gni")
+import("//release/toolchain/zircon/user_basic_redirect.gni")
+
+rustc_library("process_builder") {
+  with_unit_tests = true
+  edition = "2021"
+
+  deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+    "//sdk/fidl/fuchsia.ldsvc:fuchsia.ldsvc_rust",
+    "//sdk/rust/zx",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-runtime",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:bitflags",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:num-derive",
+    "//third_party/rust_crates:num-traits",
+    "//third_party/rust_crates:static_assertions",
+    "//third_party/rust_crates:thiserror",
+    "//third_party/rust_crates:zerocopy",
+  ]
+
+  test_deps = [
+    ":test-util-fidl_rust",
+    "//userspace/lib/fdio/rust:fdio",
+    "//userspace/storage/lib/vfs/rust:vfs",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:lazy_static",
+  ]
+
+  sources = [
+    "src/elf_load.rs",
+    "src/elf_parse.rs",
+    "src/lib.rs",
+    "src/process_args.rs",
+    "src/process_builder.rs",
+    "src/util.rs",
+  ]
+
+  inputs = [
+    "test-utils/elf_aarch64_file-header.bin",
+    "test-utils/elf_x86-64_file-header.bin",
+    "test-utils/elf_riscv64_file-header.bin",
+  ]
+}
+
+fidl("test-util-fidl") {
+  testonly = true
+  name = "test.processbuilder"
+
+  sources = [ "test-utils/test_util.test.fidl" ]
+}
+
+rustc_binary("test_util") {
+  testonly = true
+  name = "process_builder_test_util"
+  edition = "2021"
+  source_root = "test-utils/test_util.rs"
+
+  deps = [
+    ":test-util-fidl_rust",
+    "//sdk/rust/zx",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-component",
+    "//userspace/lib/fuchsia-runtime",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:futures",
+  ]
+
+  sources = [ "test-utils/test_util.rs" ]
+}
+
+# The test doesn't get normal C library setup before its code runs, so it
+# needs to use the basic machine ABI.
+user_basic_redirect("static_pie_test.basic") {
+  testonly = true
+  public_deps = [ ":static_pie_test_util" ]
+}
+
+if (toolchain_environment == "user.basic") {
+  cc_test_executable("static_pie_test_util") {
+    visibility = [ ":*" ]
+
+    sources = [ "test-utils/static_pie_test_util.cc" ]
+
+    # Avoid libc references from assert() in libc++ header code.
+    defines = [ "NDEBUG=1" ]
+
+    ldflags = [
+      # A standalone binary should indicate its stack requirements.
+      "-Wl,-z,stack-size=0x20000",
+    ]
+
+    # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+    configs += [ "//release/config:Wno-conversion" ]
+    deps = [
+      "//userspace/lib/elfldltl/test:static-pie",
+      "//userspace/zircon/lib/zircon",
+      "//zircon/system/ulib/c/string:minimal-str",
+      "//zircon/system/ulib/zircon-internal",
+    ]
+
+    include_dirs = [ "//userspace/lib/elfldltl/test" ]
+
+    exclude_toolchain_tags = [ "instrumented" ]
+
+    # TODO(https://fxbug.dev/126542): __ehdr_start bug in ld.bfd aarch64-elf
+    if (current_cpu == "arm64") {
+      exclude_toolchain_tags += [ "gcc" ]
+    }
+  }
+}
+
+fuchsia_unittest_package("process-builder-tests") {
+  manifest = "meta/process_builder_tests.cml"
+  deps = [
+    ":process_builder_test",
+    ":static_pie_test.basic",
+    ":test_util",
+    "//userspace/sys/testing/elftest",
+  ]
+
+  # Needed for fuchsia.kernel.RootJob
+  test_type = "system"
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":process-builder-tests" ]
+}

@@ -1,0 +1,174 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+
+"""Bazel platform() definitions for the Fuchsia platform build."""
+
+# The Fuchsia build will use transitions that change the --platforms=<label>
+# value to modify the current build configuration. As such, each platform
+# instance represents:
+#
+#  - A separate output directory for generated artifacts.
+#  - An execution environment for generated binaries.
+#
+# The `//release/bazel/platforms:common` platform is used for all targets
+# that do not generate os- or arch-specific binaries (e.g. Java bytecode,
+# auto-generated headers and more). It is set to be the default platforms
+# by using --platforms=//release/bazel/platforms:common in the auto-generated
+# .bazelrc
+#
+# In theory, it should be possible to define additionnal platforms that
+# correspond to specific Fuchsia product configurations, which will allow
+# performing system assembly for several Fuchsia devices in a single
+# build invocation (provided the right transitions are used).
+#
+
+load("@fuchsia_build_config//:defs.bzl", "build_config")
+load("@fuchsia_build_info//:args.bzl", fuchsia_target_cpu = "target_cpu")
+
+package(default_visibility = ["//visibility:public"])
+
+# The `//release/bazel/platforms:common` platform should be used for
+# the default build configuration, and will contain all build
+# artifacts which do not depend on a specific operating system
+# or CPU architecture.
+platform(
+    name = "common",
+    constraint_values = [],
+)
+
+# The //release/bazel/platforms:host platform is used to target
+# the build configuration matching the current host machine.
+alias(
+    name = "host",
+    actual = ":" + build_config.host_tag_alt,
+)
+
+alias(
+    name = "default",
+    actual = ":fuchsia_" + fuchsia_target_cpu,
+)
+
+# The following platforms will be used to generate binaries
+# for Fuchsia, Linux and MacOS systems respectively. Other
+# parts of Bazel should define C++ and Rust toolchain instances
+# and configs that match the same constraint values to be
+# selected for them.
+platform(
+    name = "fuchsia_x64",
+    constraint_values = [
+        "@platforms//os:fuchsia",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+platform(
+    name = "fuchsia_arm64",
+    constraint_values = [
+        "@platforms//os:fuchsia",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+platform(
+    name = "fuchsia_riscv64",
+    constraint_values = [
+        "@platforms//os:fuchsia",
+        "@platforms//cpu:riscv64",
+    ],
+)
+
+platform(
+    name = "linux_x64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    exec_properties = {
+        "container-image": build_config.rbe_container_image,
+        "gceMachineType": build_config.rbe_gce_machine_type,
+        "OSFamily": "Linux",
+    },
+)
+
+platform(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+platform(
+    name = "mac_x64",
+    constraint_values = [
+        "@platforms//os:osx",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+platform(
+    name = "mac_arm64",
+    constraint_values = [
+        "@platforms//os:osx",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+# Configuration conditions for the platform values above.
+config_setting(
+    name = "is_fuchsia_x64",
+    constraint_values = [
+        "@platforms//os:fuchsia",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_fuchsia_arm64",
+    constraint_values = [
+        "@platforms//os:fuchsia",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+config_setting(
+    name = "is_fuchsia_riscv64",
+    constraint_values = [
+        "@platforms//os:fuchsia",
+        "@platforms//cpu:riscv64",
+    ],
+)
+
+config_setting(
+    name = "is_linux_x64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+config_setting(
+    name = "is_mac_x64",
+    constraint_values = [
+        "@platforms//os:osx",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_mac_arm64",
+    constraint_values = [
+        "@platforms//os:osx",
+        "@platforms//cpu:arm64",
+    ],
+)

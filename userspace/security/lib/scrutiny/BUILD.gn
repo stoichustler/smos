@@ -1,0 +1,41 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+
+group("scrutiny") {
+  public_deps = [ ":lib($host_toolchain)" ]
+}
+
+group("lib") {
+  if (is_host) {
+    public_deps = [
+      "//userspace/security/lib/scrutiny/collection",
+      "//userspace/security/lib/scrutiny/collector",
+      "//userspace/security/lib/scrutiny/frontend",
+      "//userspace/security/lib/scrutiny/testing",
+      "//userspace/security/lib/scrutiny/utils",
+    ]
+  }
+}
+
+if (is_fuchsia) {
+  group("tests") {
+    testonly = true
+    public_deps = [ "tests" ]
+  }
+}
+
+if (is_host) {
+  group("host_tests") {
+    testonly = true
+    deps = [
+      "collection:tests",
+      "collector:tests",
+      "frontend:tests",
+      "tests:host_tests",
+      "utils:tests",
+    ]
+  }
+}

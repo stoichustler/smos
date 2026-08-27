@@ -1,0 +1,292 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_binary.gni")
+import("//release/test.gni")
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":fvm-integration-test",
+    ":fvm-rust-tests",
+    ":fvm-tests",
+    ":fvm_unit($host_toolchain)",
+    "//userspace/storage/fvm/driver:tests",
+  ]
+}
+
+static_library("fvm") {
+  public = [
+    "format.h",
+    "fvm.h",
+    "fvm_sparse.h",
+    "metadata.h",
+    "metadata_buffer.h",
+    "sparse_reader.h",
+  ]
+  sources = [
+    "format.cc",
+    "fvm.cc",
+    "metadata.cc",
+    "metadata_buffer.cc",
+    "sparse_reader.cc",
+  ]
+
+  deps = [
+    "//sdk/lib/fit",
+    "//userspace/lib/digest",
+    "//userspace/lib/uuid",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/range",
+    "//zircon/third_party/ulib/lz4",
+    "//zircon/third_party/ulib/safemath",
+  ]
+  public_deps = [
+    "//userspace/lib/digest",
+    "//userspace/storage/gpt",
+    "//zircon/system/ulib/zx",
+    "//zircon/third_party/ulib/lz4",
+  ]
+
+  if (is_fuchsia) {
+    sources += [
+      "client.cc",
+      "fvm_check.cc",
+      "vmo_metadata_buffer.cc",
+    ]
+    public += [
+      "client.h",
+      "fvm_check.h",
+      "vmo_metadata_buffer.h",
+    ]
+
+    deps += [
+      "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp",
+      "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+      "//userspace/storage/gpt",
+      "//userspace/storage/lib/block_client/cpp",
+      "//zircon/system/ulib/fzl",
+      "//zircon/system/ulib/sync",
+      "//zircon/system/ulib/zx",
+    ]
+  } else {
+    # fvm-check.cpp has #include <zircon/status.h> even when built for host.
+    public_deps += [ "//userspace/zircon/lib/zircon:zircon-headers" ]
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "test_support.cc",
+    "test_support.h",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp",
+    "//userspace/storage/fvm",
+    "//userspace/storage/lib/ramdevice_client/cpp",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/zx",
+  ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.hardware.block.partition:fuchsia.hardware.block.partition_cpp",
+    "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/component/incoming/cpp",
+    "//sdk/lib/device-watcher/cpp",
+    "//sdk/lib/fdio",
+    "//sdk/lib/fidl",
+    "//userspace/storage/fvm",
+    "//userspace/storage/lib/block_client/cpp",
+    "//userspace/storage/lib/fs_management",
+    "//userspace/storage/lib/ramdevice_client/cpp",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/fdio-caller",
+    "//zircon/system/ulib/fzl",
+    "//zircon/system/ulib/zx",
+    "//zircon/system/ulib/zxtest",
+  ]
+}
+
+test("fvm_unit") {
+  output_name = "fvm-unit-test"
+  sources = [
+    "format_test.cc",
+    "integrity_validation_test.cc",
+    "metadata_test.cc",
+    "partition_entry_test.cc",
+    "slice_entry_test.cc",
+  ]
+
+  deps = [
+    "//userspace/lib/uuid",
+    "//userspace/storage/fvm",
+    "//zircon/system/ulib/zxtest",
+  ]
+
+  if (is_fuchsia) {
+    sources += [ "client_test.cc" ]
+    deps += [
+      "//sdk/lib/fdio",
+      "//userspace/storage/lib/block_client/cpp",
+      "//zircon/system/ulib/fdio-caller",
+      "//zircon/system/ulib/zx",
+    ]
+  }
+}
+
+fuchsia_unittest_package("fvm-tests") {
+  deps = [ ":fvm_unit" ]
+}
+
+test("fvm-integration") {
+  output_name = "fvm-integration-test"
+  sources = [
+    "fvm_integration_test.cc",
+    "resize_integration_test.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.hardware.block.partition:fuchsia.hardware.block.partition_cpp",
+    "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_cpp",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/fdio",
+    "//userspace/devices/testing/driver-integration-test-shim",
+    "//userspace/lib/fxl",
+    "//userspace/storage/blobfs",
+    "//userspace/storage/fvm",
+    "//userspace/storage/lib/block_client/cpp",
+    "//userspace/storage/lib/fs_management",
+    "//userspace/storage/lib/ramdevice_client/cpp",
+    "//userspace/storage/minfs",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/fdio-caller",
+    "//zircon/system/ulib/zircon-internal",
+    "//zircon/system/ulib/zx",
+    "//zircon/system/ulib/zxtest",
+  ]
+
+  # Other components/binaries we depend on.
+  deps += [
+    "//userspace/devices/block/drivers/core",
+    "//userspace/devices/block/drivers/ramdisk",
+    "//userspace/devices/bus/drivers/platform",
+    "//userspace/storage/fvm/driver",
+  ]
+}
+
+fuchsia_test_component("test-component") {
+  component_name = "fvm-integration-test"
+  manifest = "meta/fvm_integration_test.cml"
+  deps = [ ":fvm-integration" ]
+}
+
+fuchsia_test_package("fvm-integration-test") {
+  test_components = [ ":test-component" ]
+  test_specs = {
+    log_settings = {
+      max_severity = "ERROR"
+    }
+  }
+  deps = [ "//userspace/storage/minfs/bin:minfs-component" ]
+}
+
+fvm_sources = [
+  "src/device.rs",
+  "src/main.rs",
+  "src/mapping.rs",
+  "src/zxcrypt.rs",
+]
+
+fvm_deps = [
+  "//sdk/fidl/fuchsia.fs:fuchsia.fs_rust",
+  "//sdk/fidl/fuchsia.hardware.block:fuchsia.hardware.block_rust",
+  "//sdk/fidl/fuchsia.hardware.block.volume:fuchsia.hardware.block.volume_rust",
+  "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+  "//sdk/rust/zx",
+  "//userspace/lib/fidl/rust/fidl",
+  "//userspace/lib/fuchsia",
+  "//userspace/lib/fuchsia-async",
+  "//userspace/lib/fuchsia-runtime",
+  "//userspace/lib/trace/rust:trace-provider",
+  "//userspace/storage/fidl/fuchsia.fs.startup:fuchsia.fs.startup_rust",
+  "//userspace/storage/fxfs/fidl/fuchsia.fxfs:fuchsia.fxfs_rust",
+  "//userspace/storage/lib/block_client/rust",
+  "//userspace/storage/lib/block_server",
+  "//userspace/storage/lib/fs_management/rust:fs_management",
+  "//userspace/storage/lib/vfs/rust:vfs",
+  "//third_party/rust_crates:aes",
+  "//third_party/rust_crates:anyhow",
+  "//third_party/rust_crates:async-lock",
+  "//third_party/rust_crates:event-listener",
+  "//third_party/rust_crates:futures",
+  "//third_party/rust_crates:log",
+  "//third_party/rust_crates:regex",
+  "//third_party/rust_crates:sha2",
+  "//third_party/rust_crates:static_assertions",
+  "//third_party/rust_crates:uuid",
+  "//third_party/rust_crates:zerocopy",
+]
+
+rustc_binary("fvm_rust") {
+  name = "fvm"
+  edition = "2021"
+  sources = fvm_sources
+  deps = fvm_deps
+
+  # Without optimizations, debug builds trigger test timeouts (e.g. minfs-full-tests), so enable
+  # optimizations for all builds.
+  configs -= [ "//release/config:default_optimize" ]
+  configs += [ "//release/config:optimize_speed" ]
+  if (!is_lto_variant) {
+    configs += [ "//release/config/lto:thinlto" ]
+  }
+}
+
+rustc_test("fvm_rust_test") {
+  edition = "2021"
+  source_root = "src/main.rs"
+  sources = fvm_sources
+  deps = fvm_deps + [
+           ":golden",
+           "//userspace/lib/fuchsia-component",
+           "//userspace/lib/fuchsia-fs",
+           "//userspace/storage/lib/block_client/rust:fake-block-client",
+           "//userspace/storage/lib/block_server:fake_block_server",
+           "//third_party/rust_crates:assert_matches",
+           "//third_party/rust_crates:rand",
+         ]
+}
+
+fuchsia_component("fvm-component") {
+  component_name = "fvm2"
+  manifest = "meta/fvm2.cml"
+  deps = [
+    ":fvm_rust",
+    "//userspace/storage/lib/fs_management:fs_management_shard",
+  ]
+}
+
+fuchsia_package("package") {
+  package_name = "fvm2"
+  deps = [ ":fvm-component" ]
+}
+
+resource("golden") {
+  sources = [ "golden-fvm.blk" ]
+  outputs = [ "data/{{source_file_part}}" ]
+}
+
+fuchsia_unittest_package("fvm-rust-tests") {
+  deps = [ ":fvm_rust_test" ]
+}

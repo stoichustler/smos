@@ -1,0 +1,76 @@
+// Copyright 2022 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+    include: [
+        "inspect/offer.shard.cml",
+        "syslog/client.shard.cml",
+    ],
+    program: {
+        runner: "elf",
+        binary: "bin/trace_manager",
+    },
+    children: [
+        {
+            name: "ktrace_provider",
+            url: "fuchsia-boot:///ktrace_provider#meta/ktrace_provider.cm",
+            startup: "eager",
+        },
+    ],
+    collections: [
+        {
+            name: "workloads",
+            durability: "single_run",
+        },
+    ],
+    capabilities: [
+        {
+            protocol: [
+                "fuchsia.tracing.controller.Controller",
+                "fuchsia.tracing.controller.Provisioner",
+                "fuchsia.tracing.controller.Session",
+                "fuchsia.tracing.provider.Registry",
+            ],
+        },
+    ],
+    offer: [
+        {
+            protocol: [ "fuchsia.tracing.provider.Registry" ],
+            from: "self",
+            to: [
+                "#ktrace_provider",
+                "#workloads",
+            ],
+        },
+        {
+            protocol: "fuchsia.kernel.DebugResource",
+            from: "parent",
+            to: [
+                "#ktrace_provider",
+            ],
+        },
+        {
+            protocol: [ "fuchsia.boot.ReadOnlyLog" ],
+            from: "parent",
+            to: [ "#ktrace_provider" ],
+        },
+    ],
+    expose: [
+        {
+            protocol: "fuchsia.tracing.controller.Controller",
+            from: "self",
+        },
+        {
+            protocol: "fuchsia.tracing.controller.Provisioner",
+            from: "self",
+        },
+        {
+            protocol: "fuchsia.tracing.controller.Session",
+            from: "self",
+        },
+        {
+            protocol: "fuchsia.tracing.provider.Registry",
+            from: "self",
+        },
+    ],
+}

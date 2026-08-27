@@ -1,0 +1,13 @@
+# Copyright 2026 The Fuchsia Authors.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+has_board = true
+target_cpu = "riscv64"
+
+board_configuration_label = "//platform/boards/smos-qemu-riscv64"
+bazel_product_bundle_board = "riscv64"
+board_name = "smos-qemu-riscv64"
+board_is_emu = true
+
+partitions_config_label = "//platform/boards/partitions:riscv64"

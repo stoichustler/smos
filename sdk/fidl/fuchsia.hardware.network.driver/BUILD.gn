@@ -1,0 +1,24 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.hardware.network.driver") {
+  sdk_category = "partner"
+
+  # TODO(https://fxbug.dev/369404264): Stabilize this API.
+  stable = false
+  sdk_area = "Netstack"
+  sources = [
+    "network-device.fidl",
+    "network-mac.fidl",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.hardware.network",
+    "//sdk/fidl/fuchsia.net",
+    "//zircon/vdso/zx",
+  ]
+  contains_drivers = true
+  enable_banjo = true
+}

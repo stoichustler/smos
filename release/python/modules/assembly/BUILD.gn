@@ -1,0 +1,26 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/python/python_library.gni")
+
+# The assembly python library, for use with `python_binary()` and
+# `python_host_test()` templates.
+python_library("assembly") {
+  # TODO(b/366268742): Enable MyPy type checking
+  enable_mypy = false
+  sources = [
+    "__init__.py",
+    "assembly_input_bundle.py",
+    "common.py",
+    "image_assembly_config.py",
+    "package_copier.py",
+    "package_manifest.py",
+    "utils.py",
+  ]
+
+  library_deps = [
+    "//release/python/modules/depfile",
+    "//release/python/modules/serialization",
+  ]
+}

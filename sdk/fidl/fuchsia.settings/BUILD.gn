@@ -1,0 +1,55 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+_sources = []
+_public_deps = []
+
+# power-manager only consumes fuchsia.settings.Input. Keep the complete
+# settings surface for normal products, but avoid media/UI dependencies in the
+# compact SVE product.
+if (smos_minimal_assembly) {
+  _sources += [
+    "input.fidl",
+    "overview.fidl",
+    "settings.fidl",
+  ]
+  _public_deps += [ "//zircon/vdso/zx" ]
+} else {
+  _sources += [
+    "accessibility.fidl",
+    "audio.fidl",
+    "display.fidl",
+    "do_not_disturb.fidl",
+    "factory_reset.fidl",
+    "input.fidl",
+    "intl.fidl",
+    "keyboard.fidl",
+    "light.fidl",
+    "night_mode.fidl",
+    "overview.fidl",
+    "privacy.fidl",
+    "settings.fidl",
+    "setup.fidl",
+  ]
+  _public_deps += [
+    "//sdk/fidl/fuchsia.input",
+    "//sdk/fidl/fuchsia.intl",
+    "//sdk/fidl/fuchsia.media",
+    "//sdk/fidl/fuchsia.ui.types",
+    "//zircon/vdso/zx",
+  ]
+}
+
+fidl("fuchsia.settings") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Experiences"
+
+  sources = _sources
+  public_deps = _public_deps
+
+  enable_hlcpp = true
+}

@@ -1,0 +1,54 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/bind/bind.gni")
+import("//release/drivers.gni")
+import("//release/test.gni")
+
+driver_bind_rules("virtio_console_bind") {
+  rules = "meta/virtio_console.bind"
+  tests = "meta/bind_tests.json"
+  deps = [
+    "//sdk/fidl/fuchsia.hardware.pci:fuchsia.hardware.pci_bindlib",
+    "//userspace/devices/bind/fuchsia.acpi",
+    "//userspace/devices/bind/fuchsia.pci",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":virtio_console_bind_test" ]
+}
+fuchsia_cc_driver("virtio_console-driver") {
+  legacy = true
+  output_name = "virtio_console"
+  configs += [
+    "//release/config:all_source",
+    "//release/config/fuchsia:enable_zircon_asserts",
+  ]
+  sources = [
+    "console.cc",
+    "console_driver.cc",
+  ]
+  deps = [
+    ":virtio_console_bind",
+    "//sdk/fidl/fuchsia.hardware.pty:fuchsia.hardware.pty_cpp",
+    "//userspace/devices/bus/lib/virtio",
+    "//userspace/devices/lib/driver",
+    "//userspace/devices/lib/driver:driver_runtime",
+    "//userspace/lib/ddktl",
+  ]
+}
+
+fuchsia_driver_component("virtio_console") {
+  info = "meta/virtio_console-info.json"
+  component_name = "virtio_console"
+  deps = [ ":virtio_console-driver" ]
+  manifest = "meta/virtio_console.cml"
+}
+
+fuchsia_driver_package("package") {
+  package_name = "virtio_console"
+  driver_components = [ ":virtio_console" ]
+}

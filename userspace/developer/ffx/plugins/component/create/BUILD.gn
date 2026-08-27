@@ -1,0 +1,52 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+import("../../../build/ffx_plugin.gni")
+
+if (is_host) {
+  ffx_plugin("ffx_component_create") {
+    sdk_category = "not-yet-specified"
+    version = "0.1.0"
+    edition = "2021"
+    with_unit_tests = true
+
+    deps = [
+      "//userspace/developer/ffx/lib/errors:lib",
+      "//userspace/developer/ffx/lib/fho:lib",
+      "//userspace/developer/ffx/lib/target/holders:lib",
+      "//userspace/developer/ffx/lib/writer:lib",
+      "//userspace/developer/ffx/plugins/component/common:ffx_component",
+      "//userspace/sys/lib/component_debug",
+      "//third_party/rust_crates:async-trait",
+    ]
+
+    args_sources = [ "src/args.rs" ]
+    args_deps = [
+      "//userspace/developer/ffx/core:lib",
+      "//userspace/lib/fuchsia-url",
+      "//userspace/sys/lib/component_debug",
+      "//userspace/sys/lib/moniker",
+      "//third_party/rust_crates:argh",
+    ]
+
+    sources = [ "src/lib.rs" ]
+  }
+
+  group("host_tests") {
+    testonly = true
+    deps = [
+      ":ffx_component_create_tests",
+      "tests:host_tests",
+    ]
+  }
+}
+
+if (is_fuchsia) {
+  group("package_deps_for_host_tests") {
+    testonly = true
+    deps = [ "tests:package_deps_for_host_tests" ]
+  }
+}

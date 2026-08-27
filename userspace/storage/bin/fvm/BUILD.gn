@@ -1,0 +1,36 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/sdk/sdk_host_tool.gni")
+
+executable("fvm") {
+  sources = [ "main.cc" ]
+
+  deps = [
+    "//sdk/lib/fit",
+    "//userspace/storage/blobfs",
+    "//userspace/storage/fvm",
+    "//userspace/storage/minfs",
+    "//userspace/storage/volume_image/adapter:commands",
+    "//userspace/storage/volume_image/ftl:ftl-image",
+    "//userspace/storage/volume_image/ftl:ftl-raw-nand-image-writer",
+    "//userspace/storage/volume_image/ftl:raw-nand-image",
+    "//userspace/storage/volume_image/fvm:fvm-sparse-image",
+    "//userspace/storage/volume_image/fvm:fvm-unpack",
+    "//userspace/storage/volume_image/utils:fd-io",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/range",
+    "//zircon/third_party/ulib/safemath",
+  ]
+
+  if (!is_fuchsia) {
+    deps += [ "//zircon/system/ulib/zx-panic-libc" ]
+  }
+}
+
+sdk_host_tool("fvm_sdk") {
+  category = "partner"
+  output_name = "fvm"
+  deps = [ ":fvm" ]
+}

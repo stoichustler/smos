@@ -1,0 +1,38 @@
+// Copyright 2022 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+    include: [ "syslog/client.shard.cml" ],
+    program: {
+        runner: "elf",
+        binary: "bin/device-name-provider",
+    },
+    capabilities: [
+        { protocol: "fuchsia.device.NameProvider" },
+    ],
+    use: [
+        // For network device access.
+        {
+            directory: "dev-class-network",
+            rights: [ "r*" ],
+            path: "/dev/class/network",
+        },
+        {
+            protocol: [ "fuchsia.boot.Arguments" ],
+        },
+        {
+            config: "fuchsia.network.PrimaryInterface",
+            key: "primary_interface",
+            availability: "optional",
+            type: "string",
+            max_size: 200,
+            default: "",
+        },
+    ],
+    expose: [
+        {
+            protocol: "fuchsia.device.NameProvider",
+            from: "self",
+        },
+    ],
+}

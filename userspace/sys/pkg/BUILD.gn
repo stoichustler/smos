@@ -1,0 +1,90 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+
+group("pkg") {
+  testonly = true
+  deps = [
+    "bin",
+    "lib",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  public_deps = [
+    ":non_hermetic_tests($target_toolchain)",
+    "lib:tests",
+    "scripts:tests",
+    "testing:tests",
+    "tests",
+    "//userspace/sys/lib/fidl-fuchsia-pkg-ext:tests",
+    "//userspace/sys/lib/fidl-fuchsia-pkg-rewrite-ext:tests",
+  ]
+}
+
+if (is_fuchsia) {
+  group("hermetic_tests") {
+    testonly = true
+    public_deps = [ "bin:hermetic_tests" ]
+  }
+
+  group("non_hermetic_tests") {
+    testonly = true
+    public_deps = [ "bin:non_hermetic_tests" ]
+  }
+}
+
+if (is_host) {
+  group("host_tests") {
+    testonly = true
+    public_deps = [ "bin:host_tests" ]
+  }
+}
+
+group("e2e_tests") {
+  testonly = true
+  public_deps = [ "tests:e2e_tests" ]
+}
+
+# Targets to include in the base package set for the core recovery image.
+group("recovery-core") {
+  public_deps = [
+    "bin/pkg-cache",
+    "bin/pkg-resolver",
+
+    # system-update-committer is a dependency of pkg-cache, but we don't want to do any verification
+    # in recovery mode, so we completely disable it.
+    "bin/system-update-committer",
+    "bin/system-update-committer:disable",
+  ]
+}
+
+# Targets to include in the base package set for the recovery image.
+group("recovery") {
+  public_deps = [
+    ":recovery-core",
+    "bin/omaha-client",
+    "bin/system-updater",
+  ]
+}
+
+# TODO(https://fxbug.dev/42073789) Remove transitional labels
+group("tools") {
+}
+
+group("pkgfs-disable-executability-restrictions") {
+  public_deps = [ "bin/pkg-cache:disable-executability-restrictions" ]
+  deps = [ "//release/validate:non_production_tag" ]
+}
+
+fuchsia_component("system-update-realm-component") {
+  manifest = "meta/system-update-realm.cml"
+  component_name = "system-update-realm"
+}
+
+fuchsia_package("system-update-realm") {
+  deps = [ ":system-update-realm-component" ]
+}

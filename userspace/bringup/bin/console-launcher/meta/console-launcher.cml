@@ -1,0 +1,186 @@
+// Copyright 2020 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// console-launcher component manifest.
+// For information on manifest format and features,
+// see https://fuchsia.dev/fuchsia-src/concepts/components/component_manifests.
+{
+    include: [ "syslog/client.shard.cml" ],
+    program: {
+        runner: "elf",
+        binary: "bin/console-launcher",
+    },
+    use: [
+        {
+            config: "fuchsia.virtcon.Disable",
+            key: "virtcon_disabled",
+            availability: "optional",
+            type: "bool",
+            default: false,
+        },
+        {
+            directory: "boot",
+            rights: [ "rx*" ],
+            path: "/boot",
+        },
+        {
+            directory: "blob",
+            rights: [ "rw*" ],
+            path: "/blob",
+            availability: "optional",
+        },
+        {
+            directory: "root-ssl-certificates",
+            rights: [ "r*" ],
+            path: "/config/ssl",
+            availability: "optional",
+        },
+        {
+            directory: "data",
+            rights: [ "rw*" ],
+            path: "/data",
+            availability: "optional",
+        },
+        {
+            directory: "dev-topological",
+            rights: [ "rw*" ],
+            path: "/dev",
+        },
+        {
+            directory: "pkgfs",
+            rights: [ "rx*" ],
+            path: "/pkgfs",
+            availability: "optional",
+        },
+        {
+            directory: "base-bin",
+            rights: [ "rx*" ],
+            path: "/bin",
+            availability: "optional",
+        },
+        {
+            directory: "system",
+            rights: [ "rx*" ],
+            path: "/system",
+            availability: "optional",
+        },
+        {
+            directory: "tmp",
+            rights: [ "rw*" ],
+            path: "/tmp",
+            availability: "optional",
+        },
+        {
+            // Used by console-launcher itself.
+            protocol: [
+                "console", // Default device path, overriden by boot arguments.
+                "fuchsia.boot.Arguments",
+                "fuchsia.driver.development.Manager",
+                "fuchsia.kernel.RootJob",
+                "fuchsia.process.Launcher",
+                "fuchsia.process.Resolver",
+            ],
+        },
+        {
+            // Used by programs started in the console.
+            protocol: [
+                "fuchsia.boot.FactoryItems",
+                "fuchsia.boot.Items",
+                "fuchsia.boot.ReadOnlyLog",
+                "fuchsia.boot.WriteOnlyLog",
+                "fuchsia.device.NameProvider",
+                "fuchsia.diagnostics.ArchiveAccessor",
+                "fuchsia.diagnostics.host.ArchiveAccessor",
+                "fuchsia.diagnostics.LogSettings",
+                "fuchsia.driver.registrar.DriverRegistrar",
+                "fuchsia.fshost.Admin",
+                "fuchsia.hardware.power.statecontrol.Admin",
+                "fuchsia.kernel.DebugResource",
+                "fuchsia.kernel.InfoResource",
+                "fuchsia.kernel.ProfileResource",
+                "fuchsia.kernel.RootJobForInspect",
+                "fuchsia.kernel.Stats",
+                "fuchsia.logger.Log",
+                "fuchsia.scheduler.deprecated.ProfileProvider",
+                "fuchsia.scheduler.RoleManager",
+                "fuchsia.sysinfo.SysInfo",
+            ],
+        },
+        {
+            // Used by the `component` shell command for component introspection.
+            protocol: [
+                "fuchsia.sys2.ConfigOverride.root",
+                "fuchsia.sys2.LifecycleController.root",
+                "fuchsia.sys2.RealmQuery.root",
+                "fuchsia.sys2.RouteValidator.root",
+            ],
+            availability: "optional",
+        },
+        {
+            // Virtualization is not present in all configurations.
+            // See: https://fxbug.dev/42054333
+            protocol: [
+                "fuchsia.virtualization.ZirconGuestManager",
+            ],
+            availability: "optional",
+        },
+        {
+            protocol: [
+                "fuchsia.tracing.controller.Provisioner",
+                "fuchsia.tracing.provider.Registry",
+            ],
+
+            // Trace manager may be excluded from builds where tracing is not
+            // expected to be used for observability, such as in the bringup
+            // product and non-eng builds of any product.
+            availability: "optional",
+        },
+        {
+            protocol: "fuchsia.dash.Launcher",
+
+            // The source of this protocol, debug-dash-launcher,
+            // may not be available on all products.
+            availability: "optional",
+        },
+        {
+            protocol: "fuchsia.hardware.pty.Device",
+
+            // The source of this protocol, ptysvc,
+            // may not be available on all products.
+            availability: "optional",
+        },
+        {
+            service: "fuchsia.hardware.spmi.DebugService",
+            availability: "optional",
+        },
+        {
+            // Used by usbctl
+            service: "fuchsia.hardware.usb.peripheral.Service",
+            availability: "optional",
+        },
+        {
+            service: "fuchsia.hardware.nfc.Service",
+            availability: "optional",
+        },
+        {
+            service: "fuchsia.gpu.magma.Service",
+            availability: "optional",
+        },
+        {
+            service: "fuchsia.hardware.cpu.ctrl.Service",
+            availability: "optional",
+        },
+        { service: "fuchsia.hardware.pty.Service" },
+        {
+            protocol: [
+                "fuchsia.kernel.Counter",
+                "fuchsia.kernel.DebugBroker",
+            ],
+
+            // The source of this protocol, kernel_debug_broker,
+            // may not be available on all products.
+            availability: "optional",
+        },
+    ],
+}

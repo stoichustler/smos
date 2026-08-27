@@ -1,0 +1,21 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+import("//release/rust/rustc_library.gni")
+
+rustc_library("lib") {
+  edition = "2021"
+  name = "test_list"
+
+  sources = [ "src/lib.rs" ]
+  deps = [
+    "//userspace/lib/diagnostics/log/types:types-serde",
+    "//third_party/rust_crates:serde",
+  ]
+}
+
+group("test_list") {
+  public_deps = [ ":lib" ]
+}

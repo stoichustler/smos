@@ -1,0 +1,73 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+rcs_deps = [
+  "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_rust",
+  "//userspace/developer/ffx/lib/errors:lib",
+  "//userspace/developer/ffx/lib/timeout:lib",
+  "//userspace/lib/fidl/rust/fidl",
+  "//third_party/rust_crates:anyhow",
+  "//third_party/rust_crates:futures",
+  "//third_party/rust_crates:thiserror",
+  "//third_party/rust_crates:tracing",
+]
+
+rcs_sources = [
+  "src/lib.rs",
+  "src/toolbox.rs",
+]
+
+rustc_library("lib") {
+  name = "rcs"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = rcs_deps + [
+           "//sdk/fidl/fuchsia.developer.remotecontrol:fuchsia.developer.remotecontrol_rust",
+           "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+           "//sdk/fidl/fuchsia.kernel:fuchsia.kernel_rust",
+           "//sdk/fidl/fuchsia.overnet.protocol:fuchsia.overnet.protocol_rust",
+           "//sdk/fidl/fuchsia.posix.socket:fuchsia.posix.socket_rust",
+           "//sdk/fidl/fuchsia.sys2:fuchsia.sys2_rust",
+           "//userspace/connectivity/overnet/lib/core",
+           "//userspace/lib/fuchsia-async",
+           "//userspace/lib/network/fidl_fuchsia_net_ext",
+           "//userspace/sys/lib/component_debug",
+           "//userspace/sys/lib/moniker",
+         ]
+
+  sources = rcs_sources + [ "src/port_forward.rs" ]
+}
+
+rustc_library("lib_fdomain") {
+  name = "rcs_fdomain"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = rcs_deps + [
+           "//sdk/fidl/fuchsia.developer.remotecontrol:fuchsia.developer.remotecontrol_fdomain",
+           "//sdk/fidl/fuchsia.io:fuchsia.io_fdomain",
+           "//sdk/fidl/fuchsia.kernel:fuchsia.kernel_fdomain",
+           "//sdk/fidl/fuchsia.sys2:fuchsia.sys2_fdomain",
+           "//userspace/lib/fdomain/client",
+         ]
+
+  features = [ "fdomain" ]
+  sources = rcs_sources
+}
+
+group("rcs") {
+  testonly = true
+  public_deps = [ ":lib" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":lib_fdomain_test($host_toolchain)",
+    ":lib_test($host_toolchain)",
+  ]
+}

@@ -1,0 +1,17 @@
+build/
+dist/
+jellyfish.egg-info/
+*.so
+*.swp
+*.pyc
+*.DS_Store
+*~
+.tox/
+.coverage
+htmlcov/
+.ropeproject/
+_build/
+.ipynb_checkpoints/
+.cache
+wheelhouse/
+site/

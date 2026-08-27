@@ -1,0 +1,799 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_binary.gni")
+import("//release/rust/rustc_macro.gni")
+import("//release/rust/rustc_test.gni")
+import("//release/toolchain/concurrent_jobs.gni")
+import("//userspace/starnix/kernel/starnix.gni")
+import("//userspace/starnix/lib/gzip/gzip.gni")
+import("//userspace/storage/fshost/generated_fshost_config.gni")
+import("args.gni")
+
+group("kernel") {
+  deps = [ ":starnix_kernel_package" ]
+}
+
+group("tests") {
+  testonly = true
+
+  deps = [
+    ":starnix-tests",
+    ":starnix_kernel_bin-tests",
+    ":starnix_kernel_runner-tests",
+    ":starnix_logging-tests",
+  ]
+}
+
+rustc_binary("starnix_kernel_bin") {
+  name = "starnix_kernel"
+  edition = "2021"
+  with_unit_tests = true
+
+  # TODO(https://fxbug.dev/42059075): Re-enable starnix in these environments.
+  exclude_toolchain_tags = [
+    "asan",
+    "hwasan",
+  ]
+
+  source_root = "main.rs"
+  deps = [
+    ":android_5.10_kernel_config",
+    ":starnix_core",
+    ":starnix_kernel_runner",
+    ":starnix_kernel_structured_config",
+    ":starnix_logging",
+    "//sdk/fidl/fuchsia.component.runner:fuchsia.component.runner_rust",
+    "//sdk/fidl/fuchsia.memory.attribution:fuchsia.memory.attribution_rust",
+    "//sdk/fidl/fuchsia.process.lifecycle:fuchsia.process.lifecycle_rust",
+    "//sdk/fidl/fuchsia.starnix.container:fuchsia.starnix.container_rust",
+    "//sdk/rust/zx",
+    "//userspace/graphics/lib/magma/src/libmagma",
+    "//userspace/lib/diagnostics/inspect/runtime/rust",
+    "//userspace/lib/diagnostics/inspect/rust",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-component",
+    "//userspace/lib/fuchsia-runtime",
+    "//userspace/lib/trace/rust:trace",
+    "//userspace/lib/trace/rust:trace-provider",
+    "//userspace/starnix/lib/extended_pstate:lib",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-lock",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:tracing-mutex",
+  ]
+
+  sources = [ "main.rs" ]
+
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+  configs += [ "//userspace/starnix/config:starnix_clippy_lints" ]
+
+  disable_rustdoc = false
+
+  if (target_cpu == "riscv64" || is_lto_variant) {
+    # At least for riscv64 and LTO, remote linking requires machines
+    # with more memory, particularly in the linking phase.
+    _concurrent_jobs = concurrent_jobs.rust_highmem
+    configs += _concurrent_jobs.configs
+    forward_variables_from(_concurrent_jobs.vars, "*")
+  }
+}
+
+rustc_library("starnix_core") {
+  name = "starnix_core"
+  edition = "2021"
+  version = "0.1.0"
+  with_unit_tests = true
+  source_root = "lib.rs"
+
+  # TODO(https://fxbug.dev/42059075): Re-enable starnix in these environments.
+  exclude_toolchain_tags = [
+    "asan",
+    "hwasan",
+  ]
+
+  sources = [
+    "arch/${current_cpu}/execution.rs",
+    "arch/${current_cpu}/loader.rs",
+    "arch/${current_cpu}/mod.rs",
+    "arch/${current_cpu}/registers.rs",
+    "arch/${current_cpu}/signal_handling.rs",
+    "arch/${current_cpu}/syscalls.rs",
+    "arch/${current_cpu}/task.rs",
+    "arch/${current_cpu}/vdso.rs",
+    "arch/mod.rs",
+    "bpf/attachments.rs",
+    "bpf/fs.rs",
+    "bpf/mod.rs",
+    "bpf/program.rs",
+    "bpf/syscalls.rs",
+    "container_namespace.rs",
+    "device/android/bootloader_message_store.rs",
+    "device/android/mod.rs",
+    "device/binder.rs",
+    "device/framebuffer.rs",
+    "device/framebuffer_server.rs",
+    "device/kobject.rs",
+    "device/kobject_store.rs",
+    "device/mem.rs",
+    "device/mod.rs",
+    "device/registry.rs",
+    "device/remote_binder.rs",
+    "device/remote_block_device.rs",
+    "device/terminal.rs",
+    "dynamic_thread_spawner.rs",
+    "execution/crash_reporter.rs",
+    "execution/executor.rs",
+    "execution/mod.rs",
+    "fs/devpts.rs",
+    "fs/devtmpfs.rs",
+    "fs/fuchsia/mod.rs",
+    "fs/fuchsia/remote.rs",
+    "fs/fuchsia/remote_bundle.rs",
+    "fs/fuchsia/remote_unix_domain_socket.rs",
+    "fs/fuchsia/remote_volume.rs",
+    "fs/fuchsia/sync_file.rs",
+    "fs/fuchsia/syslog.rs",
+    "fs/fuchsia/timer.rs",
+    "fs/fuchsia/zxio.rs",
+    "fs/mod.rs",
+    "fs/nmfs/fs.rs",
+    "fs/nmfs/manager.rs",
+    "fs/nmfs/mod.rs",
+    "fs/proc/cgroups.rs",
+    "fs/proc/config_gz.rs",
+    "fs/proc/cpuinfo.rs",
+    "fs/proc/device_tree.rs",
+    "fs/proc/devices.rs",
+    "fs/proc/fs.rs",
+    "fs/proc/kmsg.rs",
+    "fs/proc/loadavg.rs",
+    "fs/proc/meminfo.rs",
+    "fs/proc/misc.rs",
+    "fs/proc/mod.rs",
+    "fs/proc/mounts_symlink.rs",
+    "fs/proc/pid_directory.rs",
+    "fs/proc/pressure_directory.rs",
+    "fs/proc/proc_directory.rs",
+    "fs/proc/self_symlink.rs",
+    "fs/proc/stat.rs",
+    "fs/proc/swaps.rs",
+    "fs/proc/sysctl.rs",
+    "fs/proc/sysrq.rs",
+    "fs/proc/thread_self.rs",
+    "fs/proc/uid_cputime.rs",
+    "fs/proc/uid_io.rs",
+    "fs/proc/uid_procstat.rs",
+    "fs/proc/uptime.rs",
+    "fs/proc/vmstat.rs",
+    "fs/proc/zoneinfo.rs",
+    "fs/sysfs/bus_collection_directory.rs",
+    "fs/sysfs/cpu_class_directory.rs",
+    "fs/sysfs/device_directory.rs",
+    "fs/sysfs/fs.rs",
+    "fs/sysfs/kernel_directory.rs",
+    "fs/sysfs/kobject_directory.rs",
+    "fs/sysfs/kobject_symlink_directory.rs",
+    "fs/sysfs/mod.rs",
+    "fs/sysfs/power_directory.rs",
+    "fs/sysfs/vulnerabilities_class_directory.rs",
+    "fs/tmpfs.rs",
+    "lib.rs",
+    "loader.rs",
+    "memory_attribution/mod.rs",
+    "memory_attribution/sync.rs",
+    "mm/futex_table.rs",
+    "mm/mapping.rs",
+    "mm/memory.rs",
+    "mm/memory_manager.rs",
+    "mm/mod.rs",
+    "mm/syscalls.rs",
+    "mm/userfault.rs",
+    "mm/vmex_resource.rs",
+    "mm/vmsplice.rs",
+    "mutable_state.rs",
+    "power/manager.rs",
+    "power/mod.rs",
+    "power/state.rs",
+    "power/suspend_stats.rs",
+    "power/sync_on_suspend.rs",
+    "power/wake_lock.rs",
+    "power/wakeup_count.rs",
+    "security/hooks.rs",
+    "security/mod.rs",
+    "security/selinux_hooks/audit.rs",
+    "security/selinux_hooks/bpf.rs",
+    "security/selinux_hooks/file.rs",
+    "security/selinux_hooks/fs_node.rs",
+    "security/selinux_hooks/mod.rs",
+    "security/selinux_hooks/selinuxfs.rs",
+    "security/selinux_hooks/superblock.rs",
+    "security/selinux_hooks/task.rs",
+    "security/selinux_hooks/testing.rs",
+    "signals/mod.rs",
+    "signals/signal_handling.rs",
+    "signals/signalfd.rs",
+    "signals/syscalls.rs",
+    "signals/types.rs",
+    "syscalls/misc.rs",
+    "syscalls/mod.rs",
+    "syscalls/table.rs",
+    "syscalls/time.rs",
+    "task/abstract_socket_namespace.rs",
+    "task/cgroup.rs",
+    "task/current_task.rs",
+    "task/hr_timer_manager.rs",
+    "task/interval_timer.rs",
+    "task/iptables.rs",
+    "task/kernel.rs",
+    "task/kernel_stats.rs",
+    "task/kernel_threads.rs",
+    "task/mod.rs",
+    "task/net.rs",
+    "task/pid_table.rs",
+    "task/process_group.rs",
+    "task/psi_provider.rs",
+    "task/ptrace.rs",
+    "task/scheduler/manager.rs",
+    "task/scheduler/mod.rs",
+    "task/scheduler/role_overrides.rs",
+    "task/seccomp.rs",
+    "task/session.rs",
+    "task/syscalls.rs",
+    "task/syslog.rs",
+    "task/task.rs",
+    "task/thread_group.rs",
+    "task/timeline.rs",
+    "task/timers.rs",
+    "task/uts_namespace.rs",
+    "task/waiter.rs",
+    "testing.rs",
+    "time/mod.rs",
+    "time/utc.rs",
+    "vdso/mod.rs",
+    "vdso/vdso_loader.rs",
+    "vfs/aio.rs",
+    "vfs/anon_node.rs",
+    "vfs/buffers/io_buffers.rs",
+    "vfs/buffers/message_queue.rs",
+    "vfs/buffers/message_types.rs",
+    "vfs/buffers/mod.rs",
+    "vfs/crypt_service.rs",
+    "vfs/dir_entry.rs",
+    "vfs/dirent_sink.rs",
+    "vfs/dynamic_file.rs",
+    "vfs/epoll.rs",
+    "vfs/eventfd.rs",
+    "vfs/fd_number.rs",
+    "vfs/fd_table.rs",
+    "vfs/file_object.rs",
+    "vfs/file_server.rs",
+    "vfs/file_system/file_system.rs",
+    "vfs/file_system/mod.rs",
+    "vfs/file_write_guard.rs",
+    "vfs/fs_args.rs",
+    "vfs/fs_context.rs",
+    "vfs/fs_node.rs",
+    "vfs/fs_registry.rs",
+    "vfs/fsverity.rs",
+    "vfs/inotify.rs",
+    "vfs/io_uring.rs",
+    "vfs/memory_directory.rs",
+    "vfs/memory_regular.rs",
+    "vfs/mod.rs",
+    "vfs/namespace.rs",
+    "vfs/path.rs",
+    "vfs/pidfd.rs",
+    "vfs/pipe.rs",
+    "vfs/record_locks.rs",
+    "vfs/rw_queue.rs",
+    "vfs/simple_file.rs",
+    "vfs/socket/iptables_utils.rs",
+    "vfs/socket/mod.rs",
+    "vfs/socket/socket.rs",
+    "vfs/socket/socket_backed_by_zxio.rs",
+    "vfs/socket/socket_file.rs",
+    "vfs/socket/socket_fs.rs",
+    "vfs/socket/socket_generic_netlink/messages.rs",
+    "vfs/socket/socket_generic_netlink/mod.rs",
+    "vfs/socket/socket_generic_netlink/nl80211.rs",
+    "vfs/socket/socket_generic_netlink/taskstats.rs",
+    "vfs/socket/socket_netlink.rs",
+    "vfs/socket/socket_types.rs",
+    "vfs/socket/socket_unix.rs",
+    "vfs/socket/socket_vsock.rs",
+    "vfs/socket/syscalls.rs",
+    "vfs/splice.rs",
+    "vfs/static_directory.rs",
+    "vfs/stubs.rs",
+    "vfs/symlink_node.rs",
+    "vfs/syscalls.rs",
+    "vfs/timer.rs",
+    "vfs/userfault_file.rs",
+    "vfs/vec_directory.rs",
+    "vfs/wd_number.rs",
+    "vfs/xattr.rs",
+  ]
+
+  deps = [
+    ":restricted_trampoline",
+    ":starnix_logging",
+    ":vdso_data($bionic_linux_toolchain)",
+    "//sdk/fidl/fuchsia.buildinfo:fuchsia.buildinfo_rust",
+    "//sdk/fidl/fuchsia.component.runner:fuchsia.component.runner_rust",
+    "//sdk/fidl/fuchsia.diagnostics:fuchsia.diagnostics_rust",
+    "//sdk/fidl/fuchsia.element:fuchsia.element_rust",
+    "//sdk/fidl/fuchsia.feedback:fuchsia.feedback_rust",
+    "//sdk/fidl/fuchsia.fs:fuchsia.fs_rust",
+    "//sdk/fidl/fuchsia.fshost:fuchsia.fshost_rust",
+    "//sdk/fidl/fuchsia.hardware.power.statecontrol:fuchsia.hardware.power.statecontrol_rust",
+    "//sdk/fidl/fuchsia.images2:fuchsia.images2_rust",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+    "//sdk/fidl/fuchsia.kernel:fuchsia.kernel_rust",
+    "//sdk/fidl/fuchsia.math:fuchsia.math_rust",
+    "//sdk/fidl/fuchsia.memory.attribution:fuchsia.memory.attribution_rust",
+    "//sdk/fidl/fuchsia.net:fuchsia.net_rust",
+    "//sdk/fidl/fuchsia.net.filter:fuchsia.net.filter_rust",
+    "//sdk/fidl/fuchsia.netpol.socketproxy:fuchsia.netpol.socketproxy_rust",
+    "//sdk/fidl/fuchsia.posix:fuchsia.posix_rust",
+    "//sdk/fidl/fuchsia.posix.socket:fuchsia.posix.socket_rust",
+    "//sdk/fidl/fuchsia.posix.socket.packet:fuchsia.posix.socket.packet_rust",
+    "//sdk/fidl/fuchsia.posix.socket.raw:fuchsia.posix.socket.raw_rust",
+    "//sdk/fidl/fuchsia.power.broker:fuchsia.power.broker_rust",
+    "//sdk/fidl/fuchsia.power.observability:fuchsia.power.observability_rust",
+    "//sdk/fidl/fuchsia.power.suspend:fuchsia.power.suspend_rust",
+    "//sdk/fidl/fuchsia.recovery:fuchsia.recovery_rust",
+    "//sdk/fidl/fuchsia.scheduler:fuchsia.scheduler_rust",
+    "//sdk/fidl/fuchsia.session.power:fuchsia.session.power_rust",
+    "//sdk/fidl/fuchsia.starnix.binder:fuchsia.starnix.binder_rust",
+    "//sdk/fidl/fuchsia.starnix.psi:fuchsia.starnix.psi_rust",
+    "//sdk/fidl/fuchsia.starnix.runner:fuchsia.starnix.runner_rust",
+    "//sdk/fidl/fuchsia.sysinfo:fuchsia.sysinfo_rust",
+    "//sdk/fidl/fuchsia.time.alarms:fuchsia.time.alarms_rust",
+    "//sdk/fidl/fuchsia.ui.composition:fuchsia.ui.composition_rust",
+    "//sdk/fidl/fuchsia.ui.display.singleton:fuchsia.ui.display.singleton_rust",
+    "//sdk/fidl/fuchsia.ui.views:fuchsia.ui.views_rust",
+    "//sdk/fidl/fuchsia.unknown:fuchsia.unknown_rust",
+    "//sdk/rust/zx",
+    "//sdk/rust/zx-status",
+    "//userspace/connectivity/lib/net-types",
+    "//userspace/connectivity/network/netlink",
+    "//userspace/connectivity/wlan/wlanix:fuchsia.wlan.wlanix_rust",
+    "//userspace/graphics/lib/magma/src/libmagma",
+    "//userspace/lib/async-utils",
+    "//userspace/lib/debug/rust",
+    "//userspace/lib/dense-map",
+    "//userspace/lib/diagnostics/data/rust",
+    "//userspace/lib/diagnostics/inspect/contrib/rust",
+    "//userspace/lib/diagnostics/inspect/derive",
+    "//userspace/lib/diagnostics/inspect/rust",
+    "//userspace/lib/fdio/rust:fdio",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-component",
+    "//userspace/lib/fuchsia-fs",
+    "//userspace/lib/fuchsia-runtime",
+    "//userspace/lib/mundane",
+    "//userspace/lib/network/fidl_fuchsia_net_filter_ext",
+    "//userspace/lib/process_builder",
+    "//userspace/lib/trace/rust:trace",
+    "//userspace/lib/ui/flatland-frame-scheduling:flatland-frame-scheduling-lib",
+    "//userspace/lib/ui/fuchsia-framebuffer",
+    "//userspace/lib/ui/fuchsia-scenic",
+    "//userspace/lib/vulkan",
+    "//userspace/performance/memory/attribution/server",
+    "//userspace/starnix/lib/ebpf",
+    "//userspace/starnix/lib/ebpf_api",
+    "//userspace/starnix/lib/expando",
+    "//userspace/starnix/lib/extended_pstate:lib",
+    "//userspace/starnix/lib/filter_methods_macro",
+    "//userspace/starnix/lib/linux_uapi",
+    "//userspace/starnix/lib/range_map",
+    "//userspace/starnix/lib/selinux",
+    "//userspace/starnix/lib/starnix_lifecycle",
+    "//userspace/starnix/lib/starnix_sync",
+    "//userspace/starnix/lib/starnix_syscalls",
+    "//userspace/starnix/lib/starnix_types",
+    "//userspace/starnix/lib/starnix_uapi",
+    "//userspace/starnix/lib/syncio",
+    "//userspace/starnix/lib/third_party/rust_netlink/netlink_packet_core",
+    "//userspace/starnix/lib/third_party/rust_netlink/netlink_packet_generic",
+    "//userspace/starnix/lib/third_party/rust_netlink/netlink_packet_route",
+    "//userspace/starnix/lib/third_party/rust_netlink/netlink_packet_utils",
+    "//userspace/starnix/lib/usercopy",
+    "//userspace/storage/ext4/lib/metadata",
+    "//userspace/storage/fxfs/fidl/fuchsia.fxfs:fuchsia.fxfs_rust",
+    "//userspace/storage/lib/vfs/rust:vfs",
+    "//third_party/rust_crates:aes-gcm-siv",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:bit-vec",
+    "//third_party/rust_crates:bitflags",
+    "//third_party/rust_crates:bstr",
+    "//third_party/rust_crates:byteorder",
+    "//third_party/rust_crates:derivative",
+    "//third_party/rust_crates:dyn-clone",
+    "//third_party/rust_crates:fragile",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:hkdf",
+    "//third_party/rust_crates:itertools",
+    "//third_party/rust_crates:linked-hash-map",
+    "//third_party/rust_crates:lock_api",
+    "//third_party/rust_crates:macro_rules_attribute",
+    "//third_party/rust_crates:maplit",
+    "//third_party/rust_crates:memchr",
+    "//third_party/rust_crates:memoffset",
+    "//third_party/rust_crates:nom",
+    "//third_party/rust_crates:num-derive",
+    "//third_party/rust_crates:num-traits",
+    "//third_party/rust_crates:once_cell",
+    "//third_party/rust_crates:paste",
+    "//third_party/rust_crates:pin-project",
+    "//third_party/rust_crates:rand",
+    "//third_party/rust_crates:ref-cast",
+    "//third_party/rust_crates:regex",
+    "//third_party/rust_crates:scopeguard",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:sha2",
+    "//third_party/rust_crates:slab",
+    "//third_party/rust_crates:smallvec",
+    "//third_party/rust_crates:static_assertions",
+    "//third_party/rust_crates:thiserror",
+    "//third_party/rust_crates:tracing-mutex",
+    "//third_party/rust_crates:utf8parse",
+    "//third_party/rust_crates:uuid",
+    "//third_party/rust_crates:zerocopy",
+  ]
+
+  if (starnix_enable_arch32) {
+    deps += [ ":vdso_data($bionic_linux_arch32_toolchain)" ]
+  }
+
+  test_deps = [
+    "//userspace/connectivity/lib/net-declare",
+    "//userspace/lib/diagnostics/testing/diagnostics-assertions/rust:diagnostics-assertions",
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/fuchsia-fs",
+    "//userspace/lib/test_util",
+    "//userspace/storage/ext4/tests:test_img",
+    "//userspace/storage/fxfs/platform:fxfs-testing",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:futures-lite",
+    "//third_party/rust_crates:test-case",
+    "//third_party/rust_crates:tracing-mutex",
+  ]
+
+  features = []
+  if (starnix_enable_arch32) {
+    features += [ "arch32" ]
+  }
+  if (starnix_syscall_stats) {
+    features += [ "syscall_stats" ]
+  }
+  if (starnix_unified_aspace) {
+    features += [ "unified_aspace" ]
+  }
+  if (starnix_enable_alternate_anon_allocs) {
+    features += [ "alternate_anon_allocs" ]
+  }
+  inputs = [
+    "//userspace/starnix/kernel/security/selinux_hooks/default_exceptions_config",
+    "//userspace/starnix/lib/selinux/testdata/micro_policies/hooks_tests_policy.pp",
+    "//userspace/starnix/lib/selinux/testdata/composite_policies/compiled/bounded_transition_policy.pp",
+  ]
+  configs += [ "//userspace/starnix/config:starnix_clippy_lints" ]
+
+  # Linking the lib tests requires a lot of memory.
+  # Notes: if (is_asan || target_cpu == "riscv64"), linking is known to
+  # OOM on n2-standard-2.
+  # For other configurations, building on n2-standard-8 is significantly
+  # faster due to the memory usage.
+  _concurrent_jobs = concurrent_jobs.rust_highmem
+  test_configs = _concurrent_jobs.configs
+  test_vars = _concurrent_jobs.vars
+}
+
+rustc_library("starnix_kernel_runner") {
+  name = "starnix_kernel_runner"
+  edition = "2021"
+  version = "0.1.0"
+  with_unit_tests = true
+  source_root = "runner/lib.rs"
+
+  # TODO(https://fxbug.dev/42059075): Re-enable starnix in these environments.
+  exclude_toolchain_tags = [
+    "asan",
+    "hwasan",
+  ]
+
+  sources = [
+    "runner/component_runner.rs",
+    "runner/container.rs",
+    "runner/features.rs",
+    "runner/lib.rs",
+    "runner/mounts.rs",
+    "runner/serve_protocols.rs",
+  ]
+
+  deps = [
+    ":starnix_core",
+    ":starnix_kernel_structured_config",
+    ":starnix_logging",
+    "//sdk/fidl/fuchsia.component:fuchsia.component_rust",
+    "//sdk/fidl/fuchsia.component.runner:fuchsia.component.runner_rust",
+    "//sdk/fidl/fuchsia.element:fuchsia.element_rust",
+    "//sdk/fidl/fuchsia.feedback:fuchsia.feedback_rust",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+    "//sdk/fidl/fuchsia.memory.attribution:fuchsia.memory.attribution_rust",
+    "//sdk/fidl/fuchsia.process:fuchsia.process_rust",
+    "//sdk/fidl/fuchsia.starnix.container:fuchsia.starnix.container_rust",
+    "//sdk/fidl/fuchsia.sysinfo:fuchsia.sysinfo_rust",
+    "//sdk/fidl/fuchsia.ui.composition:fuchsia.ui.composition_rust",
+    "//sdk/fidl/fuchsia.ui.input3:fuchsia.ui.input3_rust",
+    "//sdk/fidl/fuchsia.ui.policy:fuchsia.ui.policy_rust",
+    "//sdk/fidl/fuchsia.ui.views:fuchsia.ui.views_rust",
+    "//sdk/rust/zx",
+    "//userspace/graphics/lib/magma/src/libmagma",
+    "//userspace/lib/diagnostics/inspect/contrib/rust",
+    "//userspace/lib/diagnostics/inspect/rust",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-component",
+    "//userspace/lib/fuchsia-fs",
+    "//userspace/lib/fuchsia-runtime",
+    "//userspace/lib/ui/fuchsia-scenic",
+    "//userspace/performance/memory/attribution/server",
+    "//userspace/starnix/lib/starnix_sync",
+    "//userspace/starnix/lib/starnix_types",
+    "//userspace/starnix/lib/starnix_uapi",
+    "//userspace/starnix/modules",
+    "//userspace/starnix/modules/ashmem",
+    "//userspace/starnix/modules/gpu",
+    "//userspace/starnix/modules/gralloc",
+    "//userspace/starnix/modules/input",
+    "//userspace/starnix/modules/layeredfs",
+    "//userspace/starnix/modules/magma",
+    "//userspace/starnix/modules/nanohub",
+    "//userspace/starnix/modules/overlayfs",
+    "//userspace/starnix/modules/perfetto_consumer",
+    "//userspace/starnix/modules/touch_power_policy",
+    "//userspace/sys/lib/runner",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:bstr",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:rand",
+    "//third_party/rust_crates:serde",
+  ]
+
+  test_deps = [ "//userspace/lib/fuchsia" ]
+
+  configs += [ "//userspace/starnix/config:starnix_clippy_lints" ]
+}
+
+rustc_library("starnix_logging") {
+  name = "starnix_logging"
+  edition = "2021"
+  version = "0.1.0"
+  with_unit_tests = true
+  source_root = "logging/lib.rs"
+
+  sources = [
+    "logging/core_dump_list.rs",
+    "logging/lib.rs",
+    "logging/logging.rs",
+    "logging/not_found.rs",
+    "logging/stubs.rs",
+    "logging/trace.rs",
+  ]
+
+  deps = [
+    "//sdk/rust/zx",
+    "//userspace/lib/diagnostics/inspect/contrib/rust",
+    "//userspace/lib/diagnostics/inspect/contrib/stubs:inspect_stubs",
+    "//userspace/lib/diagnostics/inspect/rust",
+    "//userspace/lib/fuchsia-runtime",
+    "//userspace/lib/trace/rust:trace",
+    "//userspace/starnix/lib/starnix_sync",
+    "//userspace/starnix/lib/starnix_uapi",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:bstr",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:log",
+    "//third_party/rust_crates:regex",
+  ]
+
+  test_deps = [ "//third_party/rust_crates:pretty_assertions" ]
+
+  features = []
+  if (starnix_disable_logging) {
+    features += [ "disable_logging" ]
+  }
+  if (starnix_enable_tracing) {
+    features += [ "tracing" ]
+  }
+  if (starnix_enable_tracing_firehose) {
+    features += [ "tracing_firehose" ]
+  }
+  if (starnix_enable_trace_and_debug_logs_in_release) {
+    features += [ "trace_and_debug_logs_in_release" ]
+  }
+
+  configs += [ "//userspace/starnix/config:starnix_clippy_lints" ]
+}
+
+static_library("restricted_trampoline") {
+  sources = [ "execution/trampoline_${current_cpu}.S" ]
+}
+
+resource("starnix-test-files") {
+  sources = [
+    "data/testfile.txt",
+    "data/testfile2.txt",
+  ]
+  outputs = [ "data/{{source_file_part}}" ]
+}
+
+# vDSO
+
+config("vdso_config") {
+  cflags = [ "-fPIC" ]
+  ldflags = [
+    "-shared",
+
+    # Make sure libc is not linked into the vDSO. Header-only use is OK.
+    "-nostdlib",
+  ]
+
+  # Force LTO so that functions are inlined when appropriate even across
+  # different compilation units.
+  # TODO(https://fxbug.dev/378658421): Disable lto on arm32 because it doesn't compile
+  if (!is_debug && current_cpu != "arm") {
+    # Add thinlto config if lto variants are not used.
+    if (!is_lto_variant) {
+      configs = [ "//release/config/lto:thinlto" ]
+    }
+  } else {
+    configs = [ "//release/config/lto:no-lto" ]
+  }
+
+  # Use a custom linker script to ensure only one PT_LOAD header.
+  vdso_linker_script = "vdso/vdso.ld"
+  vdso_version_script = "vdso/vdso_${current_cpu}.map"
+  ldflags += [
+    "-Wl,--hash-style=both",
+    "-Wl,-T," + rebase_path(vdso_linker_script, root_build_dir),
+    "-Wl,--version-script," + rebase_path(vdso_version_script, root_build_dir),
+  ]
+}
+
+source_set("vdso_calculate_utc") {
+  sources = [ "vdso/vdso_calculate_utc.cc" ]
+  deps = [
+    "//zircon/kernel/lib/fasttime:headers",
+    "//zircon/system/public",
+    "//zircon/system/ulib/affine",
+  ]
+  configs += [ ":vdso_config" ]
+}
+
+loadable_module("vdso") {
+  sources = [
+    "vdso/vdso_${current_cpu}.cc",
+    "vdso/vdso_common.cc",
+  ]
+  if (current_cpu == "arm") {
+    sources += [ "vdso/vdso_arm_eabi.cc" ]
+  }
+
+  deps = [ "//zircon/system/public" ]
+
+  if (current_cpu != "arm") {
+    deps += [
+      ":vdso_calculate_utc",
+      "//zircon/kernel/lib/fasttime:headers",
+      "//zircon/system/ulib/affine",
+    ]
+  }
+
+  output_name = "libvdso"
+  configs += [ ":vdso_config" ]
+  if (is_linux) {
+    # By default, Linux host libraries statically link libc++. Since this library specifies nostdlib
+    # this option is unused and generates a warning.
+    configs -= [ "//release/config/linux:implicit-host-libs" ]
+  }
+
+  exclude_toolchain_tags = [ "instrumented" ]
+}
+
+resource("vdso_data") {
+  sources = [ "$root_out_dir/libvdso.so" ]
+  if (current_cpu != "arm") {
+    outputs = [ "data/libvdso.so" ]
+  } else {
+    outputs = [ "data/libvdso_arch32.so" ]
+  }
+  deps = [ ":vdso" ]
+}
+
+# Components
+
+# The starnix kernel manifest, used by all containers.
+fuchsia_component_manifest("starnix_kernel_manifest") {
+  manifest = "meta/starnix_kernel.cml"
+  component_name = "starnix_kernel"
+}
+
+gzip("gzip_android_5.10_kernel_config") {
+  input = "data/config"
+  output = "$target_gen_dir/config.gz"
+}
+
+resource("android_5.10_kernel_config") {
+  sources = [ "$target_gen_dir/config.gz" ]
+  outputs = [ "data/config.gz" ]
+  deps = [ ":gzip_android_5.10_kernel_config" ]
+}
+
+fuchsia_structured_config_rust_lib("starnix_kernel_structured_config") {
+  cm_label = ":starnix_kernel_manifest"
+}
+
+fuchsia_component("starnix_kernel") {
+  cm_label = ":starnix_kernel_manifest"
+  deps = [ ":starnix_kernel_bin" ]
+}
+
+# Packages
+
+fuchsia_package("starnix_kernel_package") {
+  package_name = "starnix_kernel"
+  deps = [
+    ":starnix_kernel",
+    ":starnix_kernel_manifest",
+    "//userspace/starnix/containers:default_init",
+  ]
+}
+
+fuchsia_unittest_package("starnix-tests") {
+  manifest = "meta/starnix_tests.cml"
+  deps = [
+    ":starnix-test-files",
+    ":starnix_core_test",
+    "//userspace/starnix/examples/hello_starnix:hello_starnix_bin",
+  ]
+  test_specs = {
+    log_settings = {
+      # Tests exercise failure cases, so ERROR logs are expected.
+      max_severity = "ERROR"
+    }
+  }
+  test_type = "starnix"
+}
+
+fuchsia_unittest_package("starnix_kernel_bin-tests") {
+  deps = [ ":starnix_kernel_bin_test" ]
+  manifest = "meta/starnix_kernel_bin_tests.cml"
+}
+
+fuchsia_unittest_package("starnix_kernel_runner-tests") {
+  deps = [ ":starnix_kernel_runner_test" ]
+  manifest = "meta/starnix_kernel_runner_tests.cml"
+  test_specs = {
+    log_settings = {
+      # Tests exercise failure cases, so ERROR logs are expected.
+      max_severity = "ERROR"
+    }
+  }
+  test_type = "starnix"
+}
+
+fuchsia_unittest_package("starnix_logging-tests") {
+  deps = [ ":starnix_logging_test" ]
+}

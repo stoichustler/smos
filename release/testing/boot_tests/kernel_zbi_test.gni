@@ -1,0 +1,199 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/assembled_system.gni")
+import("//release/board.gni")
+import("//release/images/args.gni")
+import("//release/product.gni")
+import("//release/sdk/product_bundle.gni")
+import("//release/testing/boot_tests/zbi_test.gni")
+import("//userspace/storage/fshost/generated_fshost_config.gni")
+
+declare_args() {
+  # Defines the default value of `kernel_zbi_test()` template `generate_cuckoo` parameters.
+  # When true, all instances of `kernel_zbi_tests()` will default to generating a `cuckoo_zbi_test()`
+  # which is a full system image generated for exfiltrating instrumentation data from a target system.
+  generate_cuckoo_tests = false
+
+  # Default value for `disabled` parameter for generated `cuckoo_test()`.
+  # TODO(https://fxbug.dev/320511796): Cleanup when no longer necessary.
+  disable_cuckoo_tests = false
+}
+
+template("_cuckoo_product_bundle") {
+  assert(current_toolchain == default_toolchain)
+  assert(defined(invoker.kernel_zbi))
+
+  main_target = target_name
+  assembled_system_target = "${target_name}.assembled_system"
+  stub_test_target = "${target_name}.test"
+
+  assembled_system_namespace = assembled_system_target
+
+  # This creates the target test to run against the cuckoo images, the purpose of
+  # this test is to trigger coverage collection.
+  fuchsia_unittest_package(stub_test_target) {
+    deps = [
+      "//userspace/sys/early_boot_instrumentation/test:early-boot-collector-stub",
+    ]
+    test_specs = {
+      if ((defined(invoker.disabled) && invoker.disabled) ||
+          disable_cuckoo_tests) {
+        # A disabled test is marked by an empty environments list.
+        environments = []
+      } else {
+        forward_variables_from(invoker, [ "environments" ])
+      }
+      isolated = true
+      product_bundle = main_target
+      is_boot_test = true
+
+      bootup_timeout_secs = default_boot_test_timeout_secs
+      if (defined(invoker.timeout)) {
+        bootup_timeout_secs = invoker.timeout
+      }
+    }
+  }
+
+  # Generate the assembled system with the provided kernel_zbi.
+  assembly_kernel_zbi = invoker.kernel_zbi
+  assembly_kernel_image_name = get_label_info(assembly_kernel_zbi, "name")
+  if (defined(invoker.kernel_image_name)) {
+    assembly_kernel_image_name = invoker.kernel_image_name
+  }
+
+  assembly_input = {
+    testonly = true
+    namespace = assembled_system_namespace
+    image_name = "fuchsia"
+    include_legacy_bundle = true
+    kernel_zbi = assembly_kernel_zbi
+    kernel_image_name = assembly_kernel_image_name
+    base_packages = [
+      # This package is needed to provide a fake intl_services
+      # so that snapshot won't time out trying to collect
+      # locale and timezone annotations.
+      "//userspace/testing/fidl/intl_property_manager:fake_intl_services_package",
+      ":$stub_test_target",
+    ]
+    cmdline_deps = [ "//release/testing:userboot.next-component-manager" ]
+    board_config_label = board_configuration_label
+
+    if (fxfs_blob) {
+      product_assembly_config_label =
+          "//release/testing:cuckoo-product-configuration"
+      generate_fxfs = true
+    } else {
+      if (data_filesystem_format == "fxfs") {
+        product_assembly_config_label =
+            "//release/testing:cuckoo-product-configuration-fxfs"
+      } else {
+        product_assembly_config_label =
+            "//release/testing:cuckoo-product-configuration-minfs"
+      }
+      generate_fvm = true
+      generate_fvm_fastboot = generate_fvm && assembly_generate_fvm_fastboot
+      generate_fvm_nand = generate_fvm && assembly_generate_fvm_nand
+    }
+
+    generate_vbmeta = use_vbmeta
+  }
+
+  assembled_system(assembled_system_target) {
+    forward_variables_from(assembly_input, "*")
+  }
+
+  # The following logic to determine the product bundle's partition information
+  # (including the location of the assembly manifest of the system A contents)
+  # is a standard dance with product bundles and is replicated from
+  # similar logic in `boot_test()`.
+  _partition_config_label = "//platform/boards/partitions:default($default_toolchain)"
+  if (has_board) {
+    assert(partitions_config_label != false,
+           "Need to define partitions_config_label")
+    _partition_config_label = partitions_config_label
+  }
+
+  product_bundle(main_target) {
+    testonly = true
+
+    name = main_target
+    system_a = "${target_out_dir}/${assembled_system_namespace}/images.json"
+    partitions = get_label_info(_partition_config_label, "target_out_dir") +
+                 "/" + get_label_info(_partition_config_label, "name") +
+                 "/partitions_config.json"
+
+    deps = [
+      ":$assembled_system_target",
+      _partition_config_label,
+
+      # While it is already a transitive dependency of the assembled system,
+      # that dependency is subject to package metadata barrier. Accordingly, we
+      # also depend directly the stub test package so it ends up in main
+      # repository.
+      ":$stub_test_target",
+    ]
+  }
+}
+
+# Composes a bootable kernel zbi test. That is, a zircon kernel that will launch
+# a custom user space process instead of component manager.
+#
+# Subtargets
+#
+#   * `${target_name}.cuckoo.assembled_system`
+#     Specifies a "cuckoo assembled system": an `assembled_system()` that
+#     contains a test package with a stub test component, and which boots the
+#     associated ZBI to a full Fuchsia system. This subtarget is only emitted
+#     if `generate_cuckoo = true`.
+#
+# Parameters
+#
+#   * generate_cuckoo
+#     - Optional: Whether to generate a cuckoo assembled system and emit the
+#       `.cuckoo.assembled_system` subtarget (see above).
+#     - Type: boolean
+#     - Default: `kernel_zbi_test_generates_cuckoo`
+#
+# See zbi_test() for additional parameters.
+template("kernel_zbi_test") {
+  generate_cuckoo = generate_cuckoo_tests
+  if (defined(invoker.generate_cuckoo)) {
+    generate_cuckoo = invoker.generate_cuckoo
+  }
+
+  main_target = target_name
+  cuckoo_deps = []
+
+  if (generate_cuckoo) {
+    cuckoo_target_name = "${target_name}.cuckoo"
+    if (default_toolchain == current_toolchain) {
+      _cuckoo_product_bundle(cuckoo_target_name) {
+        forward_variables_from(invoker,
+                               [
+                                 "disabled",
+                                 "environments",
+                                 "timeout",
+                               ])
+        kernel_zbi = ":$main_target.zbi"
+        kernel_image_name = "$main_target"
+      }
+    } else {
+      group(cuckoo_target_name) {
+        testonly = true
+        deps = [ ":$cuckoo_target_name($default_toolchain)" ]
+      }
+    }
+    cuckoo_deps = [ ":$cuckoo_target_name($default_toolchain)" ]
+  }
+
+  zbi_test(main_target) {
+    assert(current_cpu != "")
+    deps = []
+    data_deps = []
+    forward_variables_from(invoker, "*", [ "generate_cuckoo" ])
+    data_deps += cuckoo_deps
+    deps += [ "//zircon/kernel" ]
+  }
+}

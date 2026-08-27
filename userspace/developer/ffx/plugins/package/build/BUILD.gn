@@ -1,0 +1,23 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//userspace/developer/ffx/build/ffx_plugin.gni")
+
+ffx_plugin("ffx_package_build") {
+  sdk_category = "not-yet-specified"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+  deps = [
+    "//userspace/developer/ffx/lib/fho:lib",
+    "//userspace/developer/ffx/lib/writer:lib",
+    "//userspace/sys/pkg/lib/package-tool",
+    "//third_party/rust_crates:async-trait",
+  ]
+  args_deps = [ "//userspace/sys/pkg/lib/package-tool" ]
+
+  args_sources = [ "src/args.rs" ]
+
+  sources = [ "src/lib.rs" ]
+}

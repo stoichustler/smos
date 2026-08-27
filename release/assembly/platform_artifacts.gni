@@ -1,0 +1,110 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/bazel/bazel_inputs.gni")
+import("//release/python/python_action.gni")
+
+# Creates a directory of platform artifacts that can be shipped to out-of-tree
+# customers.
+#
+# Arguments
+#
+#   check_production_eligibility (optional)
+#     [boolean] Whether to check that the inputs to these platform artifacts are suitable for
+#     production builds.
+#
+#   deps (optional)
+#     [list] Deps to metadata walk to find the platform artifacts which will
+#     be copied into the output directory.
+#
+template("platform_artifacts") {
+  files = {
+    aib_list = "$target_out_dir/$target_name/aib_list.json"
+    platform_artifacts = "$target_out_dir/$target_name/platform_artifacts"
+    depfile = "$target_out_dir/$target_name.depfile"
+  }
+
+  labels = {
+    aib_list = "${target_name}.aib_list"
+    platform_artifacts = "${target_name}.platform_artifacts"
+    bazel_inputs = "${target_name}.bazel_inputs"
+  }
+
+  _check_production_eligibility =
+      defined(invoker.check_production_eligibility) &&
+      invoker.check_production_eligibility
+
+  generated_file(labels.aib_list) {
+    forward_variables_from(invoker,
+                           [
+                             "deps",
+                             "testonly",
+                             "visibility",
+                           ])
+
+    outputs = [ files.aib_list ]
+    data_keys = [ "assembly_input_bundles" ]
+    walk_keys = [ "assembly_input_bundles_barrier" ]
+    output_conversion = "json"
+  }
+
+  python_action(labels.platform_artifacts) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "visibility",
+                           ])
+
+    hermetic_deps = false
+    hermetic_action_ignored_prefixes = [ "${files.platform_artifacts}" ]
+
+    binary_label = "//release/assembly/scripts:generate_platform_artifacts"
+    outputs = [ "${files.platform_artifacts}/stamp" ]
+    deps = [ ":${labels.aib_list}" ]
+    depfile = files.depfile
+
+    args = [
+      "--aib-list",
+      rebase_path(files.aib_list, root_build_dir),
+      "--outdir",
+      rebase_path(files.platform_artifacts, root_build_dir),
+      "--depfile",
+      rebase_path(files.depfile, root_build_dir),
+    ]
+  }
+
+  bazel_input_directory(labels.bazel_inputs) {
+    forward_variables_from(invoker, [ "testonly" ])
+    generator = ":${labels.platform_artifacts}"
+    output_directory = files.platform_artifacts
+    gn_targets_name = labels.bazel_inputs
+  }
+
+  group(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "visibility",
+                           ])
+
+    deps = [
+      ":${labels.bazel_inputs}",
+      ":${labels.platform_artifacts}",
+    ]
+
+    if (_check_production_eligibility) {
+      assert_no_deps = [ "//release/validate:non_production_tag" ]
+    }
+
+    metadata = {
+      package_barrier = []
+      platform_artifacts = [
+        {
+          path = rebase_path(files.platform_artifacts, root_build_dir)
+          label = get_label_info(target_name, "label_no_toolchain")
+        },
+      ]
+    }
+  }
+}

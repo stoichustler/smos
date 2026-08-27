@@ -1,0 +1,20 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.hardware.block") {
+  sources = [
+    "block.fidl",
+    "ftl.fidl",
+    "overview.fidl",
+    "stats.fidl",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.unknown",
+    "//zircon/vdso/zx",
+  ]
+  enable_banjo = true
+  enable_hlcpp = true
+}

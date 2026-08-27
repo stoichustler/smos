@@ -1,0 +1,36 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+rustc_library("ffx_zxdb") {
+  version = "0.1.0"
+  edition = "2021"
+
+  deps = [
+    "//sdk/fidl/fuchsia.debugger:fuchsia.debugger_rust",
+    "//sdk/rust/zx-status",
+    "//sdk/rust/zx-types",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/lib/errors:lib",
+    "//userspace/developer/ffx/lib/symbol-index",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:futures-util",
+    "//third_party/rust_crates:rand",
+    "//third_party/rust_crates:signal-hook",
+    "//third_party/rust_crates:tokio",
+  ]
+
+  sources = [
+    "src/background.rs",
+    "src/command_builder.rs",
+    "src/debug_agent.rs",
+    "src/debugger.rs",
+    "src/lib.rs",
+    "src/util.rs",
+  ]
+}

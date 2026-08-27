@@ -1,0 +1,25 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.net.routes") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Netstack"
+
+  api = "fuchsia.net.routes.api"
+  sources = [
+    "ipv4.fidl",
+    "ipv6.fidl",
+    "routes.fidl",
+    "rules.fidl",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.net",
+    "//sdk/fidl/fuchsia.net.interfaces",
+    "//zircon/vdso/zx",
+  ]
+  enable_hlcpp = true
+}

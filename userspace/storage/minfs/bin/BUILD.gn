@@ -1,0 +1,78 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/test.gni")
+
+visibility = [ "./*" ]
+
+executable("minfs") {
+  sources = [ "main.cc" ]
+  deps = [
+    "//sdk/fidl/fuchsia.process.lifecycle:fuchsia.process.lifecycle_cpp",
+    "//sdk/lib/fdio",
+    "//sdk/lib/scheduler/cpp",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/storage/minfs",
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+fuchsia_component("minfs-component") {
+  visibility += [ "*" ]
+  manifest = "meta/minfs.cml"
+  component_name = "minfs"
+  deps = [ ":minfs" ]
+}
+
+fuchsia_package("package") {
+  visibility += [ "*" ]
+  package_name = "minfs"
+  deps = [ ":minfs-component" ]
+}
+
+group("minfs-test-component") {
+  visibility += [ "*" ]
+  deps = [
+    ":minfs-component",
+    "//userspace/storage/lib/fs_management:fs_management_shard",
+  ]
+}
+
+test("minfs_component_test") {
+  sources = [ "minfs_test.cc" ]
+  deps = [
+    "//sdk/fidl/fuchsia.component:fuchsia.component_cpp",
+    "//sdk/fidl/fuchsia.fs:fuchsia.fs_cpp",
+    "//sdk/fidl/fuchsia.hardware.block:fuchsia.hardware.block_cpp",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/async-loop",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/component/incoming/cpp",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/storage/fidl/fuchsia.fs.startup:fuchsia.fs.startup_cpp",
+    "//userspace/storage/testing:storage_driver_test_support",
+  ]
+}
+
+fuchsia_component("minfs-component-test-component") {
+  testonly = true
+  manifest = "meta/minfs_component_test.cml"
+  deps = [
+    ":minfs_component_test",
+    "//userspace/storage/testing:storage_driver_test_realm",
+  ]
+}
+
+fuchsia_test_package("minfs-component-tests") {
+  test_components = [ ":minfs-component-test-component" ]
+  deps = [ ":minfs-component" ]
+}
+
+group("tests") {
+  visibility += [ "*" ]
+  testonly = true
+  deps = [ ":minfs-component-tests" ]
+}

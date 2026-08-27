@@ -1,0 +1,55 @@
+# Copyright 2016 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/testing/cc_test_executable.gni")
+
+static_library("fsl") {
+  output_name = "fsl"
+
+  public_deps = [
+    "//userspace/lib/fsl/handles",
+    "//userspace/lib/fsl/io",
+    "//userspace/lib/fsl/socket",
+    "//userspace/lib/fsl/tasks",
+    "//userspace/lib/fsl/types",
+    "//userspace/lib/fsl/vmo",
+  ]
+}
+
+cc_test_executable("fsl_unittests") {
+  testonly = true
+
+  sources = [
+    "handles/object_info_unittest.cc",
+    "io/device_watcher_unittest.cc",
+    "io/redirection_unittest.cc",
+    "socket/blocking_drain_unittest.cc",
+    "socket/files_unittest.cc",
+    "socket/socket_drainer_unittest.cc",
+    "socket/strings_unittest.cc",
+    "tasks/fd_waiter_unittest.cc",
+    "types/type_converters_unittest.cc",
+    "vmo/file_unittest.cc",
+    "vmo/shared_vmo_unittest.cc",
+    "vmo/strings_unittest.cc",
+    "vmo/vector_unittest.cc",
+  ]
+
+  deps = [
+    ":fsl",
+    "//sdk/lib/fit",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/lib/testing/loop_fixture",
+    "//userspace/storage/lib/vfs/cpp",
+    "//third_party/googletest:gtest",
+  ]
+}
+
+fuchsia_unittest_package("fsl_tests") {
+  deps = [
+    ":fsl_unittests",
+    "//userspace/sys/test_runners:tmp_storage",
+  ]
+}

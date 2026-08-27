@@ -1,0 +1,43 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/cpp/sdk_source_set.gni")
+
+_shared_public_configs = [ "//sdk/config" ]
+
+sdk_source_set("cpp") {
+  category = "partner"
+  sdk_name = "component_outgoing_cpp"
+  include_base = "//sdk"
+  stable = true
+
+  sources = [
+    "handlers.h",
+    "outgoing_directory.cc",
+    "outgoing_directory.h",
+    "structured_config.h",
+  ]
+
+  # TODO(https://fxbug.dev/322528969): Temporarily disable asan container check for
+  # OutgoingDirectory::MakePath. This seems to be a false positive, but let's
+  # temporarily disable this test for now.
+  if (target_cpu == "riscv64") {
+    non_sdk_deps =
+        [ "//release/config/sanitizers:suppress-asan-container-overflow" ]
+  }
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/async",
+    "//sdk/lib/async:async-cpp",
+    "//sdk/lib/fdio",
+    "//sdk/lib/fit",
+    "//sdk/lib/fit-promise",
+    "//sdk/lib/stdcompat",
+    "//sdk/lib/svc",
+    "//zircon/system/ulib/zx",
+  ]
+
+  public_configs = _shared_public_configs
+}

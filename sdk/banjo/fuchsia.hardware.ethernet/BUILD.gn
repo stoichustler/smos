@@ -1,0 +1,49 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.hardware.ethernet") {
+  sources = [ "ethernet.fidl" ]
+  public_deps = [ "//zircon/vdso/zx" ]
+  enable_banjo = true
+
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # New drivers should not use fuchsia.hardware.ethernet, but use
+  # fuchsia.hardware.network.driver banjo instead.
+  #
+  # TODO(https://fxbug.dev/42154225): Migrate all of these away from
+  # fuchsia.hardware.ethernet.
+  visibility = [
+    "//sdk/banjo/fuchsia.hardware.wlan.fullmac:*",
+    "//userspace/connectivity/ethernet/drivers/aml-ethernet:*",
+    "//userspace/connectivity/ethernet/drivers/asix-88179:*",
+    "//userspace/connectivity/ethernet/drivers/asix-88772b:*",
+    "//userspace/connectivity/ethernet/drivers/dwmac:*",
+    "//userspace/connectivity/ethernet/drivers/ethernet/netdevice-migration:*",
+    "//userspace/connectivity/ethernet/drivers/realtek-8111:*",
+    "//userspace/connectivity/ethernet/drivers/realtek-8211f:*",
+    "//userspace/connectivity/ethernet/drivers/rndis-function:*",
+    "//userspace/connectivity/ethernet/drivers/rndis-host:*",
+    "//userspace/connectivity/ethernet/drivers/usb-cdc-ecm:*",
+    "//userspace/connectivity/ethernet/drivers/usb-cdc-function:*",
+    "//userspace/connectivity/telephony/drivers/qmi-usb-transport:*",
+    "//userspace/connectivity/wlan/drivers/third_party/broadcom/brcmfmac:*",
+    "//userspace/connectivity/wlan/drivers/wlansoftmac:*",
+    "//userspace/connectivity/wlan/testing/wlantap-driver:*",
+    "//userspace/devices/board/drivers/av400:*",
+    "//userspace/devices/board/drivers/fragment:*",
+    "//userspace/devices/board/drivers/vim3:*",
+    "//userspace/lib/ddktl/tests:ddktl-test",
+    "//zircon/third_party/dev/ethernet/e1000:*",
+  ]
+}

@@ -1,0 +1,66 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+import("//release/rust/rustc_macro.gni")
+import("//userspace/developer/ffx/build/protocols.gni")
+
+template("ffx_protocols") {
+  output_name = target_name
+  if (defined(invoker.name)) {
+    output_name = invoker.name
+  }
+
+  protocol_version = "0.1.0"
+  if (defined(invoker.version)) {
+    protocol_version = invoker.version
+  }
+
+  protocol_deps = []
+  if (defined(invoker.deps)) {
+    protocol_deps += invoker.deps
+  }
+
+  protocol_sources = []
+  if (defined(invoker.sources)) {
+    protocol_sources += invoker.sources
+  }
+
+  protocols_gen = output_name + "_gen"
+  protocols(protocols_gen) {
+    output_name = "macros.rs"
+    deps = protocol_deps
+  }
+
+  protocol_deps += [ ":" + protocols_gen ]
+
+  protocols_macro_lib = output_name + "_macros"
+  rustc_macro(protocols_macro_lib) {
+    output_name = protocols_macro_lib
+    version = protocol_version
+    edition = "2018"
+    source_root = "$target_gen_dir/macros.rs"
+    sources = [ "$target_gen_dir/macros.rs" ]
+    deps = protocol_deps + [
+             "//userspace/developer/ffx/lib/protocols:lib",
+             "//userspace/developer/ffx/lib/protocols/dependencies:lib",
+             "//userspace/lib/fidl/rust/fidl",
+             "//third_party/rust_crates:quote",
+           ]
+  }
+
+  rustc_library(output_name + "_lib") {
+    name = output_name
+    version = protocol_version
+    edition = "2018"
+    with_unit_tests = true
+    deps = protocol_deps + [ ":" + protocols_macro_lib ] + [
+             "//userspace/developer/ffx/lib/protocols:lib",
+             "//userspace/lib/fidl/rust/fidl",
+             "//third_party/rust_crates:tracing",
+           ]
+
+    sources = protocol_sources
+  }
+}

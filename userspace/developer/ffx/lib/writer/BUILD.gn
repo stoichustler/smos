@@ -1,0 +1,44 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+# TODO(b/394964930): Enable host-only assert
+assert(is_host, "ffx writer is for host tools only")
+
+rustc_library("lib") {
+  name = "ffx_writer"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+  sources = [
+    "src/lib.rs",
+    "src/machine_writer.rs",
+    "src/simple_writer.rs",
+    "src/verified_machine_writer.rs",
+  ]
+  deps = [
+    "//userspace/developer/ffx/lib/fho:lib",
+    "//userspace/developer/lib/writer:lib",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:schemars",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:valico",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":lib_test($host_toolchain)" ]
+}
+
+group("writer") {
+  testonly = true
+
+  deps = [
+    ":lib",
+    ":tests",
+  ]
+}

@@ -1,0 +1,50 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.power.broker") {
+  sdk_category = "partner"
+  stable = false
+  sdk_area = "Power"
+  sources = [ "broker.fidl" ]
+  public_deps = [ "//zircon/vdso/zx" ]
+
+  # This is still experimental, so restricting visibility for now.
+  visibility = [
+    "//examples/power/*",
+    "//sdk:*",
+    "//sdk/fidl:*",
+    "//sdk/fidl/fuchsia.hardware.hrtimer/*:*",
+    "//sdk/fidl/fuchsia.power.system/*:*",
+    "//sdk/fidl/fuchsia.power.topology.test/*:*",
+    "//sdk/fidl/fuchsia.session.power/*:*",
+    "//sdk/lib/driver/power/cpp/*:*",
+    "//userspace/connectivity/network/netstack3:*",
+    "//userspace/connectivity/network/tests/integration/power:*",
+    "//userspace/connectivity/wlan/wlanix/*:*",
+    "//userspace/developer/forensics/*:*",
+    "//userspace/devices/block/drivers/aml-sdmmc/*:*",
+    "//userspace/devices/block/drivers/sdmmc/*:*",
+    "//userspace/devices/block/drivers/ufs/*:*",
+    "//userspace/devices/bus/drivers/platform/test/*:*",
+    "//userspace/devices/hrtimer/drivers/aml-hrtimer/*:*",
+    "//userspace/graphics/drivers/msd-arm-mali/*:*",
+    "//userspace/power/bench/*:*",
+    "//userspace/power/broker/*:*",
+    "//userspace/power/shutdown-shim/*:*",
+    "//userspace/power/system-activity-governor-controller/*:*",
+    "//userspace/power/system-activity-governor/*:*",
+    "//userspace/power/testing/client/*:*",
+    "//userspace/power/testing/fake-broker/*:*",
+    "//userspace/power/testing/fake-hrtimer/*:*",
+    "//userspace/power/testing/system-integration/*:*",
+    "//userspace/power/topology-test-daemon/*:*",
+    "//userspace/session/bin/*",
+    "//userspace/session/tests/session_manager:*",
+    "//userspace/starnix/*:*",
+    "//userspace/sys/time/timekeeper/*:*",
+    "//vendor/*",
+  ]
+}

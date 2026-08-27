@@ -1,0 +1,26 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("tests") {
+  testonly = true
+  public_deps = [
+    "far:tests",
+    "isolated-ota:tests",
+    "omaha-client:tests",
+    "pkg-cache:tests",
+    "pkg-cache-as-base-resolver:tests",
+    "pkg-resolver:tests",
+    "pkgctl:tests",
+    "pkgdir:tests",
+    "system-update-checker:tests",
+    "system-update-committer:tests",
+    "system-updater:tests",
+    "update:tests",
+  ]
+}
+
+group("e2e_tests") {
+  testonly = true
+  public_deps = [ "system-tests:tests" ]
+}

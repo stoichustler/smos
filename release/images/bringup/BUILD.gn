@@ -1,0 +1,128 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/assembled_system.gni")
+import("//release/assembly/generated_partitions_config.gni")
+import("//release/assembly/legacy_image_metadata_overrides.gni")
+import("//release/assembly/product_assembly_configuration.gni")
+import("//release/board.gni")
+import("//release/images/args.gni")
+import("//release/images/custom_signing.gni")
+import("//release/images/vboot/vboot.gni")
+import("//release/product.gni")
+import("//release/sdk/product_bundle.gni")
+import("//release/security.gni")
+import("//zircon/kernel/phys/qemu.gni")
+
+assert(current_toolchain == default_toolchain,
+       "//release/images/* are only valid in the Fuchsia toolchain")
+
+files = {
+  partitions_config = "$target_out_dir/partitions_config.json"
+
+  # Outputs of assembly.
+  outdir = target_out_dir + "/bringup"
+  zbi = "${outdir}/bringup.zbi"
+  zbi_signed = "${outdir}/bringup.zbi.signed"
+  vbmeta = "${outdir}/bringup.vbmeta"
+  images_json = "${outdir}/images.json"
+
+  # Outputs of recovery.
+  recovery_name = get_label_info(recovery_label, "name")
+  recovery_outdir =
+      get_label_info(recovery_label, "target_out_dir") + "/" + recovery_name
+  recovery_zbi = "${recovery_outdir}/${recovery_name}.zbi"
+  recovery_zbi_signed = "${recovery_outdir}/${recovery_name}.zbi.signed"
+  recovery_vbmeta = "${recovery_outdir}/${recovery_name}.vbmeta"
+  recovery_images_json = "${recovery_outdir}/images.json"
+
+  qemu_kernel = qemu_boot_shim.path
+}
+
+_partitions_config = "//platform/boards/partitions:default"
+if (has_board) {
+  assert(partitions_config_label != false,
+         "Need to define partitions_config_label")
+  _partitions_config = partitions_config_label
+}
+_partitions_config_file =
+    get_label_info(_partitions_config, "target_out_dir") + "/" +
+    get_label_info(_partitions_config, "name") + "/partitions_config.json"
+
+assert(fuchsia_product_assembly_config_label != false,
+       "fuchsia_product_assembly_config_label must be defined to use bringup")
+
+bringup_base = {
+  testonly = true
+  include_legacy_bundle = true
+  output_dir = root_build_dir
+  generate_vbmeta = use_vbmeta
+
+  if (custom_signing_script != "") {
+    inputs = custom_signing_script_inputs
+    deps = [ "//release/images/custom_signing:deps" ]
+    generate_signed_zbi = true
+  } else if (use_vboot) {
+    inputs = vboot_action.inputs
+    generate_signed_zbi = true
+  }
+
+  product_assembly_config_label = fuchsia_product_assembly_config_label
+  board_config_label = board_configuration_label
+  use_bringup_platform_bundles_only = true
+  if (bringup_platform_aib_names != []) {
+    platform_aib_names = bringup_platform_aib_names
+  }
+
+  bootfs_labels = [ "//:developer_base_packages" ]
+}
+
+assembled_system("bringup_assembly") {
+  forward_variables_from(bringup_base, "*")
+  if (smos_minimal_assembly) {
+    # Product Assembly names the ZBI from storage.filesystems.image_name.
+    # Keep the historical bringup target namespace, but make the declared GN
+    # outputs agree with the compact product's actual file name.
+    image_name = "smos_boot"
+    namespace = "bringup"
+  } else {
+    image_name = "bringup"
+  }
+  image_metadata_overrides = legacy_bringup_image_metadata_overrides
+}
+
+product_bundle("product_bundle") {
+  testonly = true
+  deps = [
+    ":bringup_assembly",
+    _partitions_config,
+    recovery_label,
+  ]
+
+  name = main_product_bundle_name
+  partitions = _partitions_config_file
+  system_a = files.images_json
+  system_r = files.recovery_images_json
+
+  # Create lists of the files that are referenced by the assembly manifests.
+  _assembly_contents = [ files.qemu_kernel ]
+  _recovery_contents = [ files.qemu_kernel ]
+
+  _assembly_contents += [ files.zbi ]
+  _recovery_contents += [ files.recovery_zbi ]
+
+  if (use_vbmeta) {
+    _assembly_contents += [ files.vbmeta ]
+    _recovery_contents += [ files.recovery_vbmeta ]
+  }
+
+  # List the contents of each input so that the outputs can be calculated.
+  system_a_contents = _assembly_contents
+  system_r_contents = _recovery_contents
+}
+
+group("bringup") {
+  testonly = true
+  public_deps = [ ":product_bundle" ]
+}

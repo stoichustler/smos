@@ -1,0 +1,746 @@
+# Copyright 2019 The Fuchsia Authors
+#
+# Use of this source code is governed by a MIT-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/MIT
+
+import("//release/config/zircon/standard.gni")
+import("//release/toolchain/variant.gni")
+import("//release/toolchain/zircon/zircon_toolchain_suite.gni")
+import("//release/zbi/zbi.gni")
+import("//release/zircon/c_utils.gni")
+import("//release/zircon/zircon_cpu.gni")
+import("//zircon/kernel/phys/kernel_elf_binary.gni")
+import("kernel_package.gni")
+import("kernel_shell_script.gni")
+import("params.gni")
+
+declare_args() {
+  # Cause //zircon/kernel:boot_tests to generate the phys boot tests
+  # for all supported CPUs, not just $target_cpu.
+  all_cpu_kernel_boot_tests = false
+
+  # A list of GN labels reaching zbi_input()-style targets to include in the
+  # kernel ZBI.  These targets can be zbi_input(), kernel_cmdline(), etc. to
+  # inject ZBI items or resource(), etc. to inject items into the filesystem
+  # image that physboot decodes.
+  #
+  # These are injected first, so an item that's itself a zbi_executable() or
+  # the like can be listed here to be used as a ZBI-to-ZBI boot shim
+  # (e.g. an architecture-specific phys boot shim)
+  kernel_zbi_extra_deps = []
+
+  # A list of GN labels comprising additional dependencies of the kernel
+  # proper. This can be useful - in a prototyping or 'vendor' capacity - for
+  # injecting new instances of subsystems that the kernel has defined modularly
+  # (e.g., pdev drivers or k commands).
+  kernel_extra_deps = []
+}
+
+kernel_cpus = standard_fuchsia_cpus
+if (smos_minimal_assembly) {
+  kernel_cpus -= [ "x64" ]
+}
+
+if (current_toolchain == default_toolchain) {
+  # In the default toolchain, just define the kernel toolchains.
+  foreach(cpu, kernel_cpus) {
+    zircon_toolchain_suite("kernel_$cpu") {
+      cpu = cpu
+      os = "fuchsia"
+      environment = "kernel"
+
+      if (cpu == "x64") {
+        kernel_cpu = "x86"
+      } else {
+        kernel_cpu = cpu
+      }
+
+      toolchain_tags = [
+        "kernel",
+        "no-floating-point",
+        "standalone",
+      ]
+
+      prefix_configs = [
+        "//zircon/kernel:headers",
+
+        # TODO(https://fxbug.dev/42121444): Many include/ headers use <ktl/*.h> headers.
+        "//zircon/kernel/lib/ktl:headers.config",
+        "//sdk/lib/fit:headers.config",
+        "//sdk/lib/stdcompat:headers.config",
+
+        # <stdlib.h> has #include <lib/heap.h>.
+        "//zircon/kernel/lib/heap:headers.config",
+
+        # <lib/lockup_detector.h> is included by some "low-level" headers.
+        "//zircon/kernel/lib/lockup_detector:headers.config",
+
+        # <kernel/percpu.h> has #include <lib/lazy_init/lazy_init.h>.
+        "//zircon/system/ulib/lazy_init:headers.config",
+
+        # <kernel/spinlock.h> has #include <lockdep/lock_policy.h>.
+        "//zircon/system/ulib/lockdep:headers.config",
+
+        # <kernel/{scheduler.h,scheduler_state.h> has #include <ffl/fixed.h>.
+        "//zircon/system/ulib/ffl:headers.config",
+
+        # <kernel/thread.h> has #include <lib/kconcurrent/*.h>.
+        "//zircon/kernel/lib/kconcurrent:headers.config",
+        "//zircon/system/ulib/concurrent:headers.config",
+
+        # <kernel/thread.h> has #include <vm/kstack.h>.
+        "//zircon/kernel/vm:headers.config",
+
+        # <vm/page.h> has #include <vm/phys/arena.h>
+        "//zircon/kernel/vm/phys:headers.config",
+
+        # <vm/vm_object.h> has #include <lib/user_copy/user_ptr.h>.
+        "//zircon/kernel/lib/user_copy:headers.config",
+
+        # <vm/pmm_checker.h> has #include <lib/boot-options/boot-options.h>.
+        "//zircon/kernel/lib/acpi_lite:headers.config",
+        "//zircon/kernel/lib/boot-options:headers.config",
+        "//zircon/kernel/lib/devicetree:headers.config",
+        "//zircon/system/ulib/uart:headers.config",
+        "//zircon/system/ulib/hwreg:headers.config",
+
+        # <vm/phys/arena.h> has #include <lib/memalloc/range.h>
+        "//zircon/kernel/phys/lib/memalloc:range.headers.config",
+
+        # <lib/ktrace.h> has #include <lib/zircon-internal/ktrace.h>.
+        "//zircon/system/ulib/zircon-internal:headers.config",
+
+        # <lib/ktrace.h> has #include <lib/ktrace/string_ref.h>.
+        "//zircon/kernel/lib/ktrace:headers.config",
+        "//zircon/kernel/lib/ktrace:suppress-warning.config",
+        "//zircon/kernel/lib/special-sections:headers.config",
+        "//userspace/performance/lib/fxt:headers.config",
+
+        # <kernel/thread.h> has #include <fbl/macros.h>
+        "//zircon/system/ulib/fbl:headers.config",
+
+        # <dev/iommu.h> has #include <fbl/name.h>
+        "//zircon/kernel/lib/fbl:headers.config",
+
+        # <reg.h> has #include <lib/mmio-ptr/mmio-ptr.h>.
+        "//zircon/system/ulib/mmio-ptr:headers.config",
+
+        # Everywhere has #include <lib/fit/result.h>
+        # Everywhere has #include <zx/result.h>
+        "//zircon/system/ulib/zx:headers.config",
+
+        "//zircon/kernel/lib/backtrace:headers.config",
+
+        "//zircon/kernel/lib/version:headers.config",
+
+        "//zircon/kernel/lib/wake-vector:headers.config",
+
+        # <platform.h> has #include <lib/arch/ticks.h>.
+        "//zircon/kernel/lib/arch/$kernel_cpu:headers.config",
+        "//zircon/kernel/lib/arch:common-headers.config",
+
+        # Many headers have #include <lib/zbi-format/zbi.h>.
+        "//sdk/lib/zbi-format:include",
+
+        # <kernel/scheduler.h> depends on <lib/power-management/power-state.h>
+        "//zircon/kernel/lib/power-management:headers.config",
+
+        # <kernel/scheduler.h> depends on <lib/stall.h>
+        "//zircon/kernel/lib/stall:headers.config",
+      ]
+
+      configs = [ "//zircon/kernel:kernel_config" ]
+
+      # NOTE: kernel artifacts currently do not build under fuzzer
+      # variants. This was also true with the Zircon build, but
+      # the Fuchsia build never invoked it with corresponding
+      # variant selectors. Using an exclude_variant_tag is
+      # enough to fix the issue.
+      exclude_variant_tags = [ "fuzzer" ]
+      if (cpu == "riscv64") {
+        # TODO(https://fxbug.dev/42076027): no asan for riscv64 yet
+        exclude_variant_tags += [ "asan" ]
+      } else if (cpu == "arm64") {
+        # TODO(https://fxbug.dev/379891035): arm64 KASan support was
+        # temporarily removed and is to be reimplemeted.
+        exclude_variant_tags += [ "asan" ]
+      }
+
+      # Always enable frame pointers in the kernel so there are panic
+      # backtraces and such.
+      # TODO(mcgrathr): Consider either removing this so there's a
+      # no-frame-pointers option, or removing the kernel's support for
+      # !WITH_FRAME_POINTERS if it will never be used.
+      remove_common_configs = [ "//release/config:default_frame_pointers" ]
+      configs += [ "//release/config:frame_pointers" ]
+
+      if (cpu == "x64") {
+        # TODO(https://fxbug.dev/42101838): x86 kernel can't be built without --gc-sections
+        # because of crufty acpica code, and some compiler instrumentation
+        # is broken wrt --gc-sections semantics.
+        # Ensure that linker GC is enabled.
+        configs += [ "//release/config:linker_gc" ]
+      }
+
+      # As a special case, kernel assertions are controlled by the kernel_debug_level
+      # variable, and not zx_assert_level (though it defaults to the same value, but
+      # some product configurations may decide to change it).
+      remove_common_configs += [ "//release/config/zircon:default_assert_level" ]
+
+      # Map kernel_debug_level above 2 to an assert_level of 2, as that is the
+      # highest valid assertion level.
+      if (kernel_debug_level > 2) {
+        kernel_assert_level = 2
+      } else {
+        kernel_assert_level = kernel_debug_level
+      }
+      configs += [ "//release/config/zircon:assert_level_$kernel_assert_level" ]
+
+      # TODO(https://fxbug.dev/42150661): the kernel crashes on boot if built with -O0.
+      _optimize_none = [ "//release/config:optimize_none" ]
+      if (configs + _optimize_none - _optimize_none != configs) {
+        configs -= _optimize_none
+        configs += [ "//release/config:optimize_debug" ]
+      }
+    }
+  }
+}
+
+# For any standalone static binary.
+config("standalone") {
+  ldflags = [
+    "-nostdlib",
+    "-static",
+  ]
+
+  cflags = [
+    "-ffreestanding",
+    "-include",
+    rebase_path("include/hidden.h", root_build_dir),
+
+    # We want `.debug_frame` for the kernel (https://fxbug.dev/42104841).  And we still want
+    # asynchronous unwind tables.  Alas there's (currently) no way to
+    # achieve this with our GCC.  At the moment we compile with
+    # `-fno-omit-frame-pointer`, which is good because we link with
+    # `--gc-sections`, which means `.eh_frame` gets discarded so GCC-built
+    # kernels don't have any unwind info (except for assembly)!
+    "-fno-unwind-tables",
+  ]
+
+  # Always feed assembler code the `.cfi_sections` directive to
+  # populate only `.debug_frame` and not `.eh_frame`.
+  asmflags = [
+    "-include",
+    rebase_path("debug-frame.S", root_build_dir),
+  ]
+
+  cflags_cc = [
+    # Underlying kernel heap only has default alignment of 8 bytes, so pass
+    # this to the compiler as the default new alignment.
+    "-faligned-new=8",
+  ]
+
+  if (current_os != "win") {
+    if (current_cpu == "x64") {
+      # This only matters in an environment where interrupt handlers might
+      # push trap frames in the same privilege level, like the kernel.
+      # e.g. Multiboot probably doesn't actually need it, but it doesn't hurt.
+      cflags += [ "-mno-red-zone" ]
+    } else if (current_cpu == "arm64") {
+      # This matters if vector registers are not available, e.g. in the kernel
+      # since the they hold unsaved user state, or in the physmem environment
+      # because they might not be enabled in hardware yet.
+      cflags += [ "-mgeneral-regs-only" ]
+    }
+  }
+
+  if (is_gcc && current_os == "fuchsia") {
+    cflags += [ "-fpie" ]
+  }
+
+  if (!is_gcc && current_os == "fuchsia") {
+    # In the Fuchsia-target toolchains there's no way to prevent the
+    # compiler driver from passing -pie, so negate it.  BFD ld doesn't
+    # have --no-pie, but arm64-elf-gcc doesn't pass -pie either.
+    ldflags += [ "-Wl,--no-pie" ]
+  }
+
+  configs = [ "//release/config:no_exceptions" ]
+}
+
+if (is_kernel) {
+  # These are needed both in kernel sources (pervasively) and in the linker
+  # scripts.
+  kernel_defines = [
+    # TODO: should not be needed in C, but is in one place now.
+    "KERNEL_BASE=$kernel_base",
+
+    "SMP_MAX_CPUS=$smp_max_cpus",
+  ]
+
+  config("instrumented-stack-size") {
+    # Note: Using this extra variable to capture whether the stack size should
+    # be increased or not, is due to GN's limitation on treating unevaluated parts
+    # of an expression as unused (e.g. a || b, would flag `b` as unused if `a` is true).
+    increase_stack_size = false
+
+    # Lockdep enabled.
+    if (enable_lock_dep || enable_lock_dep_metadata_only ||
+        scheduler_lock_spin_tracing_enabled || lock_tracing_enabled) {
+      increase_stack_size = true
+    }
+
+    # Variant considered instrumentation.
+    if (toolchain_variant.tags + [ "instrumented" ] - [ "instrumented" ] !=
+        toolchain_variant.tags) {
+      increase_stack_size = true
+    }
+    if (increase_stack_size) {
+      defines = [ "CUSTOM_DEFAULT_STACK_SIZE=16384" ]
+    }
+  }
+
+  # This is the top config for all kernel code.
+  variant("kernel_config") {
+    configs = [
+      ":jtrace_config",
+      ":lock_dep",
+      ":scheduler",
+      ":standalone",
+      ":warnings",
+      "arch/$zircon_cpu:abi",
+      "arch/$zircon_cpu:kernel",
+      "//release/config:no-finite-loops",
+      "//release/config:zero-call-used-regs",
+
+      # include/lib/counters.h and kernel.ld depend on -fdata-sections.
+      "//release/config/zircon:data_sections",
+
+      # Provides checks for maximum supported kernel sizes.
+      ":kernel_image_max_size",
+
+      # Overrides default stack size for instrumented builds.
+      ":instrumented-stack-size",
+    ]
+
+    # TODO(https://fxbug.dev/42101573): This dependency is conditional because when built
+    # with GCC the kernel uses function scoped statics requiring dynamic
+    # initialization. Once https://fxbug.dev/42101573 is fixed, this dependency can be
+    # removed.
+    if (is_gcc) {
+      # Don't emit extra code making static initializers thread-safe.
+      configs += [ "//release/config/zircon:no_threadsafe_statics" ]
+    }
+
+    # Always enable frame pointers in the kernel so there are panic
+    # backtraces and such.
+    # TODO(mcgrathr): Consider either removing this so there's a
+    # no-frame-pointers option, or removing the kernel's support for
+    # !WITH_FRAME_POINTERS if it will never be used.
+    configs += [ "//release/config:frame_pointers" ]
+
+    defines = kernel_defines + kernel_extra_defines
+    defines += [
+      "_KERNEL",
+      "LK",
+      "ENABLE_PANIC_SHELL",
+      "ZIRCON_TOOLCHAIN",
+      "LK_DEBUGLEVEL=$kernel_debug_level",
+      "DEBUG_PRINT_LEVEL=$kernel_debug_print_level",
+      "VM_TRACING_LEVEL=$vm_tracing_level",
+      "FUTEX_BLOCK_TRACING_ENABLED=$futex_block_tracing_enabled",
+      "LOCK_TRACING_ENABLED=$lock_tracing_enabled",
+      "EXPERIMENTAL_THREAD_SAMPLER_ENABLED=$experimental_thread_sampler_enabled",
+    ]
+
+    if (kernel_no_userabi) {
+      defines += [ "KERNEL_NO_USERABI" ]
+    }
+
+    cflags = [ "-fpie" ]
+  }
+
+  config("headers") {
+    include_dirs = [
+      "include",
+      "lib/libc/include",
+    ]
+
+    # This is in public_configs of libc:headers, so we need it explicitly here
+    # to match up with the include_dirs here that replicates what a proper dep
+    # on libc:headers would yield.
+    configs = [ "lib/libc:headers.after" ]
+  }
+
+  config("warnings") {
+    cflags = [
+      "-Wformat=2",
+      "-Wmissing-declarations",
+      "-Wvla",
+    ]
+
+    # GCC supports `-Wformat-signedness` but Clang currently does not.
+    if (is_gcc) {
+      cflags += [ "-Wformat-signedness" ]
+    }
+
+    # TODO(https://fxbug.dev/42159114): Eventually enable -Wshadow for GCC.  It's currently
+    # disabled because GCC is more aggressive than Clang.
+    if (!is_gcc) {
+      cflags += [ "-Wshadow" ]
+    }
+
+    cflags_c = [ "-Wmissing-prototypes" ]
+  }
+
+  config("lock_dep") {
+    visibility = [ ":*" ]
+    defines = []
+    if (enable_lock_dep) {
+      defines += [
+        "WITH_LOCK_DEP=1",
+        "LOCK_DEP_ENABLED_FEATURE_LEVEL=2",
+      ]
+    } else if (enable_lock_dep_metadata_only ||
+               scheduler_lock_spin_tracing_enabled || lock_tracing_enabled) {
+      defines += [
+        "WITH_LOCK_DEP=1",
+        "LOCK_DEP_ENABLED_FEATURE_LEVEL=1",
+      ]
+    }
+    if (enable_lock_dep_tests) {
+      defines += [ "WITH_LOCK_DEP_TESTS=1" ]
+    }
+  }
+
+  config("scheduler") {
+    visibility = [ ":*" ]
+    defines = [
+      "SCHEDULER_TRACING_LEVEL=$scheduler_tracing_level",
+      "SCHEDULER_QUEUE_TRACING_ENABLED=$scheduler_queue_tracing_enabled",
+      "SCHEDULER_EXTRA_INVARIANT_VALIDATION=$scheduler_extra_invariant_validation",
+      "SCHEDULER_LOCK_SPIN_TRACING_COMPRESSED=$scheduler_lock_spin_tracing_compressed",
+      "SCHEDULER_LOCK_SPIN_TRACING_ENABLED=$scheduler_lock_spin_tracing_enabled",
+      "WAIT_QUEUE_DEPTH_TRACING_ENABLED=$wait_queue_depth_tracing_enabled",
+    ]
+  }
+
+  config("persistent_ram_config") {
+    visibility = [
+      ":*",
+      "//zircon/kernel/lib/crashlog/*",
+      "//zircon/kernel/lib/jtrace/*",
+      "//zircon/kernel/lib/persistent-debuglog/*",
+    ]
+    defines = [ "PERSISTENT_RAM_ALLOCATION_GRANULARITY=$persistent_ram_allocation_granularity" ]
+  }
+
+  # In architechtures where it is necessary, determined the number of boot pages to be preallocated
+  # from BSS to map the kernel in the higher address space for enabling the MMU when booting.
+  # See `start.S` of the relevant architectures for more information.
+  config("kernel_image_max_size") {
+    if (target_cpu == "arm64" || target_cpu == "riscv64") {
+      if (toolchain_variant.tags + [ "coverage" ] - [ "coverage" ] !=
+          toolchain_variant.tags) {
+        # 25 MB upperbound for coverage builds.
+        kernel_image_max_size = 26214400
+      } else {
+        # 14 MB upperbound for non coverage builds.
+        kernel_image_max_size = 14680064
+      }
+    } else if (target_cpu == "x64") {
+      # x64 hard coded to support up to 64 MB.
+      kernel_image_max_size = 67108864
+    }
+
+    visibility = [
+      ":*",
+      "//zircon/kernel/phys:*",
+    ]
+    defines = [ "KERNEL_IMAGE_MAX_SIZE=$kernel_image_max_size" ]
+  }
+
+  config("jtrace_config") {
+    visibility = [
+      ":*",
+      "//zircon/kernel/lib/jtrace/*",
+    ]
+
+    if (!jtrace_enabled) {
+      defines = [ "JTRACE_TARGET_BUFFER_SIZE=0" ]
+    } else {
+      if (jtrace_target_buffer_size == "auto") {
+        if (jtrace_enabled == "persistent") {
+          jtrace_target_buffer_size = 4096
+        } else {
+          jtrace_target_buffer_size = 32768
+        }
+      }
+
+      if (jtrace_use_large_entries == "auto") {
+        if (jtrace_enabled == "persistent") {
+          jtrace_use_large_entries = false
+        } else {
+          jtrace_use_large_entries = true
+        }
+      }
+
+      defines = [
+        "JTRACE_TARGET_BUFFER_SIZE=$jtrace_target_buffer_size",
+        "JTRACE_LAST_ENTRY_STORAGE=$jtrace_last_entry_storage",
+        "JTRACE_USE_LARGE_ENTRIES=$jtrace_use_large_entries",
+        "JTRACE_USE_MONO_TIMESTAMPS=$jtrace_use_mono_timestamps",
+      ]
+
+      if (jtrace_enabled == "persistent") {
+        defines += [ "JTRACE_IS_PERSISTENT=true" ]
+      } else {
+        defines += [ "JTRACE_IS_PERSISTENT=false" ]
+      }
+    }
+  }
+
+  kernel_elf_binary("physzircon") {
+    visibility = [ ":*" ]
+
+    configs += [
+      ":elf-kernel.config",
+      ":kernel_defsym",
+    ]
+    deps = [
+      ":zircon-main",
+      "phys:physboot.kernel",
+    ]
+  }
+
+  config("elf-kernel.config") {
+    visibility = [ ":*" ]
+
+    inputs = [ "elf-kernel.ld" ]
+    ldflags = [ "-Wl,-T," + rebase_path(inputs[0], root_build_dir) ]
+
+    configs = [
+      "//release/config/zircon:static-pie-compile",
+      "//release/config/zircon:static-pie-link",
+    ]
+  }
+
+  group("zircon-main") {
+    deps = [
+             ":test",  # TODO: make optional, add testonly taint
+             "top",
+
+             # Ensures that //docs/gen/boot-options.md is never stale.
+             "lib/boot-options:check-markdown($default_toolchain)",
+           ] + kernel_extra_deps
+    if (current_cpu == "arm64") {
+      deps += [ "platform/generic-arm" ]
+    } else if (current_cpu == "riscv64") {
+      deps += [ "platform/generic-riscv64" ]
+    } else if (current_cpu == "x64") {
+      deps += [ "platform/pc" ]
+    }
+  }
+
+  physzircon_rspfile = "$target_gen_dir/physzircon.rsp"
+  link_output_rspfile("physzircon.rsp") {
+    visibility = [ ":*" ]
+    deps = [ ":physzircon" ]
+    outputs = [ physzircon_rspfile ]
+  }
+
+  # See elf-kernel.ld where KERNEL_GOT_TOLERANCE is used.
+  if (current_cpu == "arm64" && is_gcc) {
+    # Each slot is 8 bytes.  The first two special slots are always there if
+    # .got is there at all, per psABI.  GNU (BFD) ld seems to emit two more
+    # unused slots with no associated relocs to explain their existence.
+    got_tolerance = 32
+  } else {
+    got_tolerance = 0
+  }
+
+  # These are needed only in the linker script.
+  linker_script_defines = [ "KERNEL_GOT_TOLERANCE=$got_tolerance" ]
+
+  # This supplies those variables for use in linker scripts.
+  config("kernel_defsym") {
+    visibility = [ ":*" ]
+    ldflags = []
+    foreach(assignment, kernel_defines + linker_script_defines) {
+      ldflags += [ "-Wl,-defsym,$assignment" ]
+    }
+  }
+
+  group("test") {
+    #TODO: testonly = true
+    visibility = [ ":*" ]
+    deps = [
+      "debug",
+      "tests",
+    ]
+  }
+
+  toolchain_utils_action("validate-kernel-symbols") {
+    visibility = [ ":*" ]
+    outputs = [ "$target_gen_dir/$target_name.stamp" ]
+    script = "//zircon/kernel/scripts/validate-kernel-symbols.py"
+    utils = [ "nm" ]
+    deps = [
+      ":physzircon",
+      ":physzircon.rsp",
+    ]
+    sources = [ physzircon_rspfile ]
+    depfile = "$target_gen_dir/$target_name.d"
+    args = rebase_path(sources + outputs + [ depfile ], root_build_dir)
+  }
+
+  # Copy gdb extension script file needed for kernel debugging.
+  copy("gdb_extension") {
+    visibility = [ ":*" ]
+    sources = [ "scripts/zircon.elf-gdb.py" ]
+    outputs = [ "$root_out_dir/zircon.elf-gdb.py" ]
+  }
+
+  kernel_package("zircon") {
+    deps = [ ":physzircon" ]
+
+    # Embed userboot, the vDSO, and the version-string.txt file in the package
+    # subdirectory.
+    deps += [
+      "//zircon/kernel/lib/userabi/userboot",
+      "//zircon/kernel/lib/userabi/vdso",
+      "//zircon/kernel/lib/version:version-string.txt",
+    ]
+  }
+
+  # The final kernel ZBI combines physboot with that kernel storage payload.
+  zbi("kernel") {
+    deps = kernel_zbi_extra_deps
+    deps += [
+      ":zircon",
+      "phys:physboot",
+    ]
+    compress = "zstd.max"
+
+    output_dir = root_out_dir
+    output_extension = "zbi"
+    output_path = rebase_path("$output_dir/$target_name.$output_extension",
+                              root_build_dir)
+    metadata = {
+      # For the //:images build_api_module().
+      images = [
+        {
+          label = get_label_info(":$target_name", "label_with_toolchain")
+          name = "kernel"
+          tags = [ "incomplete" ]
+          type = "zbi"
+          path = output_path
+          cpu = current_cpu
+        },
+      ]
+    }
+  }
+} else {
+  group("kernel") {
+    public_deps = [ ":kernel(//zircon/kernel:kernel_$target_cpu)" ]
+  }
+
+  group("tests") {
+    testonly = true
+    deps = [
+      "arch/$zircon_cpu/user-copy:tests",
+      "dev/coresight/tests($host_toolchain)",
+      "lib/acpi_lite:tests",
+      "lib/arch:tests",
+      "lib/boot-options/tests",
+      "lib/devicetree/tests",
+      "lib/efi:tests",
+      "lib/heap/cmpctmalloc:tests",
+      "lib/power-management:tests",
+      "lib/sched:tests",
+      "phys:tests",
+      "phys/lib:tests",
+      "vm/phys:tests",
+    ]
+
+    if (current_cpu == "x64") {
+      deps += [ "lib/libc/string/arch/x86:tests" ]
+    }
+
+    # TODO(https://fxbug.dev/42101573): This dependency is conditional because when built
+    # with GCC the kernel uses function scoped statics requiring dynamic
+    # initialization. Once https://fxbug.dev/42101573 is fixed, this dependency can be made
+    # unconditional.
+    if (!is_gcc) {
+      deps += [ "lib/cxxabi-dynamic-init/tests" ]
+    }
+
+    # Don't let any test ZBIs roll up into the overall product image.
+    metadata = {
+      zbi_input_barrier = []
+    }
+  }
+}
+
+if (!is_efi_toolchain) {
+  group("boot_tests") {
+    testonly = true
+    deps = [
+      ":kernel-unittests-boot-test",
+      ":kernel-unittests-boot-test-bypass-debuglog",
+      "phys:boot_tests",
+      "//zircon/kernel/lib/userabi/userboot/tests:boot_tests",
+    ]
+    if (all_cpu_kernel_boot_tests) {
+      foreach(cpu, kernel_cpus) {
+        deps += [ ":boot_tests.$cpu" ]
+      }
+    }
+  }
+
+  template("kernel_unittests_boot_test") {
+    kernel_shell_script_test(target_name) {
+      environments = kernel_test_environments
+      deps = [
+        ":kernel(:kernel_$current_cpu)",
+        "//zircon/system/utest/core:core-tests-standalone.args",
+      ]
+      script = [
+        "ut all",
+        "and ut -r 10 timer",
+        "and ut -r 10 pi",
+        "boot-test-success",
+        "graceful-shutdown",
+      ]
+      deps += invoker.deps
+    }
+  }
+
+  kernel_unittests_boot_test("kernel-unittests-boot-test") {
+    deps = []
+  }
+
+  # In strange failure modes, the bypass-debuglog version may get more useful
+  # logging out than the normal one, though it may also greatly perturb the
+  # timing and hardware interactions of the test.  Running both versions in
+  # automation gives the best chance of logs from one of them being helpful.
+  kernel_unittests_boot_test("kernel-unittests-boot-test-bypass-debuglog") {
+    deps = [ ":bypass-debuglog" ]
+  }
+}
+
+kernel_cmdline("bypass-debuglog") {
+  testonly = true
+  args = [ "kernel.bypass-debuglog" ]
+}
+
+foreach(cpu, kernel_cpus) {
+  group("boot_tests.$cpu") {
+    testonly = true
+    deps = [
+      ":kernel-unittests-boot-test(:kernel_$cpu)",
+      "phys/test:$cpu",
+    ]
+  }
+}

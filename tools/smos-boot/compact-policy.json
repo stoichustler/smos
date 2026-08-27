@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "architectures": {
+    "arm64": [
+      "release/images/fuchsia:fuchsia_assembly",
+      "kernel.phys_arm64/linux-arm64-boot-shim.bin",
+      "platform/products/smos_boot/virtualization:host",
+      "userspace/smos_boot/virtcheck:virtcheck_test"
+    ],
+    "riscv64": [
+      "release/images/fuchsia:fuchsia_assembly",
+      "kernel.phys_riscv64/linux-riscv64-boot-shim.bin",
+      "userspace/smos_boot/virtcheck:virtcheck_test"
+    ]
+  },
+  "external_links": [],
+  "excluded_prefixes": [".git", "out", "prebuilt", ".cipd", "beau"],
+  "protected_files": [
+    ".gn", ".gitignore", "AGENTS.md", "LICENSE", "Makefile", "PATENTS", "README.md", "SVE-os.md",
+    "kept-components.md",
+    "zircon/scripts/run-zircon",
+    "third_party/golibs/go.mod", "third_party/golibs/go.sum",
+    "third_party/golibs/vendor/modules.txt",
+    "third_party/rust_crates/vendor/libc-0.2.169/src/fuchsia/riscv64.rs"
+  ],
+  "protected_trees": [
+    "release", "docs/plans",
+    "tools/skills",
+    "third_party/pylibs/mypy/src/mypy",
+    "third_party/pylibs/mypy/src/mypyc",
+    "third_party/pylibs/mypy_extensions/src",
+    "third_party/pylibs/typing_extensions/src/src",
+    "tools/smos-boot"
+  ],
+  "runtime_forbidden_domains": [
+    "bluetooth", "camera", "graphics", "network", "recovery", "update", "wlan"
+  ],
+  "host_build_only_prefixes": [
+    "sdk/fidl/", "userspace/camera/", "userspace/connectivity/", "userspace/graphics/",
+    "userspace/media/", "userspace/recovery/", "userspace/ui/"
+  ]
+}

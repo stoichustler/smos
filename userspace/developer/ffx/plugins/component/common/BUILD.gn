@@ -1,0 +1,34 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+rustc_library("ffx_component") {
+  name = "ffx_component"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//sdk/fidl/fuchsia.sys2:fuchsia.sys2_rust",
+    "//userspace/developer/ffx/lib/errors:lib",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/sys/lib/component_debug",
+    "//userspace/sys/lib/moniker",
+    "//third_party/rust_crates:anyhow",
+  ]
+
+  if (is_host) {
+    deps += [
+      "//sdk/fidl/fuchsia.developer.remotecontrol:fuchsia.developer.remotecontrol_rust",
+      "//userspace/developer/ffx/lib/rcs:lib",
+    ]
+  }
+
+  sources = [
+    "src/format.rs",
+    "src/lib.rs",
+    "src/rcs.rs",
+  ]
+}

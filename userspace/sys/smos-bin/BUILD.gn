@@ -1,0 +1,135 @@
+# Copyright 2026 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/bootfs_files_for_assembly.gni")
+import("//release/components.gni")
+import("//release/rust/rustc_binary.gni")
+
+group("bins") {
+  visibility = [
+    ":*",
+    "//userspace/sys/tools/debug-dash-launcher:*",
+  ]
+  deps = [
+    ":cat_bin",
+    ":date_bin",
+    ":du_bin",
+    ":env_bin",
+    ":find_bin",
+    ":hexdump_bin",
+    ":pwd_bin",
+    ":tree_bin",
+    ":wc_bin",
+  ]
+}
+
+rustc_binary("cat_bin") {
+  visibility = [ ":*" ]
+  output_name = "cat"
+  edition = "2021"
+  source_root = "src/cat.rs"
+  sources = [ "src/cat.rs" ]
+  configs += [ "//release/config/rust:bootfs" ]
+  with_unit_tests = true
+}
+
+rustc_binary("env_bin") {
+  visibility = [ ":*" ]
+  output_name = "env"
+  edition = "2021"
+  source_root = "src/env.rs"
+  sources = [ "src/env.rs" ]
+  configs += [ "//release/config/rust:bootfs" ]
+  with_unit_tests = true
+}
+
+rustc_binary("hexdump_bin") {
+  visibility = [ ":*" ]
+  output_name = "hexdump"
+  edition = "2021"
+  source_root = "src/hexdump.rs"
+  sources = [ "src/hexdump.rs" ]
+  configs += [ "//release/config/rust:bootfs" ]
+  with_unit_tests = true
+}
+
+foreach(command,
+        [
+          "date",
+          "du",
+          "find",
+          "pwd",
+          "tree",
+          "wc",
+        ]) {
+  rustc_binary("${command}_bin") {
+    visibility = [ ":*" ]
+    output_name = command
+    edition = "2021"
+    source_root = "src/${command}.rs"
+    sources = [ "src/${command}.rs" ]
+    configs += [ "//release/config/rust:bootfs" ]
+    with_unit_tests = true
+  }
+}
+
+bootfs_files_for_assembly("bootfs") {
+  deps = [
+    ":cat_bin",
+    ":date_bin",
+    ":du_bin",
+    ":env_bin",
+    ":find_bin",
+    ":hexdump_bin",
+    ":pwd_bin",
+    ":tree_bin",
+    ":wc_bin",
+  ]
+}
+
+fuchsia_package("cat_pkg") {
+  visibility = [
+    ":*",
+    "//platform/bundles/assembly:*",
+  ]
+  package_name = "cat"
+  deps = [ ":cat_bin" ]
+}
+
+fuchsia_package("env_pkg") {
+  visibility = [
+    ":*",
+    "//platform/bundles/assembly:*",
+  ]
+  package_name = "env"
+  deps = [ ":env_bin" ]
+}
+
+fuchsia_package("hexdump_pkg") {
+  visibility = [
+    ":*",
+    "//platform/bundles/assembly:*",
+  ]
+  package_name = "hexdump"
+  deps = [ ":hexdump_bin" ]
+}
+
+foreach(command,
+        [
+          "date",
+          "du",
+          "find",
+          "pwd",
+          "tree",
+          "wc",
+        ]) {
+  fuchsia_package("${command}_pkg") {
+    visibility = [
+      ":*",
+      "//platform/bundles/assembly:*",
+    ]
+    package_name = command
+    deps = [ ":${command}_bin" ]
+  }
+}

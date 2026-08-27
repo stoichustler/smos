@@ -1,0 +1,50 @@
+// Copyright 2026 The Fuchsia Authors.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+    include: [
+        "inspect/offer.shard.cml",
+        "syslog/client.shard.cml",
+        "trace/client.shard.cml",
+    ],
+    program: {
+        runner: "elf",
+        binary: "bin/vmm",
+    },
+    collections: [
+        { name: "virtio_block_devices", durability: "single_run" },
+        { name: "virtio_console_devices", durability: "single_run" },
+        { name: "virtio_rng_devices", durability: "single_run" },
+        { name: "virtio_vsock_devices", durability: "single_run" },
+    ],
+    capabilities: [
+        {
+            protocol: [
+                "fuchsia.virtualization.Guest",
+                "fuchsia.virtualization.GuestLifecycle",
+            ],
+        },
+    ],
+    use: [
+        {
+            protocol: [
+                "fuchsia.kernel.HypervisorResource",
+                "fuchsia.kernel.VmexResource",
+                "fuchsia.sysinfo.SysInfo",
+            ],
+        },
+        {
+            protocol: "fuchsia.component.Realm",
+            from: "framework",
+        },
+    ],
+    expose: [
+        {
+            protocol: [
+                "fuchsia.virtualization.Guest",
+                "fuchsia.virtualization.GuestLifecycle",
+            ],
+            from: "self",
+        },
+    ],
+}

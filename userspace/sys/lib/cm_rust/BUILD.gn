@@ -1,0 +1,76 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/config/fuchsia/target_api_level.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/rust/rustc_macro.gni")
+
+rustc_library("cm_rust") {
+  edition = "2021"
+  with_unit_tests = true
+  deps = [
+    ":cm_rust_derive",
+    "//sdk/fidl/fuchsia.component.decl:fuchsia.component.decl_rust",
+    "//sdk/fidl/fuchsia.data:fuchsia.data_rust",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+    "//sdk/fidl/fuchsia.process:fuchsia.process_rust",
+    "//userspace/lib/from-enum",
+    "//userspace/sys/lib/cm_fidl_validator",
+    "//userspace/sys/lib/cm_types",
+    "//third_party/rust_crates:bitflags",
+    "//third_party/rust_crates:lazy_static",
+    "//third_party/rust_crates:thiserror",
+  ]
+  sources = [ "src/lib.rs" ]
+
+  features = []
+
+  test_deps = [ "//third_party/rust_crates:difference" ]
+
+  # Some host tools use serde to serialize/deserialize cm_rust types. This
+  # dependency is guarded in code via #[cfg(feature = "serde")] and
+  # #[cfg_attr(feature = "serde", ...)] to prevent serde dependencies in
+  # non-host builds.
+  if (is_host) {
+    features += [ "serde" ]
+    deps += [
+      "//userspace/sys/lib/bitflags-serde-legacy",
+      "//third_party/rust_crates:serde",
+    ]
+    sources += [ "src/serde_ext.rs" ]
+    test_deps += [ "//third_party/rust_crates:serde_json" ]
+  }
+}
+
+rustc_macro("cm_rust_derive") {
+  edition = "2021"
+  deps = [
+    "//third_party/rust_crates:darling",
+    "//third_party/rust_crates:proc-macro2",
+    "//third_party/rust_crates:quote",
+    "//third_party/rust_crates:syn",
+  ]
+
+  source_root = "src/macro.rs"
+  sources = [ "src/macro.rs" ]
+}
+
+fuchsia_unittest_package("cm_rust_tests") {
+  deps = [
+    ":cm_rust_test",
+    "//userspace/sys/lib/cm_types",
+  ]
+  test_specs = {
+  }
+}
+
+group("tests") {
+  testonly = true
+
+  deps = [
+    ":cm_rust_test($host_toolchain)",
+    ":cm_rust_tests",
+  ]
+}

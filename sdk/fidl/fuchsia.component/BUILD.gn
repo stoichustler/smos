@@ -1,0 +1,38 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.component") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Component Framework"
+
+  sources = [
+    "binder.fidl",
+    "constants.fidl",
+    "controller.fidl",
+    "error.fidl",
+    "events.fidl",
+    "introspector.fidl",
+    "namespace.fidl",
+    "overview.fidl",
+    "realm.fidl",
+    "types.fidl",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.component.decl",
+    "//sdk/fidl/fuchsia.component.sandbox",
+    "//sdk/fidl/fuchsia.io",
+    "//sdk/fidl/fuchsia.process",
+    "//sdk/fidl/fuchsia.url",
+    "//zircon/vdso/zx",
+  ]
+
+  # TODO(https://fxbug.dev/42061105): Re-enable.
+  excluded_checks = [ "invalid-case-for-decl-name" ]
+
+  enable_hlcpp = true
+  enable_rust_next = true
+}

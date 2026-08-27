@@ -1,0 +1,9 @@
+# Copyright 2025 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+import("//release/python/python_binary.gni")
+
+python_binary("dtc_py") {
+  main_source = "//release/devicetree/dtc.py"
+  deps = [ "//release/python/modules/assembly" ]
+}

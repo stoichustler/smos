@@ -1,0 +1,82 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//userspace/developer/ffx/build/ffx_plugin.gni")
+
+ffx_plugin("ffx_repository_server_start") {
+  sdk_category = "not-yet-specified"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  args_sources = [ "src/args.rs" ]
+  args_deps = [
+    "//userspace/developer/ffx/core:lib",
+    "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_rust",
+    "//third_party/rust_crates:argh",
+    "//third_party/rust_crates:camino",
+  ]
+  sources = [
+    "src/lib.rs",
+    "src/server.rs",
+    "src/server_impl.rs",
+    "src/target.rs",
+  ]
+
+  deps = [
+    "//release/sdk/meta:rust",
+    "//sdk/fidl/fuchsia.developer.remotecontrol:fuchsia.developer.remotecontrol_rust",
+    "//sdk/fidl/fuchsia.pkg:fuchsia.pkg_rust",
+    "//sdk/fidl/fuchsia.pkg.rewrite:fuchsia.pkg.rewrite_rust",
+    "//userspace/developer/ffx/command/error:lib",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_rust",
+    "//userspace/developer/ffx/lib/daemonize:lib",
+    "//userspace/developer/ffx/lib/errors:lib",
+    "//userspace/developer/ffx/lib/fho:lib",
+    "//userspace/developer/ffx/lib/fidl-fuchsia-developer-ffx-ext",
+    "//userspace/developer/ffx/lib/pkg",
+    "//userspace/developer/ffx/lib/rcs:lib",
+    "//userspace/developer/ffx/lib/target:lib",
+    "//userspace/developer/ffx/lib/target/connector:lib",
+    "//userspace/developer/ffx/lib/target/holders:lib",
+    "//userspace/developer/ffx/lib/target_errors:lib",
+    "//userspace/developer/ffx/lib/timeout:lib",
+    "//userspace/developer/ffx/lib/writer:lib",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/sys/lib/fidl-fuchsia-pkg-ext",
+    "//userspace/sys/pkg/lib/fuchsia-repo",
+    "//userspace/sys/pkg/lib/package-tool",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-fs",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:chrono",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:http",
+    "//third_party/rust_crates:schemars",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:signal-hook",
+    "//third_party/rust_crates:tracing",
+    "//third_party/rust_crates:tuf",
+  ]
+  test_deps = [
+    "//sdk/fidl/fuchsia.net:fuchsia.net_rust",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/lib/pkg:empty-repo-keys",
+    "//userspace/developer/ffx/lib/pkg:empty-repo-metadata",
+    "//userspace/developer/ffx/lib/target:lib",
+    "//userspace/lib/assembly/partitions_config",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/fuchsia-hyper",
+    "//userspace/sys/lib/fidl-fuchsia-pkg-rewrite-ext",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:tempfile",
+    "//third_party/rust_crates:url",
+  ]
+}

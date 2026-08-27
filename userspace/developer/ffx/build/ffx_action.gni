@@ -1,0 +1,309 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/compiled_action.gni")
+
+# This is the actual label for the sdk host tools, and is used to provide the
+# path to the sdk molecule manifest.
+_sdk_host_tools_label =
+    "//sdk:host_tools_used_by_ffx_action_during_build($host_toolchain)"
+sdk_host_tools_manifest =
+    get_label_info(_sdk_host_tools_label, "root_out_dir") +
+    "/sdk/manifest/host_tools_used_by_ffx_action_during_build"
+
+# This is a group that has a public dependency on the above, which is visibility
+# restricted to only this group, because ffx_action() instances can be anywhere
+# in the tree, and there isn't a way to otherwise say "only visible to actions
+# defined by template X".
+sdk_host_tools_visibility_bridge_label =
+    "//userspace/developer/ffx/build:host_tools_used_by_ffx_action($host_toolchain)"
+sdk_host_tools_visibility_bridge_label_testonly = "//userspace/developer/ffx/build:host_tools_used_by_ffx_action_testonly($host_toolchain)"
+
+# Executes an ffx command as an action during the build.
+#
+# This is a wrapper around compiled_action() that automatically adds ffx as
+# a dependency and an input, and properly configures the args.
+#
+# Parameters
+#
+#   args (required)
+#       [list of strings] Same meaning as action().  All args to ffx need to be
+#       specified.
+#
+#   outputs (required)
+#       [list of files] Like the outputs of action().
+#
+#   inputs (optional)
+#
+#   hermetic_inputs_file (optional)
+#       Implicit inputs to the ffx plugin.
+#
+#   needs_sdk (optional, default true)
+#       Whether the (host-tools module of the) sdk is needed to run this action
+#       or not.
+#
+#   sources (optional)
+#       Files the plugin takes as input. The step will be re-run whenever any
+#       of these change. If inputs is empty, the step will run only when the
+#       plugin itself changes.
+#
+#   ffx_tool
+#       The gn label of the ffx tool binary to run. If you want to run through
+#       the main ffx binary, you can set this to `//userspace/developer/ffx:ffx_bin',
+#       but it's strongly preferred to use separately compiled ffx subtools
+#       instead, to avoid stalling the build on completing the whole ffx build.
+#       For eg. `//userspace/developer/ffx/plugins/product:ffx_product_tool_versioned`.
+#       See compiled_action()'s tool argument.
+#
+#   ffx_tool_output_name
+#       The binary name of the ffx tool binary to run. If you want to run through
+#       the main ffx binary, you can set this to `ffx',
+#       but it's strongly preferred to use separately compiled ffx subtools
+#       instead, to avoid stalling the build on completing the whole ffx build.
+#       For eg. `ffx-product`.
+#       See compiled_action()'s tool_output_name argument.
+#
+#   use_versioned_binary (optional; default='false')
+#       If true, the version-stamped binary is used (either `ffx` or the subtool
+#       specified with 'ffx_tool_output_name'), and '_versioned' is appended to
+#       the GN label provided in 'ffx_tool'.  When false, the
+#       '${ffx_tool_output_name}_unversioned' binary will be used, and the GN
+#       GN label for 'ffx_tool' is used without modification.
+#
+#       NOTE: The opposite is true when using the main ffx binary, both its
+#       target and binary are suffixed with "_unversioned" when this is false,
+#       and nothing is added when true.
+#
+#       NOTE:  Most build actions should not be sensitive the version-stamp
+#       within the ffx binaries, and should rely on the non-stamped binaries to
+#       reduce incremental build churn caused by the integration commit date
+#       being stamped into the tools.
+#
+#   no_environment (optional; default=true)
+#       When true, adds the `--no-environment` flag to ffx. This disables
+#       reading the various implicit configuration files in order to be
+#       hermetic. If this option is set to false, it is up to the caller
+#       to make sure the correct input file specification is provided.
+#
+#   args (all optional)
+#   depfile
+#   deps
+#   public_deps
+#   testonly
+#   visibility
+#       Same meaning as action()
+#
+# Example of usage:
+#
+#   ffx_action("run_a_plugin") {
+#     outputs = [
+#       "$target_obj_dir/some_output_file",
+#       "$target_obj_dir/some_other_output_file",
+#     ]
+#
+#     # The tool takes this input.
+#     inputs = [ "my_input_file" ]
+#
+#     ffx_tool = "//userspace/developer/ffx/tools/echo:ffx_echo"
+#     ffx_tool_output_name = "ffx-echo"
+#
+#     # In this case, the plugin takes as arguments the input file and the output
+#     # build dir (both relative to the root_build_dir that the plugin will be
+#     # run in) and will produce the output files listed above.
+#     args = [
+#       "path",
+#       "to",
+#       "plugin",
+#       rebase_path("my_input_file", root_build_dir),
+#       "--output-dir", rebase_path(target_out_dir, root_build_dir),
+#     ]
+#   }
+#
+#  Which is equivalent to:
+#    `ffx path to plugin src/foo/my_input_file --output-dir obj/bar`
+template("ffx_action") {
+  assert(defined(invoker.args), "args must be defined for $target_name")
+  assert(defined(invoker.outputs), "outputs must be defined for $target_name")
+  assert(defined(invoker.ffx_tool),
+         "ffx_tool must be specified for $target_name")
+  assert(defined(invoker.ffx_tool_output_name),
+         "ffx_tool_output_name must be specified for $target_name")
+
+  # use the versioned version of the binary (and dep on the versioned target),
+  # instead of the unversioned binary.  Most build actions do not depend on
+  # the version-stamped binaries.
+  _use_versioned_binary =
+      defined(invoker.use_versioned_binary) && invoker.use_versioned_binary
+
+  assert(
+      string_replace(invoker.ffx_tool, "_versioned", "") == invoker.ffx_tool,
+      "This template will automatically append '_versioned' to the 'ffx_tool' label when 'use_versioned_binary' is true, use the base label without the '_versioned' suffix.")
+
+  assert(
+      string_replace(invoker.ffx_tool_output_name, "_unversioned", "") ==
+          invoker.ffx_tool_output_name,
+      "This template will automatically append '_unversioned' to the 'ffx_tool_output_name' label when 'use_versioned_binary' is false, use base name for the tool.")
+
+  # Only generate our own hermetic inputs file if a depfile is not specified
+  # OR hermetic_deps is not turned off.
+  _use_hermetic_inputs_file =
+      !defined(invoker.depfile) &&
+      (!defined(invoker.hermetic_deps) || invoker.hermetic_deps)
+
+  _needs_sdk = !defined(invoker.needs_sdk) || invoker.needs_sdk
+
+  if (_use_hermetic_inputs_file) {
+    # Generate a list of hermetic inputs based on the files in the SDK manifest.
+    # Also, merge in any additional inputs if necessary.
+    hermetic_inputs_label = "${target_name}_all_inputs"
+    hermetic_inputs_path = "${target_out_dir}/${target_name}_all_inputs"
+    hermetic_inputs_action(hermetic_inputs_label) {
+      forward_variables_from(invoker,
+                             [
+                               "testonly",
+                               "visibility",
+                             ])
+
+      deps = []
+      if (defined(invoker.deps)) {
+        deps += invoker.deps
+      }
+
+      script = "//userspace/developer/ffx/build/hermetic_inputs_for_ffx.py"
+      inputs = []
+      outputs = [ hermetic_inputs_path ]
+      args = [
+        "--output",
+        rebase_path(hermetic_inputs_path, root_build_dir),
+      ]
+
+      if (_needs_sdk) {
+        if (defined(invoker.testonly) && invoker.testonly) {
+          deps += [ sdk_host_tools_visibility_bridge_label_testonly ]
+        } else {
+          deps += [ sdk_host_tools_visibility_bridge_label ]
+        }
+        inputs += [ sdk_host_tools_manifest ]
+        args += [
+          "--sdk-manifest",
+          rebase_path(sdk_host_tools_manifest, root_build_dir),
+        ]
+      }
+
+      if (defined(invoker.hermetic_inputs_file)) {
+        inputs += [ invoker.hermetic_inputs_file ]
+        args += [
+          "--additional-hermetic-inputs",
+          rebase_path(invoker.hermetic_inputs_file, root_build_dir),
+        ]
+      }
+
+      if (defined(invoker.hermetic_inputs_target)) {
+        deps += [ invoker.hermetic_inputs_target ]
+      }
+    }
+  }
+
+  env_target_name = target_name + ".ffx_env"
+  env_file = "$target_out_dir/ffx.env." + target_name
+
+  # TODO(https://fxbug.dev/42077443): We could avoid creating an extra file if ffx
+  # could have its env passed in on the command line.
+  generated_file(env_target_name) {
+    outputs = [ env_file ]
+    output_conversion = "json"
+    contents = {
+    }
+  }
+
+  # Invoke the compiled_action template for the call to the ffx plugin.
+  #
+  # This uses the compiled_action() template instead of directly creating an
+  # action so that it will pick up the "gn_run_binary.sh" and hermetic deps
+  # checking that's done with the compiled_action() template.
+  compiled_action(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "assert_no_deps",
+                             "data_deps",
+                             "depfile",
+                             "hermetic_action_ignored_prefixes",
+                             "hermetic_deps",
+                             "inputs",
+                             "metadata",
+                             "no_output_dir_leaks",
+                             "outputs",
+                             "public_deps",
+                             "repeatable",
+                             "sources",
+                             "testonly",
+                             "tool_output_name",
+                             "visibility",
+                           ])
+
+    # Use a builddir-specific environment, not the user's own environment.
+    _ffx_config = [
+      "ffx.analytics.disabled=true",
+      "daemon.autostart=false",
+      "log.enabled=false",
+    ]
+
+    deps = [ ":" + env_target_name ]
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+
+    inputs += [ env_file ]
+
+    if (_needs_sdk) {
+      if (defined(invoker.testonly) && invoker.testonly) {
+        deps += [ sdk_host_tools_visibility_bridge_label_testonly ]
+      } else {
+        deps += [ sdk_host_tools_visibility_bridge_label ]
+      }
+
+      inputs += [ sdk_host_tools_manifest ]
+      _ffx_config += [
+        "sdk.root=" + rebase_path(root_build_dir, root_build_dir),
+        "sdk.module=host_tools_used_by_ffx_action_during_build",
+      ]
+    }
+
+    args = [ "--no-environment" ]
+    if (defined(invoker.no_environment) && invoker.no_environment == false) {
+      args = []
+    }
+
+    # Pass the ffx config at runtime. ffx checks that it has read and write access to the
+    # config files which causes hermetic actions error if using a global ffx config file.
+    args += [
+              "--env",
+              rebase_path(env_file, root_build_dir),
+              "--isolate-dir",
+              rebase_path(target_out_dir, root_build_dir),
+              "--config",
+              string_join(",", _ffx_config),
+            ] + invoker.args
+
+    if (_use_hermetic_inputs_file) {
+      hermetic_inputs_target = ":${hermetic_inputs_label}"
+      hermetic_inputs_file = hermetic_inputs_path
+    }
+
+    tool = invoker.ffx_tool
+    if (_use_versioned_binary) {
+      # ffx_tool defines a separate "${target_name}_versioned" target, with
+      # the unversioned binary at the base "target_name"
+      tool += "_versioned"
+    }
+
+    tool_output_name = invoker.ffx_tool_output_name
+
+    if (!_use_versioned_binary) {
+      # ffx_tool creates the unversioned binary with the suffix
+      # "_unversioned", this is the opposite of the target that is defined.
+      tool_output_name += "_unversioned"
+    }
+  }
+}

@@ -1,0 +1,165 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("tools") {
+  testonly = true
+
+  public_deps = [
+    "//tools/auto_owners($host_toolchain)",
+    "//tools/bindc:host($host_toolchain)",
+    "//tools/bootserver_old:host($host_toolchain)",
+    "//tools/build($host_toolchain)",
+    "//tools/bundle_fetcher($host_toolchain)",
+    "//tools/clidoc:clidoc($host_toolchain)",
+    "//tools/cmc:install($host_toolchain)",
+    "//tools/component_id_index($host_toolchain)",
+    "//tools/component_manager_config($host_toolchain)",
+    "//tools/configc:install($host_toolchain)",
+    "//tools/cppdocgen($host_toolchain)",
+    "//tools/create:install($host_toolchain)",
+    "//tools/debroot($host_toolchain)",
+    "//tools/doc_checker($host_toolchain)",
+    "//tools/fidl($host_toolchain)",
+    "//tools/fidlcat:fidlcat_host($host_toolchain)",
+    "//tools/fuchsia-sdk-run($host_toolchain)",
+    "//tools/funnel:($host_toolchain)",
+    "//tools/host_test_component($host_toolchain)",
+    "//tools/jq5:install($host_toolchain)",
+    "//tools/loglistener:host($host_toolchain)",
+    "//tools/make-fuchsia-vol:host($host_toolchain)",
+    "//tools/mdlint:host($host_toolchain)",
+    "//tools/net/device-finder:host($host_toolchain)",
+    "//tools/netprotocol($host_toolchain)",
+    "//tools/orchestrate($host_toolchain)",
+    "//tools/pbtool($host_toolchain)",
+    "//tools/pkgstats:install($host_toolchain)",
+    "//tools/power_config($host_toolchain)",
+    "//tools/pretty_serial:install($host_toolchain)",
+    "//tools/rfc:install($host_toolchain)",
+    "//tools/rust_extract:install($host_toolchain)",
+    "//tools/sdk-tools:tools($host_toolchain)",
+    "//tools/shush:install($host_toolchain)",
+    "//tools/symbolizer($host_toolchain)",
+    "//tools/test_list_tool:install($host_toolchain)",
+    "//tools/testgen:host($host_toolchain)",
+    "//tools/update_crates($host_toolchain)",
+    "//tools/validate_test_type:install($host_toolchain)",
+    "//tools/virtual_device:fvd($host_toolchain)",
+    "//tools/zedmon/client:zedmon_client($host_toolchain)",
+
+    # This go program should be still correctly built even if a Windows SDK
+    # sysroot is absent.
+    "//tools/winsdk($win_x64_toolchain)",
+  ]
+}
+
+# These are part of the build graph, but not depedendencies of //:default, so
+# they are never built if not explicitly requested via `fx build <target>`.
+group("defined_but_not_built") {
+  testonly = true
+  public_deps = [ "//tools/gn_desc:gn_desc($host_toolchain)" ]
+}
+
+# DEPRECATED! DO NOT ADD TO THIS GROUP
+group("build_infra") {
+  public_deps = [ "//platform/bundles/infra/build" ]
+}
+
+# DEPRECATED! DO NOT ADD TO THIS GROUP
+group("test_infra") {
+  testonly = true
+  public_deps = [ "//platform/bundles/infra/test" ]
+}
+
+group("e2e_tests") {
+  testonly = true
+
+  deps = []
+
+  # TODO(https://fxbug.dev/42142554): Temporarily disable bootserver_old tests on coverage builders.
+  if (!is_coverage) {
+    deps += [ "//tools/bootserver_old/tests($host_toolchain)" ]
+  }
+}
+
+group("host_tests") {
+  testonly = true
+
+  deps = []
+}
+
+group("tests_no_e2e") {
+  testonly = true
+  assert_no_deps = e2e_test_libs
+
+  deps = [
+    "//tools/artifactory:tests",
+    "//tools/auto_owners:tests($host_toolchain)",
+    "//tools/bindc:tests",
+    "//tools/bootserver:tests($host_toolchain)",
+    "//tools/botanist:tests($host_toolchain)",
+    "//tools/build:tests($host_toolchain)",
+    "//tools/bundle_fetcher:tests",
+    "//tools/cargo-gnaw:tests",
+    "//tools/check-licenses:tests",
+    "//tools/clidoc:tests",
+    "//tools/cmc:tests",
+    "//tools/component_id_index:tests($host_toolchain)",
+    "//tools/component_manager_config:tests($host_toolchain)",
+    "//tools/configc:tests",
+    "//tools/cppdocgen:tests($host_toolchain)",
+    "//tools/create:tests",
+    "//tools/debug:tests($host_toolchain)",
+    "//tools/devshell:tests($host_toolchain)",
+    "//tools/doc_checker:tests",
+    "//tools/docsgen:tests",
+    "//tools/fidl:tests",
+    "//tools/fidlcat:fidlcat_host_tests($host_toolchain)",
+    "//tools/fidlcat/tests",
+    "//tools/fuchsia-sdk-run:tests($host_toolchain)",
+    "//tools/fuzz:tests",
+    "//tools/gn_desc:host_tests($host_toolchain)",
+    "//tools/host_test_component:tests($host_toolchain)",
+    "//tools/integration:tests($host_toolchain)",
+    "//tools/jq5:tests($host_toolchain)",
+    "//tools/lib:tests($host_toolchain)",
+    "//tools/lib/serial:tests($host_toolchain)",
+    "//tools/make-fuchsia-vol:tests",
+    "//tools/mdlint:tests",
+    "//tools/net:tests($host_toolchain)",
+    "//tools/orchestrate:tests($host_toolchain)",
+    "//tools/pbtool:tests($host_toolchain)",
+    "//tools/pkgstats:tests",
+    "//tools/power_config:tests",
+    "//tools/pretty_serial:tests",
+    "//tools/qemu:tests($host_toolchain)",
+    "//tools/rfc:tests",
+    "//tools/sdk-tools:tests($host_toolchain)",
+    "//tools/shush:tests($host_toolchain)",
+    "//tools/staticanalysis:tests",
+    "//tools/symbolizer:tests",
+    "//tools/test_list_tool:test_list_tool_test($host_toolchain)",
+    "//tools/test_pilot:tests",
+    "//tools/testgen:tests",
+    "//tools/testing:tests($host_toolchain)",
+    "//tools/update_crates:tests($host_toolchain)",
+    "//tools/validate_test_type:tests",
+    "//tools/virtual_device:tests($host_toolchain)",
+    "//tools/whereiscl:whereiscl_test($host_toolchain)",
+    "//tools/zedmon:tests",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":e2e_tests",
+    ":tests_no_e2e",
+
+    # `emulator:tests` contains unit tests for emulator, which depend on
+    # emulator so we can't put it in `tests_no_e2e`, but it's not an e2e tests
+    # neither.
+    "//tools/emulator:tests",
+  ]
+}

@@ -1,0 +1,26 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/go/go_binary.gni")
+import("//release/go/go_library.gni")
+import("//release/testing/host_test_data.gni")
+
+go_library("main") {
+  deps = [
+    "hlcpp",
+    "measurer",
+    "rust",
+    "//tools/fidl/lib/fidlgen",
+  ]
+  sources = [ "main.go" ]
+}
+
+go_binary("measure-tape") {
+  library = ":main"
+}
+
+install_host_tools("host") {
+  deps = [ ":measure-tape" ]
+  outputs = [ "measure-tape" ]
+}

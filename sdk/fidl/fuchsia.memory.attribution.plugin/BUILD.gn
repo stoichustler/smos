@@ -1,0 +1,22 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.memory.attribution.plugin") {
+  sources = [ "plugin.fidl" ]
+  sdk_area = "Diagnostics"
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.kernel",
+    "//zircon/vdso/zx",
+  ]
+
+  # TODO: https://fxbug.dev/307580082 - This protocol is under construction.
+  visibility = [
+    "//sdk/fidl:*",
+    "//userspace/developer/ffx/plugins/profile/memory/*",
+    "//userspace/performance/memory/*",
+  ]
+}

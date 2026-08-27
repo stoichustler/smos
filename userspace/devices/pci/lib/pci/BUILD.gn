@@ -1,0 +1,66 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/test.gni")
+import("//release/zircon/zx_library.gni")
+
+zx_library("pci") {
+  sdk = "source"
+  sdk_headers = [
+    "lib/pci/hw.h",
+    "lib/pci/pio.h",
+    "lib/pci/pciroot.h",
+    "lib/pci/root_host.h",
+  ]
+  sources = [
+    "pio.cc",
+    "root_host.cc",
+  ]
+  deps = [
+    "//userspace/lib/ddk",
+    "//userspace/lib/ddktl",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/hwreg",
+    "//zircon/system/ulib/zx",
+  ]
+
+  public_deps = [
+    "//sdk/banjo/fuchsia.hardware.pciroot:fuchsia.hardware.pciroot_banjo_cpp",
+    "//zircon/system/ulib/hwreg",
+    "//zircon/system/ulib/inspect",
+    "//zircon/system/ulib/region-alloc",
+  ]
+
+  configs += [ "//release/config/fuchsia:static_cpp_standard_library" ]
+}
+
+test("pci-roothost") {
+  sources = [
+    "pciroot-test.cc",
+    "root_host-test.cc",
+  ]
+
+  deps = [
+    ":pci",
+    "//sdk/banjo/fuchsia.hardware.pciroot:fuchsia.hardware.pciroot_banjo_cpp",
+    "//sdk/lib/inspect/testing/cpp",
+    "//userspace/devices/testing/fake-msi",
+    "//userspace/devices/testing/fake-resource",
+    "//userspace/devices/testing/mock-ddk",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/lib/testing/predicates",
+    "//third_party/googletest:gtest",
+    "//zircon/system/ulib/region-alloc",
+  ]
+}
+
+fuchsia_unittest_package("pci-roothost-test") {
+  deps = [ ":pci-roothost" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":pci-roothost-test" ]
+}

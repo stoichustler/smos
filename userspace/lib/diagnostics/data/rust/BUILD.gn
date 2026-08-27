@@ -1,0 +1,61 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+group("rust") {
+  public_deps = [ ":lib" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":diagnostics-data-tests" ]
+}
+
+rustc_library("lib") {
+  edition = "2021"
+  name = "diagnostics_data"
+  with_unit_tests = true
+
+  sources = [ "src/lib.rs" ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.diagnostics:fuchsia.diagnostics_rust",
+    "//sdk/fidl/fuchsia.inspect:fuchsia.inspect_rust",
+    "//userspace/lib/diagnostics/hierarchy/rust",
+    "//userspace/lib/diagnostics/log/types:types-serde",
+    "//userspace/lib/diagnostics/selectors",
+    "//userspace/lib/flyweights",
+    "//userspace/sys/lib/moniker",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:chrono",
+    "//third_party/rust_crates:itertools",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:termion",
+    "//third_party/rust_crates:thiserror",
+  ]
+
+  test_deps = [
+    "//userspace/lib/fuchsia",
+    "//third_party/rust_crates:pretty_assertions",
+    "//third_party/rust_crates:serde_json",
+  ]
+
+  if (is_fuchsia) {
+    deps += [
+      "//sdk/fidl/fuchsia.logger:fuchsia.logger_rust",
+      "//sdk/rust/zx",
+      "//third_party/rust_crates:thiserror",
+    ]
+
+    sources += [ "src/logs_legacy.rs" ]
+  }
+
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+}
+
+fuchsia_unittest_package("diagnostics-data-tests") {
+  deps = [ ":lib_test" ]
+}

@@ -1,0 +1,97 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/sdk/sdk_atom.gni")
+
+# Defines a host tool in the SDK.
+#
+# Parameters
+#   category (required)
+#     Publication level of the executable in SDKs.
+#     See //release/sdk/sdk_atom.gni.
+#
+#   sdk_area (optional)
+#     [string] The API area responsible for maintaining this host tool.
+#     See //release/sdk/sdk_atom.gni.
+#
+#   sdk_name (optional)
+#     Name of the library in the SDK.
+#
+#   binary (optional)
+#     Path to the tool binary. Defaults to "$root_out_dir/$output_name".
+#
+#   output_name (optional)
+#     The tool's name. Inferred from target_name by default.
+#
+#   sdk_deps (optional)
+#     List of labels representing elements that should be added to SDKs
+#     alongside the present binary.
+#     Labels in the list must represent SDK-ready targets.
+#
+#   deps, etc.
+#     Usual GN meaning.
+template("sdk_host_tool") {
+  assert(defined(invoker.category), "Must define an SDK category")
+  assert(is_host)
+
+  output_name = target_name
+  if (defined(invoker.output_name)) {
+    output_name = invoker.output_name
+  }
+
+  sdk_name = output_name
+  if (defined(invoker.sdk_name)) {
+    sdk_name = invoker.sdk_name
+  }
+
+  binary = "$root_out_dir/$output_name"
+  if (defined(invoker.binary)) {
+    binary = invoker.binary
+  }
+
+  gn_deps = []
+  if (defined(invoker.deps)) {
+    gn_deps += invoker.deps
+  }
+
+  file_base = "tools/$output_name"
+
+  if (host_os == "linux" || host_os == "mac") {
+    file_base = "tools/$current_cpu/$sdk_name"
+  }
+
+  sdk_atom(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "category",
+                             "sdk_area",
+                           ])
+
+    id = "sdk://$file_base"
+
+    meta = {
+      dest = "$file_base-meta.json"
+      schema = "host_tool"
+      value = {
+        type = "host_tool"
+        name = output_name
+        root = "tools"
+        files = [ file_base ]
+      }
+    }
+
+    files = [
+      {
+        source = binary
+        dest = file_base
+      },
+    ]
+
+    if (defined(invoker.sdk_deps)) {
+      deps = invoker.sdk_deps
+    }
+
+    non_sdk_deps = invoker.deps
+  }
+}

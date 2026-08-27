@@ -1,0 +1,4 @@
+interface:
+  display_name: "SMOS Dev"
+  short_description: "SMOS development workflow"
+  default_prompt: "Apply the SMOS workflow: confirm requirements, design the solution, implement code, then perform manual or AI-automated validation."

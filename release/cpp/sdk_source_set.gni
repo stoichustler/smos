@@ -1,0 +1,467 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/cpp/verify_pragma_once.gni")
+import("//release/cpp/verify_public_headers.gni")
+import("//release/sdk/plasa/config.gni")
+import("//release/sdk/plasa/plasa_fragment_cc.gni")
+import("//release/sdk/sdk_atom.gni")
+
+# A source set that can be exported to an SDK.
+#
+# An equivalent to the built-in source_set which adds an SDK atom declaration to
+# allow the set to be included in an SDK as sources.
+#
+# The SDK atom target (`${target_name}_sdk) does NOT build the underlying
+# `source_set` (`target_name`).
+# To provide build coverage, ensure some other target in the build graph
+# depends on `target_name`.
+#
+# Parameters
+#
+#   category (required)
+#     Publication level of the library in SDKs.
+#     See //release/sdk/sdk_atom.gni.
+#
+#   sdk_area (optional)
+#     [string] The API area responsible for maintaining this library.
+#     See //release/sdk/sdk_atom.gni.
+#
+#   api (optional)
+#     Override path for the file representing the API of this library.
+#     This file is used to ensure modifications to the library's API are
+#     explicitly acknowledged.
+#     If not specified, the path will be "<sdk_name>.api".
+#     Not allowed when `stable` is false.
+#
+#   sdk_name (required for non-internal libraries)
+#     Name of the library in the SDK.
+#
+#   source_dir (optional)
+#     If set, path to the base directory of the sources.
+#     This is useful if the sources are generated and therefore not hosted
+#     directly under the directory where the GN rules are declared.
+#
+#   include_base (optional)
+#     Path to the root directory for includes.
+#     Defaults to "include".
+#
+#   build_as_static (optional)
+#     Whether the sources should be exposed as a static library.
+#     This is mostly used in the transition of Zircon libraries to the GN build.
+#     Defaults to false.
+#
+#   non_sdk_deps (optional)
+#     List of dependencies that should not be reflected in SDKs.
+#     Mostly useful for code generation.
+#
+#   non_sdk_public_deps (optional)
+#     List of dependencies that will go into `public_deps` field of `source_set`
+#     target.
+#
+#   non_sdk_local_deps (optional)
+#     List of dependencies that will go into `deps` field of `source_set`
+#     target.
+#
+#   sdk_headers_for_internal_use (optional)
+#     Out of the headers specified in `public` or `sources`, some headers are
+#     part of the SDK but not meant for direct inclusion by users, i.e. they are
+#     only transitively included by other public headers. They usually contain
+#     implementation details. Re-specify those headers here.
+#
+#     When enumerating the platform surface area (PlaSA), these headers will
+#     be excluded. See /release/sdk/plasa/plasa_fragment_cc.gni.
+#
+#     See https://fxbug.dev/42068255 for more details about this field.
+#
+#   stable (optional)
+#     Whether this source library is stabilized.
+#     When true, an .api file is generated. When false, the atom is marked as
+#     unstable in the final IDK.
+#     Must be specified when `sdk_category` is defined and not "internal";
+#     otherwise, must not be specified.
+#
+template("sdk_source_set") {
+  assert(defined(invoker.category), "Must define an SDK category")
+
+  # Only categories that are included in an IDK makes sense.
+  valid_categories = [
+    # "internal" is deprecated; only specific legacy cases below are allowed.
+    # "compat_test" is only for ABI compatibility and thus not applicable.
+    # "partner_internal" is only for ABI compatibility and thus not applicable.
+    "partner",
+  ]
+
+  # TODO(https://fxbug.dev/372986936): Remove once all uses have been removed.
+  is_internal = invoker.category == "internal"
+
+  # Atoms for the Firmware SDK, which is not a real IDK, use this template,
+  # but none of the supported categories are appropriate. Specifically, this
+  # template contains special logic related to the Bazel SDK for "internal"
+  # category (based on `is_internal`). Thus, allow "firmware_sdk" in this
+  # template then convert it to "internal" when defining the `sdk_atom()`.
+  # TODO(https://fxbug.dev/331991540): Remove once "firmware_sdk" is obsolete.
+  make_internal_atom = is_internal || invoker.category == "firmware_sdk"
+
+  assert(
+      valid_categories + [ invoker.category ] - [ invoker.category ] !=
+          valid_categories || make_internal_atom,
+      "'${target_name}' has unsupported SDK category '${invoker.category}'. Must be one of ${valid_categories}.")
+
+  # Internal source sets may also specify an sdk_name.
+  assert(
+      defined(invoker.sdk_name) || make_internal_atom,
+      "Source sets in the IDK must specify a name that is meaningful in that context.")
+
+  if (defined(invoker.sdk_name)) {
+    sdk_name = invoker.sdk_name
+    sdk_root_path = "pkg/${sdk_name}"
+  } else {
+    # if not defined by the invoker, the sdk_name is the fully qualified target name with some tweaks. For example:
+    #    //userspace/lib/fxl:fxl            sdk_name = //userspace/lib/fxl_fxl          sdk_root_path= src/lib/fxl_fxl
+    #    //userspace/lib/fxl:functional     sdk_name = //userspace/lib/fxl_functional   sdk_root_path= src/lib/fxl_functional
+    #    //userspace/lib/fxl/files:files    sdk_name = //userspace/lib/fxl/files_files  sdk_root_path= src/lib/fxl/files_files
+    full_label = get_label_info(":${invoker.target_name}", "label_no_toolchain")
+    path = get_label_info(full_label, "dir")
+    path = "${path}_${invoker.target_name}"
+
+    sdk_name = path
+    sdk_root_path = string_replace(path, "//", "")
+  }
+
+  sdk_id = "sdk://${sdk_root_path}"
+
+  if (make_internal_atom) {
+    assert(!defined(invoker.stable) || !invoker.stable)
+    is_stable = false
+  } else {
+    assert(defined(invoker.stable), "Must specify stability.")
+    is_stable = invoker.stable
+  }
+  assert(!is_stable || invoker.category == "partner")
+
+  # Create the native target (source_set or static_library) for the GN build
+  main_target_name = target_name
+  sdk_target_name = "${target_name}_sdk"
+
+  target_type = "source_set"
+  if (defined(invoker.build_as_static) && invoker.build_as_static) {
+    target_type = "static_library"
+  }
+
+  target(target_type, main_target_name) {
+    deps = []
+    public_deps = []
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "api",
+                             "category",
+                             "sdk_area",
+                             "include_base",
+                             "metadata",
+                             "non_sdk_deps",
+                             "non_sdk_public_deps",
+                             "non_sdk_local_deps",
+                             "sdk_headers_for_internal_use",
+                             "source_dir",
+                             "stable",
+                           ])
+
+    if (defined(visibility)) {
+      visibility += [ ":${sdk_target_name}" ]
+    }
+
+    if (defined(invoker.non_sdk_deps)) {
+      deps += invoker.non_sdk_deps
+      public_deps += invoker.non_sdk_deps
+    }
+
+    if (defined(invoker.non_sdk_public_deps)) {
+      public_deps += invoker.non_sdk_public_deps
+    }
+
+    if (defined(invoker.non_sdk_local_deps)) {
+      deps += invoker.non_sdk_local_deps
+    }
+
+    # Ensure that 'sdk_source_set()' targets are included in the appropriate
+    # allowlist. The allowlist target's `visibility` list ensures that the
+    # target using this template is in the allowlist.
+    if (make_internal_atom) {
+      deps += [ "//release/sdk:internal_source_sets_allowlist" ]
+    } else if (is_stable) {
+      assert(
+          invoker.category == "partner",
+          "Create a separate allowlist when adding support for other categories.")
+      deps += [ "//release/sdk:partner_idk_source_sets_allowlist" ]
+    } else {
+      assert(
+          invoker.category == "partner",
+          "Create a separate allowlist when adding support for other categories.")
+      deps += [ "//release/sdk:partner_idk_unstable_source_sets_allowlist" ]
+    }
+
+    configs += [ "//release/config:sdk_extra_warnings" ]
+
+    metadata = {
+      if (defined(invoker.metadata)) {
+        forward_variables_from(invoker.metadata, "*")
+      }
+    }
+  }
+
+  # Walk over dependencies (deps and public_deps) and collect their names (dep_names), labels (all_deps), labels of corresponding
+  # sdk elements (sdk_deps) and location of their metadata files (sdk_metas)
+  sdk_metas = []
+  sdk_deps = []
+  all_deps = []
+  dep_names = []
+  if (defined(invoker.deps)) {
+    all_deps += invoker.deps
+  }
+  if (defined(invoker.public_deps)) {
+    all_deps += invoker.public_deps
+  }
+  foreach(dep, all_deps) {
+    dep_full_label = get_label_info(dep, "label_no_toolchain")
+    sdk_dep = "${dep_full_label}_sdk"
+    sdk_deps += [ sdk_dep ]
+
+    gen_dir = get_label_info(sdk_dep, "target_gen_dir")
+    name = get_label_info(sdk_dep, "name")
+    sdk_metas += [ "${gen_dir}/${name}.meta.json" ]
+    dep_names += [ get_label_info(dep, "name") ]
+  }
+
+  # Split invoker.sources into sources and headers.
+  # If invoker.public is defined, use that as the list of headers. Otherwise, *.h are headers, and the others are sources
+  all_headers = []
+  all_sources = []
+  if (defined(invoker.public)) {
+    all_headers += invoker.public
+  }
+  if (defined(invoker.sources)) {
+    # If public headers are not defined, pick them from `sources`.
+    #
+    # NOTE: If this is an internal SDK library, headers from `sources` are
+    # always made available so Bazel can find them.
+    if (is_internal || !defined(invoker.public)) {
+      foreach(source_file, invoker.sources) {
+        extension = get_path_info(source_file, "extension")
+        if (extension == "h") {
+          all_headers += [ source_file ]
+        } else {
+          all_sources += [ source_file ]
+        }
+      }
+    } else {
+      all_sources += invoker.sources
+    }
+  }
+
+  # Determine destinations in the SDK for headers and sources.
+  sdk_metadata_headers = []
+  sdk_metadata_sources = []
+  sdk_header_files = []
+  sdk_files = []
+
+  if (defined(invoker.include_base)) {
+    include_base = invoker.include_base
+  } else {
+    if (is_internal) {
+      # by default, we want internal SDK elements to have their include path similar when used through
+      # an SDK (eg Bazel SDk) or directly (GN/Ninja), so that source code doesn't need to be changed
+      # when switching from one to the other.
+      include_base = "//"
+    } else {
+      include_base = "include"
+    }
+  }
+  assert(include_base != "")  # Work around for unused variable warning when
+                              # all_headers is empty
+
+  include_dest = "${sdk_root_path}/include"
+
+  foreach(header, all_headers) {
+    relative_destination = rebase_path(header, include_base)
+    destination = "${include_dest}/${relative_destination}"
+
+    sdk_metadata_headers += [ destination ]
+    sdk_header_files += [
+      {
+        source = header
+        dest = destination
+      },
+    ]
+  }
+  sdk_files += sdk_header_files
+  foreach(source, all_sources) {
+    sdk_metadata_sources += [ "${sdk_root_path}/${source}" ]
+    sdk_files += [
+      {
+        source = source
+        dest = "${sdk_root_path}/${source}"
+      },
+    ]
+  }
+
+  should_verify_pragma = !is_internal
+  if (should_verify_pragma) {
+    verify_pragma_target_name = "${target_name}_sdk_pragma"
+    verify_pragma_once(verify_pragma_target_name) {
+      headers = all_headers
+    }
+  }
+
+  verify_public_headers_target = "${target_name}_verify_public_headers"
+  verify_public_headers(verify_public_headers_target) {
+    forward_variables_from(invoker, [ "testonly" ])
+    target_label = ":${target_name}"
+    headers = all_headers
+  }
+
+  if (generate_plasa_artifacts) {
+    _plasa_artifacts_target_name = "${main_target_name}_plasa"
+    plasa_fragment_cc(_plasa_artifacts_target_name) {
+      forward_variables_from(invoker,
+                             [
+                               "source_dir",
+                               "testonly",
+                               "all_headers",
+                               "all_deps",
+                               "sdk_headers_for_internal_use",
+                             ])
+      file_base = sdk_root_path
+    }
+  } else {
+    not_needed(invoker, [ "sdk_headers_for_internal_use" ])
+  }
+
+  metadata_target_name = "${target_name}_sdk_metadata"
+  metadata_file = "$target_gen_dir/$target_name.sdk_meta.json"
+
+  action(metadata_target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    script = "//release/cpp/gen_sdk_sources_meta_file.py"
+
+    inputs = sdk_metas
+
+    outputs = [ metadata_file ]
+
+    args = [
+      "--out",
+      rebase_path(metadata_file, root_build_dir),
+      "--name",
+      sdk_name,
+      "--root",
+      sdk_root_path,
+      "--include-dir",
+      include_dest,
+    ]
+    args += [ "--deps" ] + rebase_path(sdk_metas, root_build_dir)
+    args += [ "--dep_names" ] + dep_names
+    args += [ "--sources" ] + sdk_metadata_sources
+    args += [ "--headers" ] + sdk_metadata_headers
+
+    if (is_stable) {
+      args += [ "--stable" ]
+    }
+
+    # Unlike the other C++ library templates, the main target
+    # (`main_target_name`) is not required for the metadata and is not
+    # built with the atom.
+    deps = sdk_deps
+  }
+
+  sdk_atom(sdk_target_name) {
+    # As described at the top of this file, this atom does NOT build the
+    # underlying source files.
+    # Ensure the behavior matches this documentation.
+    # Both could be changed if it makes sense.
+    #
+    # When plasa is enabled, the atom's `${sdk_target_name}_meta_copy` sub-target depends on
+    # the `${sdk_target_name}_plasa` target, which indirectly depends on
+    # `main_target_name`. Rather than trying to handle the `assert_no_deps` in
+    # `sdk_atom()`, just skip it in when generating plasa artifacts.
+    if (!generate_plasa_artifacts) {
+      assert_no_deps = [ ":${main_target_name}" ]
+    }
+
+    forward_variables_from(invoker,
+                           [
+                             "source_dir",
+                             "testonly",
+                             "sdk_area",
+                           ])
+
+    category = invoker.category
+    if (make_internal_atom) {
+      category = "internal"
+    }
+
+    id = sdk_id
+
+    if (is_stable) {
+      api = "${sdk_name}.api"
+      if (defined(invoker.api)) {
+        assert(
+            rebase_path(invoker.api, "//") != rebase_path(api, "//"),
+            "The specified `api` file (`${invoker.api}`) matches the default. `api` only needs to be specified when overriding the default.")
+        api = invoker.api
+      }
+
+      api_contents = sdk_header_files
+    } else {
+      assert(
+          !defined(invoker.api),
+          "Unstable targets do not require/support modification acknowledgement.")
+    }
+
+    meta = {
+      source = metadata_file
+      dest = "$sdk_root_path/meta.json"
+      schema = "cc_source_library"
+      stable = is_stable
+    }
+
+    files = sdk_files
+
+    deps = sdk_deps
+
+    non_sdk_deps = [
+      ":${metadata_target_name}",
+      ":${verify_public_headers_target}",
+    ]
+    if (should_verify_pragma) {
+      non_sdk_deps += [ ":${verify_pragma_target_name}" ]
+    }
+    if (generate_plasa_artifacts) {
+      non_sdk_deps += [ ":${_plasa_artifacts_target_name}" ]
+    }
+
+    # Explicitly add non-public dependencies, in case some of the source files
+    # are generated.
+    if (defined(invoker.non_sdk_deps)) {
+      non_sdk_deps += invoker.non_sdk_deps
+    }
+
+    if (defined(invoker.non_sdk_public_deps)) {
+      non_sdk_deps += invoker.non_sdk_public_deps
+    }
+
+    if (defined(invoker.non_sdk_local_deps)) {
+      non_sdk_deps += invoker.non_sdk_local_deps
+    }
+
+    metadata = {
+      # Used by the //sdk:sdk_source_set_list build API module.
+      sdk_source_set_sources = rebase_path(all_sources + all_headers, "//")
+    }
+  }
+}
+
+set_defaults("sdk_source_set") {
+  configs = default_common_binary_configs
+}

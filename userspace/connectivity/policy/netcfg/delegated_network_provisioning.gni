@@ -1,0 +1,12 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+declare_args() {
+  # DO NOT SET THIS IN A PRODUCT DEFINITION!!  FOR DEVELOPER USE ONLY
+  # TODO(https://fxbug.dev/42082693): Remove this when we have a solution for
+  # changing the netcfg configuration at runtime.
+  # LINT.IfChange
+  delegated_network_provisioning = false
+  # LINT.ThenChange(//release/bazel/gn_build_args.txt)
+}

@@ -1,0 +1,92 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# The allowlist of components that can use the "structured_config" feature in CML.
+group("structured_config") {
+  # Available to all components in fuchsia.git
+}
+
+# The allowlist of components that can define dynamic dictionaries in CML.
+group("dynamic_dictionaries") {
+  visibility = [
+    "//examples/components/dictionaries/*",
+    "//userspace/diagnostics/archivist:*",
+    "//userspace/diagnostics/archivist/tests/integration/realm_factory:*",
+    "//userspace/sys/component_manager/tests/*",
+  ]
+}
+
+# The allowlist of components that can customize timing of request delivery in CML.
+group("delivery_type") {
+  visibility = [
+    "//userspace/connectivity/policy/http-client/*",
+    "//userspace/devices/bin/driver-index:*",
+    "//userspace/sys/component_manager/tests/*",
+    "//userspace/sys/pkg/bin/system-update-committer/*",
+  ]
+}
+
+# The allowlist of components that can use the "allow_long_names" feature in CML.
+group("allow_long_names") {
+  visibility = [
+    # driver collections
+    "//sdk/lib/driver_test_realm/*",
+    "//userspace/devices/bin/driver_manager/*",
+    "//userspace/sys/bootstrap/*",
+    "//tools/cmc:*",
+  ]
+}
+
+# The allowlist of test components that can resolve non-hermetic packages.
+# Don't add any more dependencies to this. See
+# https://fuchsia.dev/fuchsia-src/development/testing/components/test_runner_framework?hl=en#hermetic-resolver
+group("allow_non_hermetic_packages") {
+  visibility = [
+    "//userspace/chromium/web_runner_tests:*",
+    "//userspace/connectivity/bluetooth/lib/fuchsia-audio-codec:*",
+    "//userspace/connectivity/bluetooth/profiles/bt-a2dp:*",
+    "//userspace/connectivity/bluetooth/profiles/bt-hfp-audio-gateway:*",
+    "//userspace/connectivity/bluetooth/profiles/tests/bt-a2dp-loopback:*",
+    "//userspace/connectivity/bluetooth/profiles/tests/bt-a2dp-source-integration-tests:*",
+    "//userspace/connectivity/network/testing/netemul/runner/tests:*",
+    "//userspace/graphics/tests/vkvalidation:*",
+    "//userspace/identity/tests/account_manager_integration:*",
+    "//userspace/media/codec/examples:*",
+    "//userspace/media/stream_processors/test:*",
+    "//userspace/recovery/integration/ota:*",
+    "//userspace/sys/pkg/tests/isolated-ota:*",
+    "//userspace/sys/run_test_suite/tests:*",
+    "//userspace/sys/test_manager/tests:*",
+    "//userspace/sys/test_manager/tests/nonhermetic_packaged_tests:*",
+    "//userspace/sys/test_runners/elf/tests:*",
+    "//userspace/sys/test_runners/fuzz/tests:*",
+    "//userspace/sys/test_runners/gotests/tests:*",
+    "//userspace/sys/test_runners/gtest/tests:*",
+    "//userspace/sys/test_runners/gunit/tests:*",
+    "//userspace/sys/test_runners/inspect/tests:*",
+    "//userspace/sys/test_runners/rust/tests:*",
+    "//userspace/sys/test_runners/stress_test/tests:*",
+    "//userspace/testing/system-validation/web:*",
+    "//userspace/tests/intl/timezone:*",
+    "//userspace/ui/a11y/lib/semantics/tests:*",
+    "//userspace/ui/tests/integration_graphics_tests/web-pixel-tests:*",
+    "//userspace/ui/tests/integration_input_tests/mouse:*",
+    "//userspace/ui/tests/integration_input_tests/text-input:*",
+    "//userspace/ui/tests/integration_input_tests/touch:*",
+    "//userspace/ui/tests/integration_input_tests/virtual-keyboard:*",
+    "//userspace/ui/tests/integration_input_tests/web-touch-input:*",
+    "//vendor/google/bin/*",
+    "//vendor/google/media/*",
+  ]
+}
+
+# The allowlist of components that can use the "enable_allow_non_hermetic_packages_feature" feature in CML.
+group("enable_allow_non_hermetic_packages_feature") {
+  # Available to all components in fuchsia.git
+}
+
+# The allowlist of components that can use the "restrict_test_type_in_facets" feature in CML.
+group("restrict_test_type_in_facets") {
+  # Available to all components in fuchsia.git
+}

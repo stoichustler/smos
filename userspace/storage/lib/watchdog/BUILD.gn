@@ -1,0 +1,28 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/test.gni")
+
+source_set("watchdog") {
+  public = [
+    "operations.h",
+    "watchdog.h",
+  ]
+  sources = [ "watchdog.cc" ]
+  deps = [
+    "//sdk/lib/syslog/cpp",
+    "//zircon/system/ulib/inspector",
+    "//zircon/system/ulib/sync",
+    "//zircon/system/ulib/zx",
+  ]
+  public_deps = [
+    "//sdk/lib/syslog/cpp",
+    "//zircon/system/ulib/zx",
+  ]
+  visibility = [
+    ":*",
+    "//userspace/storage/blobfs:*",
+  ]
+}

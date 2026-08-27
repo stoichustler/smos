@@ -1,0 +1,31 @@
+# Copyright 2016 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("socket") {
+  visibility = [ "//userspace/lib/fsl/*" ]
+
+  sources = [
+    "blocking_drain.cc",
+    "blocking_drain.h",
+    "files.cc",
+    "files.h",
+    "socket_drainer.cc",
+    "socket_drainer.h",
+    "strings.cc",
+    "strings.h",
+  ]
+
+  public_deps = [
+    "//sdk/lib/async:async-cpp",
+    "//sdk/lib/async-default",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/lib/files",
+    "//userspace/lib/fxl:common",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/zx",
+  ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+}

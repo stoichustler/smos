@@ -1,0 +1,42 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+rustc_library("lib") {
+  name = "errors"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+  sources = [ "src/lib.rs" ]
+
+  # There should be no dependencies on FIDL or anything to do with
+  # communicating with target devices.
+  assert_no_deps = [
+    "//userspace/developer/ffx/fidl:*",
+    "//userspace/lib/fidl/rust/fidl",
+  ]
+
+  deps = [
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:thiserror",
+  ]
+
+  test_deps = [ "//third_party/rust_crates:assert_matches" ]
+}
+
+group("tests") {
+  testonly = true
+
+  deps = [ ":lib_test" ]
+}
+
+group("errors") {
+  testonly = true
+
+  deps = [
+    ":lib",
+    ":tests",
+  ]
+}

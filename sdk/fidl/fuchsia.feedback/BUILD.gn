@@ -1,0 +1,31 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.feedback") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Metrics"
+
+  sources = [
+    "annotation.fidl",
+    "attachment.fidl",
+    "crash_register.fidl",
+    "crash_reporter.fidl",
+    "data_provider.fidl",
+    "data_register.fidl",
+    "device_id_provider.fidl",
+    "last_reboot_info.fidl",
+    "overview.fidl",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.math",
+    "//sdk/fidl/fuchsia.mem",
+    "//zircon/vdso/zx",
+  ]
+
+  enable_hlcpp = true
+}

@@ -1,0 +1,17 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.hardware.serialimpl") {
+  sdk_category = "partner"
+  stable = false
+  sources = [ "serial-impl.fidl" ]
+  sdk_area = "Drivers"
+  public_deps = [
+    "//sdk/fidl/fuchsia.hardware.serial",
+    "//zircon/vdso/zx",
+  ]
+  contains_drivers = true
+}

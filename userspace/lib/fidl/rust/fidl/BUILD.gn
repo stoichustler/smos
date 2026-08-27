@@ -1,0 +1,73 @@
+# Copyright 2017 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/fidl/fidl.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/rust/rustc_test.gni")
+
+fidl_rust_deps = [
+  "//sdk/rust/zx-status",
+  "//sdk/rust/zx-types",
+  "//userspace/lib/fuchsia-async",
+  "//userspace/lib/fuchsia-sync",
+  "//third_party/rust_crates:bitflags",
+  "//third_party/rust_crates:futures",
+  "//third_party/rust_crates:log",
+  "//third_party/rust_crates:slab",
+  "//third_party/rust_crates:static_assertions",
+  "//third_party/rust_crates:thiserror",
+]
+
+if (is_fuchsia) {
+  fidl_rust_deps += [ "//sdk/rust/zx" ]
+}
+
+fidl_rust_sources = [
+  "src/client.rs",
+  "src/encoding.rs",
+  "src/endpoints.rs",
+  "src/epitaph.rs",
+  "src/error.rs",
+  "src/for_fidl_message_crate.rs",
+  "src/handle.rs",
+  "src/lib.rs",
+  "src/marker.rs",
+  "src/persistence.rs",
+  "src/prelude.rs",
+  "src/server.rs",
+  "src/time.rs",
+]
+
+rustc_library("fidl") {
+  edition = "2021"
+  deps = fidl_rust_deps
+  sources = fidl_rust_sources
+  configs += [ "//release/config:optimize_size_lto" ]
+}
+
+rustc_test("fidl_rust_lib_tests_bin") {
+  output_name = "fidl_rust_lib_tests"
+  edition = "2021"
+  deps = fidl_rust_deps + [ "//third_party/rust_crates:assert_matches" ]
+  if (is_fuchsia) {
+    deps += [
+      "//third_party/rust_crates:anyhow",
+      "//third_party/rust_crates:futures-test",
+    ]
+  }
+  sources = fidl_rust_sources
+}
+
+fuchsia_unittest_package("fidl_rust_lib_tests") {
+  deps = [ ":fidl_rust_lib_tests_bin" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":fidl_rust_lib_tests",
+    ":fidl_rust_lib_tests_bin($host_toolchain)",
+  ]
+}

@@ -1,0 +1,18 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.thermal") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Power"
+  sources = [
+    "client_state.fidl",
+    "overview.fidl",
+    "thermal.fidl",
+  ]
+
+  enable_hlcpp = true
+}

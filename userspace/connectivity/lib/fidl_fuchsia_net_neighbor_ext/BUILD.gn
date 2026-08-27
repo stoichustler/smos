@@ -1,0 +1,26 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+rustc_library("fidl_fuchsia_net_neighbor_ext") {
+  with_unit_tests = true
+  edition = "2021"
+  deps = [
+    "//sdk/fidl/fuchsia.net:fuchsia.net_rust",
+    "//sdk/fidl/fuchsia.net.neighbor:fuchsia.net.neighbor_rust",
+    "//sdk/rust/zx-types",
+    "//userspace/lib/fidl_table_validation",
+    "//userspace/lib/network/fidl_fuchsia_net_ext",
+  ]
+
+  sources = [ "src/lib.rs" ]
+
+  configs -= [ "//release/config/rust/lints:allow_unused_results" ]
+}
+
+fuchsia_unittest_package("fidl-fuchsia-net-neighbor-ext-test") {
+  deps = [ ":fidl_fuchsia_net_neighbor_ext_test" ]
+}

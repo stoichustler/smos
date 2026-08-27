@@ -1,0 +1,143 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/bazel/bazel_test_package_group.gni")
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":e2e_tests",
+    ":tests_no_e2e",
+  ]
+}
+
+group("tests_no_e2e") {
+  testonly = true
+  assert_no_deps = e2e_test_libs
+
+  # Add the tests themselves
+  deps = [
+    ":bazel_tests",
+    "bringup:tests",
+    "chromium:tests",
+    "cobalt:tests",
+    "connectivity:tests_no_e2e",
+    "developer:tests",
+    "devices:tests",
+    "diagnostics:tests",
+    "factory:tests",
+    "firmware:tests",
+    "hwinfo:tests",
+    "intl:tests",
+    "lib:tests",
+    "paravirtualization:tests",
+    "performance:tests",
+    "power:tests",
+    "recovery:tests_no_e2e",
+    "security:tests",
+    "sensors:tests",
+    "session:tests",
+    "settings:tests",
+    "starnix:tests",
+    "storage:tests",
+    "sys:tests",
+    "tee:tests",
+    "testing:tests",
+    "virtualization:tests",
+    "zircon:tests",
+  ]
+}
+
+bazel_test_package_group("bazel_tests") {
+  tests = [
+    {
+      test_package_target = "//userspace/devices/board/drivers/vim3-devicetree:vim3-devicetree-test-package"
+      test_package_name = "vim3-devicetree-test"
+      test_component_names = [ "vim3-devicetree-test" ]
+
+      # Integration test for the board driver requires these prebuilt artifacts:
+      #   - devicetree blob (.dtb)
+      #   - Platform bus driver (.far)
+      #   - driver-test-realm package (.far)
+      deps = [
+        "//sdk/lib/driver/devicetree/testing:devicetree-test-bazel-inputs",
+        "//userspace/devices/board/drivers/vim3-devicetree:vim3-dtb",
+      ]
+    },
+    {
+      test_package_target =
+          "//userspace/devices/clock/drivers/vim3-clk:vim3-clk-test-package"
+      test_package_name = "vim3-clk-test"
+      test_component_names = [ "vim3-clk-test-bin" ]
+    },
+    {
+      test_package_target =
+          "//userspace/devices/gpio/drivers/aml-gpio:aml-gpio-test-package"
+      test_package_name = "aml-gpio-test"
+      test_component_names = [ "aml-gpio-test-bin" ]
+      test_specs = {
+        log_settings = {
+          max_severity = "ERROR"
+        }
+      }
+    },
+    {
+      test_package_target =
+          "//userspace/devices/i2c/drivers/aml-i2c:aml-i2c-test-package"
+      test_package_name = "aml-i2c-test"
+      test_component_names = [ "aml-i2c-test-bin" ]
+      test_specs = {
+        log_settings = {
+          max_severity = "ERROR"
+        }
+      }
+    },
+    {
+      test_package_target =
+          "//userspace/devices/usb/drivers/aml-usb-phy:aml-usb-phy-test-package"
+      test_package_name = "aml-usb-phy-test"
+      test_component_names = [ "aml-usb-phy-test-bin" ]
+      test_specs = {
+        log_settings = {
+          max_severity = "ERROR"
+        }
+      }
+    },
+    {
+      test_package_target = "//userspace/devices/spmi/lib/hwreg-spmi:spmi-hwreg-test"
+      test_package_name = "spmi-hwreg-test"
+      test_component_names = [ "spmi-hwreg-test-bin" ]
+    },
+    {
+      test_package_target = "//userspace/devices/usb/drivers/dwc3:dwc3-test-package"
+      test_package_name = "dwc3-test"
+      test_component_names = [ "dwc3-test-bin" ]
+      test_specs = {
+        log_settings = {
+          max_severity = "ERROR"
+        }
+      }
+    },
+    {
+      test_package_target =
+          "//userspace/diagnostics/archivist/tests/pipeline_test:pipeline_test"
+      test_component_names = [ "pipeline_test" ]
+    },
+  ]
+}
+
+group("e2e_tests") {
+  testonly = true
+  deps = [
+    "developer:e2e_tests",
+    "devices:e2e_tests",
+    "recovery:e2e_tests",
+    "testing:e2e_tests",
+    "tests",
+    "//userspace/connectivity/network:e2e_tests",
+    "//userspace/storage/lib/paver/e2e_tests",
+    "//userspace/sys/pkg:e2e_tests",
+    "//userspace/zircon:e2e_tests",
+  ]
+}

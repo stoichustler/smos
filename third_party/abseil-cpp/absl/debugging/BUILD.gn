@@ -1,0 +1,146 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+visibility = [
+  "$cobalt_root/*",
+  "//third_party/abseil-cpp/*",
+  "//third_party/tink/*",
+]
+
+source_set("stacktrace") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [
+    "internal/stacktrace_aarch64-inl.inc",
+    "internal/stacktrace_arm-inl.inc",
+    "internal/stacktrace_emscripten-inl.inc",
+    "internal/stacktrace_generic-inl.inc",
+    "internal/stacktrace_powerpc-inl.inc",
+    "internal/stacktrace_riscv-inl.inc",
+    "internal/stacktrace_unimplemented-inl.inc",
+    "internal/stacktrace_win32-inl.inc",
+    "internal/stacktrace_x86-inl.inc",
+    "stacktrace.cc",
+  ]
+  public = [
+    "internal/stacktrace_config.h",
+    "stacktrace.h",
+  ]
+
+  deps = [
+    ":debugging_internal",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:dynamic_annotations",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+  ]
+}
+
+source_set("symbolize") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [
+    "symbolize.cc",
+    "symbolize_darwin.inc",
+    "symbolize_elf.inc",
+    "symbolize_emscripten.inc",
+    "symbolize_unimplemented.inc",
+    "symbolize_win32.inc",
+  ]
+  public = [
+    "internal/symbolize.h",
+    "symbolize.h",
+  ]
+
+  deps = [
+    ":debugging_internal",
+    ":demangle_internal",
+    "//third_party/abseil-cpp/absl/base",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:dynamic_annotations",
+    "//third_party/abseil-cpp/absl/base:malloc_internal",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+    "//third_party/abseil-cpp/absl/strings",
+  ]
+}
+
+source_set("examine_stack") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "internal/examine_stack.cc" ]
+  public = [ "internal/examine_stack.h" ]
+
+  deps = [
+    ":stacktrace",
+    ":symbolize",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+  ]
+}
+
+source_set("failure_signal_handler") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "failure_signal_handler.cc" ]
+  public = [ "failure_signal_handler.h" ]
+
+  deps = [
+    ":examine_stack",
+    ":stacktrace",
+    "//third_party/abseil-cpp/absl/base",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+  ]
+}
+
+source_set("debugging_internal") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [
+    "internal/address_is_readable.cc",
+    "internal/elf_mem_image.cc",
+    "internal/vdso_support.cc",
+  ]
+  public = [
+    "internal/address_is_readable.h",
+    "internal/elf_mem_image.h",
+    "internal/vdso_support.h",
+  ]
+
+  deps = [
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:dynamic_annotations",
+    "//third_party/abseil-cpp/absl/base:errno_saver",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+  ]
+}
+
+source_set("demangle_internal") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "internal/demangle.cc" ]
+  public = [ "internal/demangle.h" ]
+
+  deps = [
+    "//third_party/abseil-cpp/absl/base",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+  ]
+}
+
+source_set("leak_check") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "leak_check.cc" ]
+  public = [ "leak_check.h" ]
+
+  deps = [
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+  ]
+}

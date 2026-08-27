@@ -1,0 +1,18 @@
+# Copyright 2026 The Fuchsia Authors.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+has_board = true
+target_cpu = "arm64"
+
+board_configuration_label = "//platform/boards/smos-qemu-arm64"
+bazel_product_bundle_board = "qemu-arm64"
+board_name = "smos-qemu-arm64"
+board_is_emu = true
+
+# The legacy in-kernel PCI initialization syscall is incompatible with this
+# compact boot configuration.  Keep PCI in userspace behind the qemu pciroot
+# protocol used by the retained bus-pci driver.
+qemu_arm64_enable_user_pci = true
+
+partitions_config_label = "//platform/boards/partitions:default"

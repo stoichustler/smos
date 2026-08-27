@@ -1,0 +1,60 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+declare_args() {
+  # Is the `assemble_system()` instantiation used by the product the standard
+  # one or the bringup one?
+  use_bringup_assembly = false
+
+  # Optional, product-specific list of platform Assembly Input Bundles made
+  # available to the bringup Product Assembler.  An empty list retains the
+  # platform-wide bringup catalog.
+  bringup_platform_aib_names = []
+
+  # A human readable product description.
+  product_description = ""
+
+  # Determines whether the fuchsia_async library used by many Rust targets will be compiled
+  # with TRACE level log statements that increase binary size a measurable amount.
+  # TODO(https://fxbug.dev/42161120) move this to a toolchain to allow multiple products to build together
+  fuchsia_async_trace_level_logging = true
+
+  # The product assembly config used to configure the main Fuchsia image.
+  # For GN products, this is required.
+  # For Bazel products, this is optional.
+  # For Bazel products, netboot will only be available when this is supplied.
+  fuchsia_product_assembly_config_label = false
+
+  # Name of the copied main ZBI emitted by the Fuchsia assembly.
+  smos_zbi_name = "fuchsia"
+
+  # Optional SMOS platform AIB allowlist for compact source checkouts.
+  smos_platform_aib_names = []
+
+  # The product assembly config used to configure the Zedboot image.
+  zedboot_product_assembly_config_label = false
+
+  # TODO(https://fxbug.dev/42175904): move to board definitions.
+  # Adds a prefix to the start of the virtual device name. Used to distinguish
+  # between similar virtual device's using different configuration's such as
+  # `emu_window_size`.
+  virtual_device_name_prefix = ""
+
+  # Configuration to override the default window size for the virtual device in pixels.
+  emu_window_size_width = false
+  emu_window_size_height = false
+
+  # Targets to be traversed by //:cipd_assembly_artifacts for GN metadata only.
+  # These targets are expected to set "assembly_inputs" in metadata, which can
+  # include a JSON file describing artifacts to be uploaded to CPID.
+  #
+  # NOTE: These targets are for GN metadata walk only. If the artifacts need to
+  # be built, they should be included in the build graph through other means.
+  cipd_assembly_artifact_targets = [ "//release/images:main_assembly" ]
+
+  # List of product_bundle_test_group() targets.
+  # We declare them in the top-level BUILD.gn so that the generated_file()s
+  # within get resolved at gn-gen time.
+  product_bundle_test_groups = []
+}

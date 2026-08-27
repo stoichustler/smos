@@ -1,0 +1,319 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+md5_visibility = [
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # This is an allowlist of targets that use the `md-5` Rust library, which
+  # implements the insecure and deprecated MD-5 hash function. Code should only
+  # use this if it's implementing legacy protocols that require MD-5; it should
+  # never be used for new cryptographic development.
+
+  "//userspace/connectivity/wlan/lib/rsn:*",
+]
+
+sha1_visibility = [
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # This is an allowlist of targets that use the `sha1` Rust library, which
+  # implements the insecure and deprecated SHA-1 hash function. Code should only
+  # use this if it's implementing legacy protocols that require SHA-1; it should
+  # never be used for new cryptographic development.
+
+  "//userspace/tee/runtime/api_impl:*",
+  "//userspace/connectivity/wlan/lib/rsn:*",
+]
+
+lazy_static_visibility = [
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # This is an allowlist of targets that use the `lazy_static` Rust library, as
+  # of Rust 1.80, LazyLock is now stable which should cover most of the use
+  # cases for `lazy_static`.
+  #
+  # Only add to this list if you have a use case that isn't supported by the
+  # standard library APIs.
+  #
+  # To regenerate, run:
+  # (cd $FUCHSIA_DIR && git grep  --files-with-matches '//third_party/rust_crates:lazy_static' -- '*BUILD.gn' | sed 's|\(.*\)/BUILD.gn|"//\1:*",|')
+  "//examples/components/storage:*",
+  "//examples/fidl/new/key_value_store/add_iterator/rust/server:*",
+  "//examples/fidl/new/key_value_store/add_read_item/rust/server:*",
+  "//examples/fidl/new/key_value_store/baseline/rust/server:*",
+  "//examples/fidl/new/key_value_store/support_exports/rust/server:*",
+  "//examples/fidl/new/key_value_store/support_trees/rust/server:*",
+  "//examples/fidl/new/key_value_store/use_generic_values/rust/server:*",
+  "//userspace/connectivity/lowpan/drivers/lowpan-ot-driver:*",
+  "//userspace/connectivity/lowpan/service:*",
+  "//userspace/connectivity/network/netstack3/core:*",
+  "//userspace/connectivity/policy/netcfg:*",
+  "//userspace/connectivity/wlan/lib/common/rust:*",
+  "//userspace/connectivity/wlan/lib/ieee80211-testutils:*",
+  "//userspace/connectivity/wlan/lib/ieee80211:*",
+  "//userspace/connectivity/wlan/lib/mlme/rust:*",
+  "//userspace/connectivity/wlan/lib/rsn:*",
+  "//userspace/connectivity/wlan/lib/sae:*",
+  "//userspace/connectivity/wlan/lib/sme:*",
+  "//userspace/connectivity/wlan/testing/hw-sim:*",
+  "//userspace/connectivity/wlan/testing/hw-sim/test/connect_with_bad_password:*",
+  "//userspace/connectivity/wlan/testing/hw-sim/test/connect_with_wrong_credential_type:*",
+  "//userspace/connectivity/wlan/testing/hw-sim/test/ethernet_tx_rx:*",
+  "//userspace/connectivity/wlan/testing/hw-sim/test/multiple_clients_ap:*",
+  "//userspace/connectivity/wlan/testing/hw-sim/test/rate_selection:*",
+  "//userspace/connectivity/wlan/testing/hw-sim/test/scan_contemporary_privacy:*",
+  "//userspace/connectivity/wlan/testing/hw-sim/test/scan_legacy_privacy:*",
+  "//userspace/connectivity/wlan/testing/hw-sim/test/simulate_scan:*",
+  "//userspace/connectivity/wlan/testing/hw-sim/test/verify_wlan_inspect:*",
+  "//userspace/connectivity/wlan/tests/drivers-only/common:*",
+  "//userspace/connectivity/wlan/tests/helpers/fullmac-helpers:*",
+  "//userspace/connectivity/wlan/wlancfg:*",
+  "//userspace/developer/fastboot:*",
+  "//userspace/developer/ffx/config:*",
+  "//userspace/developer/ffx/daemon/protocols/mdns:*",
+  "//userspace/developer/ffx/daemon/protocols/repo:*",
+  "//userspace/developer/ffx/lib/mdns_discovery:*",
+  "//userspace/developer/ffx/lib/netext:*",
+  "//userspace/developer/ffx/plugins/audio/device:*",
+  "//userspace/developer/ffx/plugins/fuzz:*",
+  "//userspace/developer/ffx/plugins/platform/preflight:*",
+  "//userspace/developer/ffx/plugins/process:*",
+  "//userspace/developer/ffx/plugins/product/list:*",
+  "//userspace/developer/ffx/plugins/profile/memory:*",
+  "//userspace/developer/ffx/plugins/target/list:*",
+  "//userspace/developer/ffx/plugins/test:*",
+  "//userspace/developer/ffx/plugins/trace:*",
+  "//userspace/developer/ffx/tools/starnix:*",
+  "//userspace/developer/ffx/tools/triage:*",
+  "//userspace/devices/ctap:*",
+  "//userspace/devices/lib/bind:*",
+  "//userspace/devices/lib/fidl-ir:*",
+  "//userspace/devices/pci/bin/lspci:*",
+  "//userspace/fonts:*",
+  "//userspace/hwinfo/mock:*",
+  "//userspace/lib/assembly/platform_configuration:*",
+  "//userspace/lib/async-utils:*",
+  "//userspace/lib/fuchsia-async:*",
+  "//userspace/lib/fuchsia-url:*",
+  "//userspace/lib/icu_data/rust/icu_data:*",
+  "//userspace/lib/intl/strings:*",
+  "//userspace/lib/intl/unicode_utils/unicode_blocks:*",
+  "//userspace/lib/process_builder:*",
+  "//userspace/lib/scoped_task:*",
+  "//userspace/lib/test_util:*",
+  "//userspace/lib/ui/keymaps:*",
+  "//userspace/lib/usb_bulk/rust:*",
+  "//userspace/lib/webpki-roots-fuchsia:*",
+  "//userspace/media/stream_processors/test:*",
+  "//userspace/performance/memory/heapdump/instrumentation:*",
+  "//userspace/power/broker:*",
+  "//userspace/recovery/lib/recovery-ui:*",
+  "//userspace/recovery/lib/recovery-util:*",
+  "//userspace/session/bin/element_manager:*",
+  "//userspace/session/lib/realm_management:*",
+  "//userspace/storage/fxfs/platform:*",
+  "//userspace/storage/lib/block_client/rust:*",
+  "//userspace/sys/component_manager:*",
+  "//userspace/sys/component_manager/lib/builtins:*",
+  "//userspace/sys/component_manager/lib/diagnostics:*",
+  "//userspace/sys/component_manager/lib/sandbox:*",
+  "//userspace/sys/lib/cm_fidl_validator:*",
+  "//userspace/sys/lib/cm_rust:*",
+  "//userspace/sys/lib/cm_types:*",
+  "//userspace/sys/lib/component-events:*",
+  "//userspace/sys/lib/elf_runner:*",
+  "//userspace/sys/lib/fuchsia-bootfs:*",
+  "//userspace/sys/lib/fuchsia-zbi:*",
+  "//userspace/sys/lib/routing:*",
+  "//userspace/sys/lib/runner:*",
+  "//userspace/sys/pkg/bin/system-update-checker:*",
+  "//userspace/sys/pkg/lib/fuchsia-pkg:*",
+  "//userspace/sys/pkg/lib/tuf:*",
+  "//userspace/sys/test_manager:*",
+  "//userspace/sys/test_runners/elf:*",
+  "//userspace/sys/test_runners/gotests:*",
+  "//userspace/sys/test_runners/gtest:*",
+  "//userspace/sys/test_runners/rust:*",
+  "//userspace/sys/time/httpsdate_time_source:*",
+  "//userspace/sys/time/lib/httpdate-hyper:*",
+  "//userspace/sys/time/testing:*",
+  "//userspace/sys/time/testing/example:*",
+  "//userspace/sys/time/time_test_client:*",
+  "//userspace/sys/time/timekeeper:*",
+  "//userspace/testing/fidl/intl_property_manager:*",
+  "//userspace/testing/sl4f:*",
+  "//userspace/ui/bin/brightness_manager:*",
+  "//userspace/ui/lib/input_pipeline:*",
+  "//userspace/virtualization/bin/vmm/device/virtio_input:*",
+  "//tools/clidoc:*",
+  "//tools/create:*",
+  "//tools/doc_checker:*",
+  "//tools/fidl/fidldoc:*",
+  "//tools/funnel:*",
+  "//tools/lib/cml:*",
+  "//tools/shush:*",
+
+  # At this time we are not enforcing restrictions on the below.
+  "//third_party/*",
+]
+
+once_cell_visibility = [
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # This is an allowlist of targets that use the `once_cell` Rust library, as
+  # of Rust 1.80, LazyLock and LazyCell are now stable which should cover most of the use
+  # cases for `once_cell.
+  #
+  # Only add to this list if you have a use case that isn't supported by the
+  # standard library APIs.
+  #
+  # To regenerate, run:
+  # (cd $FUCHSIA_DIR && git grep  --files-with-matches '//third_party/rust_crates:once_cell' -- '*BUILD.gn' | sed 's|\(.*\)/BUILD.gn|"//\1:*",|')
+  "//userspace/connectivity/network/netstack3:*",
+  "//userspace/connectivity/network/netstack3/core/filter:*",
+  "//userspace/fonts:*",
+  "//userspace/graphics/lib/compute/rive-rs:*",
+  "//userspace/lib/async-utils:*",
+  "//userspace/lib/ui/carnelian:*",
+  "//userspace/starnix/kernel:*",
+  "//userspace/starnix/modules/ashmem:*",
+  "//userspace/starnix/modules/ext4:*",
+  "//userspace/starnix/modules/overlayfs:*",
+  "//userspace/storage/ext4/read-only:*",
+  "//userspace/storage/fxfs:*",
+  "//userspace/storage/fxfs/tools:*",
+  "//userspace/storage/stress-tests/genericfs:*",
+  "//userspace/sys/lib/elf_runner:*",
+  "//userspace/testing/sl4f:*",
+  "//userspace/ui/testing/puppet:*",
+  "//tools/shush:*",
+
+  # At this time we are not enforcing restrictions on the below.
+  "//third_party/*",
+]
+
+tracing_visibility = [
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # This is an allowlist of targets that use the `tracing` Rust
+  # library, we've standarized on `log` for multiple reasons listed at
+  # go/fuchsia-rust-log
+  #
+  # At the moment, `tracing` macro usage is only allowed for ffx code which depends
+  # on #[tracing::instrument] features.
+  #
+  # To regenerate, run:
+  # (cd $FUCHSIA_DIR && git grep  --files-with-matches '//third_party/rust_crates:tracing"' -- '*BUILD.gn' | sed 's|\(.*\)/BUILD.gn|"//\1:*",|')
+  #
+  # At this time we are not enforcing restirctions on the below since there's a
+  # test actually validating tracing macros still work on fuchsia in case we
+  # have a 3P lib that uses them.
+  "//userspace/tests/diagnostics:*",
+
+  # At this time we are not enforcing restrictions on ffx and related libraries.
+  "//userspace/developer/ffx/*",
+  "//userspace/connectivity/overnet/lib/ascendd:*",
+  "//userspace/developer/fastboot:*",
+  "//userspace/developer/lib/credentials:*",
+  "//userspace/lib/fuchsia-lockfile:*",
+  "//userspace/lib/usb_bulk/rust:*",
+
+  # At this time we are not enforcing restrictions on the below since the
+  # sources are in a 3P library.
+  "//userspace/sys/pkg/testing/mock-omaha-server:*",
+
+  # At this time we are not enforcing restrictions on the below.
+  "//third_party/*",
+]
+
+tracing_subscriber_visibility = [
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # This is an allowlist of targets that use the `tracing_subscriber` Rust
+  # library, we've standarized on `log` for multiple reasons listed at
+  # go/fuchsia-rust-log
+  #
+  # To regenerate, run:
+  # (cd $FUCHSIA_DIR && git grep  --files-with-matches '//third_party/rust_crates:tracing-subscriber' -- '*BUILD.gn' | sed 's|\(.*\)/BUILD.gn|"//\1:*",|')
+  #
+  # At this time we are not enforcing restrictions on ffx and related code.
+  "//userspace/developer/ffx/*",
+  "//tools/funnel:*",
+
+  # At this time we are not enforcing restrictions on the below.
+  "//third_party/*",
+]
+
+zeroize_visibility = [
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # This is an allowlist of targets that use the `zeroize` Rust crate.
+  #
+  # At this time only Android KeyMint is allowed to use it.
+  "//third_party/android/platform/system/keymint:*",
+]
+
+openssl_visibility = [
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # This is an allowlist of targets that use the `openssl` Rust crate.
+  #
+  # At this time only Android KeyMint is allowed to use it.
+  "//third_party/android/platform/system/keymint:*",
+]

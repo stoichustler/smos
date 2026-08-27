@@ -1,0 +1,149 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/board.gni")
+import("//release/images/archive/paver_targets.gni")
+import("//release/images/args.gni")
+import("//release/sdk/config.gni")
+
+assert(current_toolchain == default_toolchain,
+       "//release/images/* are only valid in the Fuchsia toolchain")
+
+group("archive-extras") {
+  testonly = true
+  deps = [
+    ":build_args_metadata",
+    "//release/images/flash:fastboot_manifest_archive",
+    "//release/images/flash:flash_script_archive",
+  ]
+}
+
+group("build_args_metadata") {
+  metadata = {
+    # Not actually images, but historically required entries to be included in
+    # the relevant build archives.
+    images = [
+      {
+        label = get_label_info(":$target_name", "label_with_toolchain")
+        archive = true
+        name = "buildargs"
+        type = "gn"
+        path = "args.gn"
+      },
+    ]
+  }
+}
+
+# Name the entrypoint scripts in images.json as well, as that they are
+# presently the stable API to perform a pave/netboot/etc. without botanist.
+
+archive_formats = [
+  "tar",
+  "tgz",
+  "zip",
+]
+archive_targets = []
+foreach(format, archive_formats) {
+  archive_targets += [
+    {
+      name = "archive-$format"
+      outputs = [ "$root_build_dir/build-archive.$format" ]
+      switch = "--archive="
+      extra_bootserver_arguments = ""
+      deps = [
+        ":archive-extras",
+        "//release/images",
+        "//release/images/flash:fastboot_manifest_archive",
+        "//release/images/flash:flash_script_archive",
+        "//release/images/tools:bootserver",
+      ]
+
+      if (!use_bazel_images_only) {
+        # Paving is not supported in Bazel assembly.
+        deps += [ ":paver-script" ]
+      }
+
+      metadata = {
+        archives = [
+          {
+            name = "archive"
+            path = "build-archive.$format"
+            type = "$format"
+          },
+        ]
+      }
+    },
+  ]
+}
+
+archive_deps = []
+foreach(target, archive_targets + paver_targets) {
+  archive_deps += [ ":${target.name}" ]
+}
+
+foreach(target, archive_targets + paver_targets) {
+  _archive_manifest_target = "${target.name}_archive_manifest"
+  _archive_manifest_file = get_label_info(":${target.name}", "target_gen_dir") +
+                           "/${_archive_manifest_target}.json"
+
+  # Create a manifest that lists all images generated from the
+  # transitive dependencies of the current target.
+  generated_file(_archive_manifest_target) {
+    testonly = true
+    outputs = [ _archive_manifest_file ]
+    output_conversion = "json"
+    walk_keys = [ "images_barrier" ]
+    data_keys = [ "images" ]
+    deps = target.deps
+  }
+
+  action(target.name) {
+    deps = []
+    if (defined(target.deps)) {
+      deps += target.deps
+    }
+    testonly = true
+
+    # TODO(https://fxbug.dev/42061843): Remove this once the assembly inputs stop leaking
+    # output_dir.
+    no_output_dir_leaks = false
+    outputs = target.outputs
+    depfile = "${outputs[0]}.d"
+    script = "//release/images/pack-images.py"
+    args = [
+      "--depfile=" + rebase_path(depfile, root_build_dir),
+      target.switch + rebase_path(outputs[0], root_build_dir),
+      "--board_name=${board_name}",
+    ]
+
+    if (additional_bootserver_arguments != "") {
+      args += [
+        "--additional_bootserver_arguments=${additional_bootserver_arguments}",
+      ]
+    }
+    if (defined(target.extra_bootserver_arguments) &&
+        target.extra_bootserver_arguments != "") {
+      args += [ "--additional_bootserver_arguments=${target.extra_bootserver_arguments}" ]
+    }
+
+    args += [
+      rebase_path(_archive_manifest_file, root_build_dir),
+      "checkout_artifacts.json",
+    ]
+
+    deps += [
+      ":${_archive_manifest_target}",
+      "//:checkout_artifacts",
+    ]
+
+    if (defined(target.metadata)) {
+      metadata = target.metadata
+    }
+  }
+}
+
+group("archive") {
+  testonly = true
+  deps = archive_deps
+}

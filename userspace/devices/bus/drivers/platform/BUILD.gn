@@ -1,0 +1,186 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/bazel/export_fuchsia_package_to_bazel.gni")
+import("//release/bind/bind.gni")
+import("//release/components.gni")
+import("//release/drivers.gni")
+import("//release/test.gni")
+
+group("platform") {
+  deps = [ ":platform-bus" ]
+}
+
+driver_bind_rules("platform-bus-bind") {
+  bind_output = "platform-bus.bindbc"
+  disable_autobind = true
+}
+
+fuchsia_component_manifest("manifest") {
+  component_name = "platform-bus"
+  manifest = "meta/platform-bus.cml"
+}
+
+fuchsia_structured_config_cpp_elf_lib("platform-bus-config") {
+  cm_label = ":manifest"
+}
+
+fuchsia_cc_driver("platform-bus-driver") {
+  legacy = true
+  output_name = "platform-bus"
+  sources = [
+    "node-util.cc",
+    "platform-bus.cc",
+    "platform-device.cc",
+    "platform-interrupt.cc",
+  ]
+  deps = [
+    ":platform-bus-bind",
+    ":platform-bus-config",
+    "//sdk/banjo/fuchsia.hardware.platform.device:fuchsia.hardware.platform.device_banjo_cpp",
+    "//sdk/fidl/fuchsia.boot:fuchsia.boot_cpp",
+    "//sdk/fidl/fuchsia.boot.metadata:fuchsia.boot.metadata_cpp",
+    "//sdk/fidl/fuchsia.hardware.interrupt:fuchsia.hardware.interrupt_cpp",
+    "//sdk/fidl/fuchsia.hardware.platform.bus:fuchsia.hardware.platform.bus_cpp",
+    "//sdk/fidl/fuchsia.hardware.platform.device:fuchsia.hardware.platform.device_cpp",
+    "//sdk/fidl/fuchsia.sysinfo:fuchsia.sysinfo_cpp",
+    "//sdk/lib/component/outgoing/cpp",
+    "//sdk/lib/driver/component/cpp:cpp",
+    "//sdk/lib/inspect/component/cpp",
+    "//sdk/lib/sys/cpp",
+    "//sdk/lib/zbi-format",
+    "//userspace/devices/bind/fuchsia:fuchsia_cpp",
+    "//userspace/devices/bind/fuchsia.platform:fuchsia.platform_cpp",
+    "//userspace/devices/bind/fuchsia.resource:fuchsia.resource_cpp",
+    "//userspace/devices/lib/driver",
+    "//userspace/devices/lib/driver:driver_runtime",
+    "//userspace/lib/ddk",
+    "//userspace/lib/ddktl",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/sync",
+    "//zircon/system/ulib/zircon-internal",
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+fuchsia_driver_component("platform-bus") {
+  visibility = [
+    ":*",
+    "//examples/drivers/driver_test_realm/hermetic/rust:*",
+    "//sdk/lib/driver_test_realm/tests:*",
+    "//userspace/devices/bus:drivers",
+    "//userspace/devices/bus/drivers/platform/test/power-integration-test:*",
+    "//userspace/devices/tests/driver-multiname-test:*",
+    "//userspace/power/fake-powersource:*",
+    "//userspace/starnix/tests/diagnostics/suspend_inspect/testing/suspend_driver_realm_proxy:*",
+  ]
+  cm_label = ":manifest"
+  deps = [ ":platform-bus-driver" ]
+  info = "meta/platform-bus-info.json"
+}
+
+fuchsia_driver_package("package") {
+  package_name = "platform-bus"
+  export_to_bazel = true
+  driver_components = [ ":platform-bus" ]
+}
+
+# Define Bazel input resource so it can be used
+export_fuchsia_package_to_bazel("platform-bus-package-bazel") {
+  package = ":package"
+  package_name = "platform-bus"
+}
+
+test("platform-bus-unittest") {
+  sources = [
+    "node-util.cc",
+    "platform-bus-unittest.cc",
+    "platform-bus.cc",
+    "platform-device.cc",
+    "platform-interrupt.cc",
+  ]
+  deps = [
+    ":platform-bus-bind",
+    ":platform-bus-config",
+    "//sdk/banjo/fuchsia.hardware.platform.device:fuchsia.hardware.platform.device_banjo_cpp",
+    "//sdk/banjo/fuchsia.hardware.powerimpl:fuchsia.hardware.powerimpl_banjo_cpp",
+    "//sdk/fidl/fuchsia.boot:fuchsia.boot_cpp",
+    "//sdk/fidl/fuchsia.boot.metadata:fuchsia.boot.metadata_cpp",
+    "//sdk/fidl/fuchsia.hardware.interrupt:fuchsia.hardware.interrupt_cpp",
+    "//sdk/fidl/fuchsia.hardware.platform.bus:fuchsia.hardware.platform.bus_cpp",
+    "//sdk/fidl/fuchsia.hardware.platform.device:fuchsia.hardware.platform.device_cpp",
+    "//sdk/fidl/fuchsia.sysinfo:fuchsia.sysinfo_cpp",
+    "//sdk/lib/component/outgoing/cpp",
+    "//sdk/lib/driver/component/cpp:cpp",
+    "//sdk/lib/zbi-format",
+    "//userspace/devices/bind/fuchsia:fuchsia_cpp",
+    "//userspace/devices/bind/fuchsia.platform:fuchsia.platform_cpp",
+    "//userspace/devices/bind/fuchsia.resource:fuchsia.resource_cpp",
+    "//userspace/devices/lib/driver",
+    "//userspace/devices/lib/driver:driver_runtime",
+    "//userspace/devices/testing/driver-runtime-main:zxtest",
+    "//userspace/devices/testing/fake-bti",
+    "//userspace/devices/testing/no_ddk",
+    "//userspace/lib/ddk",
+    "//userspace/lib/ddktl",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/sync",
+    "//zircon/system/ulib/zircon-internal",
+    "//zircon/system/ulib/zx",
+    "//zircon/system/ulib/zxtest",
+  ]
+}
+
+fuchsia_unittest_package("platform-bus-unittest-package") {
+  package_name = "platform-bus-unittest"
+  deps = [ ":platform-bus-unittest" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":platform-bus-unittest-package",
+    "test:platform-bus-bti-test",
+    "test:platform-bus-test",
+    "test/power-integration-test:power-integration-tests-package",
+  ]
+}
+
+test("platform-bus-bti") {
+  output_name = "platform-bus-bti-test"
+  sources = [ "bti-test.cc" ]
+  deps = [
+    ":fuchsia.hardware.btitest_cpp",
+    "//sdk/fidl/fuchsia.driver.test:fuchsia.driver.test_hlcpp",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/device-watcher/cpp",
+    "//sdk/lib/driver_test_realm/realm_builder/cpp",
+    "//sdk/lib/fdio",
+    "//userspace/lib/ddk",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/fdio-caller",
+    "//zircon/system/ulib/zx",
+    "//zircon/system/ulib/zxtest",
+  ]
+
+  # TODO(fxb/38132): Migrate to the new bind rules and delete this dep.
+  deps += [ "//userspace/lib/ddk:ddk-deprecated-binding-headers" ]
+}
+
+fuchsia_unittest_package("platform-bus-bti-test") {
+  manifest = "meta/platform-bus-bti-test.cml"
+  test_specs = {
+    log_settings = {
+      max_severity = "ERROR"
+    }
+  }
+  deps = [
+    ":platform-bus-bti",
+    ":test-bti",
+    ":test-bti-board",
+    "//userspace/devices/bus/drivers/platform",
+  ]
+  test_type = "system"
+}

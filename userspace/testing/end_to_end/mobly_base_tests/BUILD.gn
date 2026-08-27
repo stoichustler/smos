@@ -1,0 +1,89 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/python/python_library.gni")
+
+if (is_host) {
+  group("fuchsia_base_test") {
+    testonly = true
+
+    deps = [ ":fuchsia_base_test_no_testonly" ]
+  }
+
+  python_library("fuchsia_base_test_no_testonly") {
+    # In-tree-only tests should prefer ":fuchsia_base_test" because that
+    # enforces that only testonly code uses regular base test. This target
+    # should be used for tests or dependencies of tests that are packaged into
+    # the SDK, since they cannot be testonly.
+    visibility = [
+      ":*",
+
+      # SDK-based test targets listed below.
+      "//userspace/tests/end_to_end/rtc:*",
+    ]
+
+    # TODO(https://fxbug.dev/339343263): Enable mypy checks once the mypy flake is fixed.
+    enable_mypy = false
+    library_name = "fuchsia_base_test"
+    source_root = "fuchsia_base_test"
+    sources = [
+      "__init__.py",
+      "fuchsia_base_test.py",
+    ]
+    library_deps = [
+      "//userspace/testing/end_to_end/mobly_controller:mobly_controller_no_testonly",
+      "//third_party/mobly:mobly_no_testonly",
+    ]
+  }
+
+  # NOTE: fuchsia_power_base_test requires associated on device packages to be available. Since python
+  # libraries are only built on the host, if you depend on `fuchsia_power_base_test` then you must
+  # also include a target_deps for the packages:
+  #
+  #```
+  #  target_deps = [ "//userspace/tests/end_to_end/mobly_base_tests:fuchsia_power_base_tests_packages" ]
+  #```
+  python_library("fuchsia_power_base_test") {
+    testonly = true
+
+    # Add "_lib" suffix to avoid import collision in the PYZ file when
+    # `fuchsia_power_base_test` is used as the source in both Python lib and test
+    library_name = "fuchsia_power_base_test_lib"
+    source_root = "fuchsia_power_base_test"
+    sources = [
+      "__init__.py",
+      "fuchsia_power_base_test.py",
+    ]
+    library_deps = [
+      ":fuchsia_base_test",
+      "//userspace/performance/lib/perf_publish",
+    ]
+  }
+
+  python_library("test_case_revive") {
+    # TODO(b/366268742): Enable MyPy type checking
+    enable_mypy = false
+    testonly = true
+    source_root = "test_case_revive"
+    sources = [
+      "__init__.py",
+      "test_case_revive.py",
+    ]
+    library_deps = [ ":fuchsia_base_test" ]
+  }
+
+  python_library("wlan_base_test") {
+    testonly = true
+    source_root = "wlan_base_test"
+    sources = [
+      "__init__.py",
+      "wlan_base_test.py",
+    ]
+    library_deps = [ ":fuchsia_base_test" ]
+  }
+}
+
+group("fuchsia_power_base_test_packages") {
+  deps = [ "//userspace/tests/end_to_end/power/load_generator" ]
+}

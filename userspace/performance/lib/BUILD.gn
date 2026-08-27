@@ -1,0 +1,17 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("tests") {
+  testonly = true
+  deps = [
+    "fxt:tests",
+    "perf_publish:tests",
+    "perfmon:tests",
+    "py_test_utils:tests",
+    "trace_processing:tests",
+  ]
+  if (current_cpu == "arm64" || current_cpu == "x64") {
+    deps += [ "gperftools:tests" ]
+  }
+}

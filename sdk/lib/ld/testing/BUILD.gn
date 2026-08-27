@@ -1,0 +1,64 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/cpp/library_headers.gni")
+
+group("testing") {
+  testonly = true
+  public_deps = [ ":ld-testing" ]
+}
+
+library_headers("headers") {
+  testonly = true
+
+  headers = [ "lib/ld/testing/test-elf-object.h" ]
+  public_deps = [ "//userspace/lib/elfldltl" ]
+  if (is_fuchsia) {
+    headers += [
+      "lib/ld/testing/mock-debugdata.h",
+      "lib/ld/testing/mock-loader-service.h",
+      "lib/ld/testing/test-processargs.h",
+      "lib/ld/testing/test-vmo.h",
+    ]
+    public_deps += [
+      "//sdk/fidl/fuchsia.debugdata:fuchsia.debugdata_cpp",
+      "//sdk/fidl/fuchsia.ldsvc:fuchsia.ldsvc_cpp",
+      "//sdk/lib/async-loop:async-loop-cpp",
+      "//sdk/lib/async-loop:async-loop-default",
+      "//userspace/lib/elfldltl:headers",
+      "//third_party/googletest:gmock",
+      "//zircon/system/ulib/fbl",
+      "//zircon/system/ulib/zx",
+    ]
+  }
+}
+
+static_library("ld-testing") {
+  testonly = true
+
+  public_deps = [ ":headers" ]
+
+  sources = [ "test-elf-object.cc" ]
+  deps = []
+  if (is_fuchsia) {
+    sources += [
+      "mock-debugdata.cc",
+      "mock-loader-service.cc",
+      "test-processargs.cc",
+      "test-vmo.cc",
+    ]
+    deps += [
+      "//sdk/lib/async",
+      "//sdk/lib/async:async-cpp",
+      "//sdk/lib/async-loop",
+      "//sdk/lib/async-loop:async-loop-cpp",
+      "//sdk/lib/async-loop:async-loop-default",
+      "//sdk/lib/fdio",
+      "//userspace/lib/elfldltl/testing",
+      "//userspace/storage/lib/vfs/cpp",
+      "//third_party/googletest:gtest",
+      "//zircon/system/ulib/zx",
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+# Copyright 2026 The Fuchsia Authors.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/board_configuration.gni")
+
+assert(current_toolchain == default_toolchain,
+       "The SMOS arm64 board is defined only in the default toolchain.")
+assert(current_cpu == "arm64",
+       "The SMOS arm64 board requires an arm64 toolchain.")
+
+board_configuration("smos-qemu-arm64") {
+  provided_features = [
+    "fuchsia::driver_framework_v2_support",
+    "fuchsia::real_time_clock",
+  ]
+
+  input_bundles = [ "//platform/boards/smos-server-drivers:server" ]
+
+  hardware_info = {
+    name = "smos-qemu-arm64"
+    product_id = 1
+    vendor_id = 1
+    revision = 1
+  }
+
+  filesystems = {
+    fvm = {
+      sparse_output = {
+      }
+    }
+    fxfs = {
+    }
+  }
+}

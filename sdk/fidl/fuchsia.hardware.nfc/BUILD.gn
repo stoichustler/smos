@@ -1,0 +1,14 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.hardware.nfc") {
+  sdk_category = "partner"
+  stable = false
+  sdk_area = "Drivers"
+  sources = [ "nfc.fidl" ]
+  contains_drivers = true
+  public_deps = [ "//zircon/vdso/zx" ]
+}

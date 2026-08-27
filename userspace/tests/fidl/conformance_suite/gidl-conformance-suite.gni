@@ -1,0 +1,39 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+conformance_suite_gidl_files = [
+  "//userspace/tests/fidl/conformance_suite/alignment.gidl",
+  "//userspace/tests/fidl/conformance_suite/bits_flexible.gidl",
+  "//userspace/tests/fidl/conformance_suite/bits_strict.gidl",
+  "//userspace/tests/fidl/conformance_suite/bool.gidl",
+  "//userspace/tests/fidl/conformance_suite/conformance.gidl",
+  "//userspace/tests/fidl/conformance_suite/empty_struct.gidl",
+  "//userspace/tests/fidl/conformance_suite/enums_flexible.gidl",
+  "//userspace/tests/fidl/conformance_suite/enums_strict.gidl",
+  "//userspace/tests/fidl/conformance_suite/float.gidl",
+  "//userspace/tests/fidl/conformance_suite/golden.gidl",
+  "//userspace/tests/fidl/conformance_suite/handles.gidl",
+  "//userspace/tests/fidl/conformance_suite/integer.gidl",
+  "//userspace/tests/fidl/conformance_suite/memcpy_compatibility.gidl",
+  "//userspace/tests/fidl/conformance_suite/padding.gidl",
+  "//userspace/tests/fidl/conformance_suite/ported_from_walker_handles.gidl",
+  "//userspace/tests/fidl/conformance_suite/ported_from_walker_strings.gidl",
+  "//userspace/tests/fidl/conformance_suite/ported_from_walker_vectors.gidl",
+  "//userspace/tests/fidl/conformance_suite/protocol_endpoints.gidl",
+  "//userspace/tests/fidl/conformance_suite/recursive_depth.gidl",
+  "//userspace/tests/fidl/conformance_suite/recursive_types.gidl",
+  "//userspace/tests/fidl/conformance_suite/strings.gidl",
+  "//userspace/tests/fidl/conformance_suite/strings_utf8.gen.gidl",
+  "//userspace/tests/fidl/conformance_suite/tables.gidl",
+  "//userspace/tests/fidl/conformance_suite/transformer1.gidl",
+  "//userspace/tests/fidl/conformance_suite/transformer2.gidl",
+  "//userspace/tests/fidl/conformance_suite/union.gidl",
+  "//userspace/tests/fidl/conformance_suite/vectors.gidl",
+]
+
+conformance_suite_fidl_target =
+    "//userspace/tests/fidl/conformance_suite:conformance_fidl"
+
+conformance_suite_golden_gidl_files =
+    [ "//userspace/tests/fidl/conformance_suite/golden.gidl" ]

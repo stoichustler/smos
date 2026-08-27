@@ -1,0 +1,45 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/fidl/fidl.gni")
+import("//release/rust/rustc_library.gni")
+
+rustc_library("fidl-connector") {
+  name = "fidl_connector"
+  edition = "2021"
+  version = "0.1.0"
+  with_unit_tests = true
+  deps = [
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-component",
+    "//userspace/lib/fuchsia-sync",
+    "//third_party/rust_crates:anyhow",
+  ]
+
+  test_deps = [
+    ":test.fidl.connector_rust",
+    "//userspace/lib/fdio",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:futures",
+  ]
+
+  sources = [ "src/lib.rs" ]
+}
+
+fuchsia_unittest_package("fidl-connector-tests") {
+  deps = [ ":fidl-connector_test" ]
+  test_specs = {
+  }
+}
+
+fidl("test.fidl.connector") {
+  testonly = true
+  sources = [ "test.fidl" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":fidl-connector-tests" ]
+}

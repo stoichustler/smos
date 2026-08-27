@@ -1,0 +1,5059 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/assembly_input_bundle.gni")
+import("//release/assembly/assembly_resources_directory.gni")
+import("//release/assembly/kernel_aib.gni")
+import("//release/assembly/platform_artifacts.gni")
+import("//release/bazel/bazel_inputs.gni")
+import("//release/components.gni")
+import("//release/icu/icu_assembly_input_bundle.gni")
+import("//release/product.gni")
+import("//platform/bundles/assembly/platform_aibs.gni")
+import("//userspace/lib/icu/tzdata/icu_tzres_source.gni")
+import("//zircon/kernel/phys/qemu.gni")
+
+########
+# Guaranteed Invariants
+#
+#
+# Invariants that are guaranteed by these platform-defined Assembly Input
+# Bundles (AIBs):
+#
+# 1) Their contents are bitwise identical for all boards and products, for a
+#    given architecture and "debug" vs. "release".  They could be built once-
+#    each for the following, and then used as prebuilts if the build supported
+#    that:
+#      - x64-release
+#      - x64-debug
+#      - arm64-release
+#      - arm64-debug
+#    This is not currently possible given the state of the in-tree build, but it
+#    is a contract that we have for using these with our OOT product assembly
+#    environments.
+#
+# 2) Each AIB directly lists files that it includes, or the label to the exact
+#    GN target that it includes.  They do not include group() targets.
+#
+# 3) Any single artifact is only included in one AIB.
+
+########
+# Maintenance Guidelines
+#
+# DO:  Prefer verboseness and clarity over abstractions and delegation.
+#
+# The template used in this file requires the direct listing of the package,
+# config_data, and bootfs labels or entries.
+#
+# DO NOT: import a file that defines, for example, a list of labels or a set of
+# config_data entries, that are added to an AIB using a GN variable.
+#
+# Importing other files which define variables used to provide the contents for
+# an AIB reduces the clarity of how an artifact gets included first in AIBs, and
+# later the assembled image.  This makes it harder to reason about how and when
+# the artifacts are included within the assembled product.
+
+assert(is_fuchsia,
+       "Assembly Input Bundles can only be in the Fuchsia toolchain")
+
+# All of the platform assembly input bundles.
+group("assembly") {
+  testonly = true
+  deps = [ ":eng" ]
+
+  # Coverage, profile and sanitizer builders rename the shared libs, therefore ignore them.
+  # RISCV skips some artifacts, therefore we also ignore that.
+  if (!is_coverage && !is_profile && !is_asan && !is_hwasan &&
+      current_cpu != "riscv64") {
+    deps += [ "//platform/bundles/assembly/scrutiny" ]
+  }
+}
+
+platform_artifacts("bringup") {
+  testonly = true
+  deps = bringup_platform_aib_labels
+}
+
+platform_artifacts("eng") {
+  testonly = true
+  deps = eng_platform_aib_labels
+}
+
+platform_artifacts("userdebug") {
+  deps = userdebug_platform_aib_labels
+}
+
+platform_artifacts("user") {
+  deps = user_platform_aib_labels
+  check_production_eligibility = true
+}
+
+########
+#
+# The Zircon kernel itself
+#
+# This uses a specialized template to create the AIB.
+kernel_assembly_input_bundle("zircon") {
+}
+
+########
+#
+# The /bootstrap realm AIBs
+#
+# The most-common, most-basic, Assembly Input Bundles that are included by all
+# assembled systems.  No system can function without these.
+#
+# These provide the `/bootstrap` realm and its children that are always present
+# in each of the build-types.
+#
+
+# The most-common, most-basic, AIB that is included in all assembled systems,
+# regardless of build-type.
+#
+# WARNING:  The only way to remove items from this AIB for a given product is to
+# move them to other AIBs that are included by all other products.
+#
+assembly_input_bundle("embeddable") {
+  bootfs_files_labels = [
+    "//release/info/bootfs",
+    "//userspace/bringup:bootfs",
+  ]
+  bootfs_packages = [
+    "//userspace/bringup/bin/critical-services:package",
+    "//userspace/diagnostics/archivist:package",
+    "//userspace/power/shutdown-shim:package",
+  ]
+
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "root"
+      components = [
+        {
+          component_name = "root"
+          shards = [ "//userspace/sys/root/root.cml" ]
+        },
+      ]
+    },
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [
+            "//userspace/diagnostics/archivist/meta/archivist.bootstrap_shard.cml",
+            "//userspace/sys/bootstrap/meta/bootstrap.cml",
+          ]
+        },
+      ]
+    },
+  ]
+
+  boot_driver_packages = [
+    {
+      package_target = "//userspace/devices/bus/drivers/platform:package"
+      driver_components = [ "meta/platform-bus.cm" ]
+    },
+  ]
+}
+
+# This AIB contains Component Manager without tracing enabled.
+assembly_input_bundle("component_manager") {
+  bootfs_files_labels = [ "//userspace/sys/component_manager:bootfs" ]
+}
+
+# This AIB contains Component Manager with tracing, which should not
+# be used in memory-constrained builds.
+assembly_input_bundle("component_manager_with_tracing") {
+  bootfs_files_labels = [ "//userspace/sys/component_manager:bootfs_with_tracing" ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "root"
+      components = [
+        {
+          component_name = "root"
+          shards = [ "//userspace/sys/component_manager/meta/component_manager_root_trace.root_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# The most minimal AIB that is included in assembled systems that are meant to be
+# standalone, regardless of build-type.
+#
+assembly_input_bundle("bootstrap") {
+  bootfs_packages = [
+    "//userspace/bringup/bin/device-name-provider:package",
+    "//userspace/bringup/bin/sysinfo:package",
+    "//userspace/sysmem/server:pkg",
+    "//userspace/zircon/bin/role_manager:package",
+  ]
+  if (smos_minimal_assembly) {
+    bootfs_packages -= [ "//userspace/sysmem/server:pkg" ]
+  }
+
+  # Enabling profiling fundamentally changes how the platform is
+  # compiled and requires the addition of instrumentation_data_processor
+  # package in bootfs packages to collect and process profiles.
+  if (is_profile) {
+    bootfs_packages += [ "//userspace/sys/instrumentation_data_processor:instrumentation_data_processor_pkg" ]
+  }
+
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [
+            "//userspace/bringup/bin/paver/meta/paver.bootstrap_shard.cml",
+            "//userspace/bringup/bin/sysinfo/meta/sysinfo.shard.cml",
+            "//userspace/sysmem/server/meta/sysmem.bootstrap_shard.cml",
+            "//userspace/bringup/bin/device-name-provider/meta/device-name-provider.bootstrap_shard.cml",
+            "//userspace/zircon/bin/role_manager/meta/role_manager.bootstrap_shard.cml",
+          ]
+
+          if (is_profile) {
+            shards += [ "//userspace/sys/instrumentation_data_processor/meta/instrumentation_data_processor.bootstrap_shard.cml" ]
+          }
+          if (smos_minimal_assembly) {
+            shards -= [
+              "//userspace/bringup/bin/paver/meta/paver.bootstrap_shard.cml",
+              "//userspace/sysmem/server/meta/sysmem.bootstrap_shard.cml",
+            ]
+          }
+        },
+      ]
+    },
+  ]
+
+  boot_driver_packages = [
+    {
+      package_target = "//userspace/connectivity/bluetooth/hci/transport/usb:package"
+      driver_components = [ "meta/bt-transport-usb.cm" ]
+    },
+    {
+      package_target = "//userspace/connectivity/ethernet/drivers/asix-88179:package"
+      driver_components = [ "meta/asix-88179.cm" ]
+    },
+    {
+      package_target = "//userspace/connectivity/ethernet/drivers/asix-88772b:package"
+      driver_components = [ "meta/asix-88772b.cm" ]
+    },
+    {
+      package_target = "//userspace/connectivity/ethernet/drivers/ethernet/netdevice-migration:package"
+      driver_components = [ "meta/netdevice-migration.cm" ]
+    },
+    {
+      package_target = "//userspace/connectivity/ethernet/drivers/usb-cdc-ecm:package"
+      driver_components = [ "meta/usb-cdc-ecm.cm" ]
+    },
+    {
+      package_target =
+          "//userspace/connectivity/network/drivers/network-device:package"
+      driver_components = [ "meta/network-device.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/adc/drivers/adc:package"
+      driver_components = [ "meta/adc.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/block/drivers/core:package"
+      driver_components = [ "meta/block.core.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/block/drivers/gpt:package"
+      driver_components = [ "meta/gpt.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/block/drivers/ramdisk:package"
+      driver_components = [ "meta/ramdisk.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/block/drivers/sdmmc:package"
+      driver_components = [ "meta/sdmmc.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/block/drivers/usb-mass-storage:package"
+      driver_components = [ "meta/usb-mass-storage.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/block/drivers/zxcrypt:package"
+      driver_components = [ "meta/zxcrypt.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/clock/drivers/clock:package"
+      driver_components = [ "meta/clock.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/gpio/drivers/gpio:package"
+      driver_components = [ "meta/gpio.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/i2c/drivers/i2c:package"
+      driver_components = [ "meta/i2c.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/ml/drivers/usb-harriet:package"
+      driver_components = [ "meta/usb-harriet.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/power/drivers/power:package"
+      driver_components = [ "meta/power.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/pwm/drivers/pwm:package"
+      driver_components = [ "meta/pwm.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/serial/drivers/ftdi:package"
+      driver_components = [ "meta/ftdi.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/serial/drivers/usb-cdc-acm:package"
+      driver_components = [ "meta/usb-cdc-acm.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/spi/drivers/spi:package"
+      driver_components = [ "meta/spi.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/usb/drivers/usb-bus:package"
+      driver_components = [ "meta/usb-bus.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/usb/drivers/usb-composite:package"
+      driver_components = [ "meta/usb-composite.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/usb/drivers/usb-hub:package"
+      driver_components = [ "meta/usb-hub.cm" ]
+    },
+    {
+      package_target = "//userspace/graphics/display/drivers/coordinator:package"
+      driver_components = [ "meta/display-coordinator.cm" ]
+    },
+    {
+      package_target = "//userspace/media/audio/drivers/usb-audio:package"
+      driver_components = [ "meta/usb-audio.cm" ]
+    },
+    {
+      package_target = "//userspace/storage/fvm/driver:package"
+      driver_components = [ "meta/fvm.cm" ]
+    },
+    {
+      package_target = "//userspace/ui/input/drivers/hid:package"
+      driver_components = [ "meta/hid.cm" ]
+    },
+    {
+      package_target = "//userspace/ui/input/drivers/buttons:package"
+      driver_components = [ "meta/buttons.cm" ]
+    },
+    {
+      package_target = "//userspace/ui/input/drivers/hid-input-report:package"
+      driver_components = [ "meta/hid-input-report.cm" ]
+    },
+    {
+      package_target = "//userspace/ui/input/drivers/usb-hid:package"
+      driver_components = [ "meta/usb-hid.cm" ]
+    },
+
+    # TODO(https://fxbug.dev/42082105): Carve out usb-peripheral-stack drivers for specific products/boards.
+    {
+      package_target =
+          "//userspace/connectivity/ethernet/drivers/rndis-function:package"
+      driver_components = [ "meta/rndis-function.cm" ]
+    },
+    {
+      package_target =
+          "//userspace/connectivity/ethernet/drivers/usb-cdc-function:package"
+      driver_components = [ "meta/usb-cdc-function.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/block/drivers/ums-function:package"
+      driver_components = [ "meta/ums-function.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/usb/drivers/usb-peripheral:package"
+      driver_components = [ "meta/usb-peripheral.cm" ]
+    },
+  ]
+  if (smos_minimal_assembly) {
+    # The SVE boards provide their complete boot-driver set explicitly.
+    boot_driver_packages = []
+  }
+}
+
+# The most-common, most-basic, AIB that is included in all userdebug and eng
+# systems.
+#
+assembly_input_bundle("embeddable_userdebug") {
+  bootfs_files_labels = [
+    # tools
+    "//userspace/bringup/bin/debuglog:bootfs",
+    "//userspace/bringup/bin/dlog:bootfs",
+    "//userspace/bringup/bin/waitfor:bootfs",
+    "//userspace/developer/forensics/crasher/cpp:bootfs",
+    "//userspace/sys/bin/psutils:bootfs",
+    "//userspace/sys/tools/component:bootfs",
+    "//userspace/zircon/bin/kcounter:bootfs",
+
+    # shell
+    "//zircon/third_party/uapp/dash:bootfs",
+  ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "toolbox"
+      components = [
+        {
+          component_name = "toolbox"
+          shards = [ "//userspace/developer/toolbox/meta/toolbox.cml" ]
+        },
+      ]
+    },
+  ]
+  if (smos_minimal_assembly) {
+    bootfs_files_labels = []
+    bootfs_files_labels = [
+      "//userspace/bringup/bin/debuglog:bootfs",
+      "//userspace/bringup/bin/dlog:bootfs",
+      "//userspace/bringup/bin/waitfor:bootfs",
+      "//userspace/sys/bin/psutils:bootfs",
+      "//userspace/sys/tools/component:bootfs",
+      "//userspace/zircon/bin/kcounter:bootfs",
+      "//zircon/third_party/uapp/dash:bootfs",
+    ]
+  }
+}
+
+# The most minimal AIB that is included in userdebug and eng assembled systems
+# that are meant to be standalone.
+#
+assembly_input_bundle("bootstrap_userdebug") {
+  bootfs_files_labels = [
+    # tools
+    "//userspace/connectivity/network/bin/ping:bootfs",
+    "//userspace/devices/block/bin/fvm-check:bootfs",
+    "//userspace/devices/nand/bin/nand-loader:bootfs",
+    "//userspace/devices/nand/bin/nand-util:bootfs",
+    "//userspace/devices/usb/bin/usbctl",
+    "//userspace/storage/bin/dd:bootfs",
+    "//userspace/storage/bin/df:bootfs",
+    "//userspace/storage/bin/storage-metrics:bootfs",
+    "//userspace/zircon/bin/ktrace:bootfs",
+    "//userspace/zircon/bin/loadgen:bootfs",
+  ]
+
+  # Do not automatically include pistress, but build it to keep it from
+  # bit-rotting.
+  deps = [ "//userspace/zircon/bin/pistress:bootfs" ]
+
+  boot_driver_packages = [
+    {
+      package_target = "//userspace/devices/nand/drivers/broker:package"
+      driver_components = [ "meta/nand-broker.cm" ]
+    },
+  ]
+  if (smos_minimal_assembly) {
+    bootfs_files_labels = []
+    bootfs_files_labels = [
+      "//userspace/storage/bin/dd:bootfs",
+      "//userspace/storage/bin/df:bootfs",
+      "//userspace/zircon/bin/ktrace:bootfs",
+      "//userspace/zircon/bin/loadgen:bootfs",
+      "//userspace/zircon/bin/pistress:bootfs",
+      "//userspace/zircon/bin/time:bootfs",
+      "//userspace/zircon/bin/uname:bootfs",
+    ]
+    deps = []
+    boot_driver_packages = []
+  }
+}
+
+# The most-common, most-basic, AIB that is included in all eng systems.
+#
+assembly_input_bundle("embeddable_eng") {
+  testonly = true
+  bootfs_packages = [
+    "//userspace/bringup/bin/bootpkg:package",
+    "//userspace/devices/bin/driver_tools:package",
+    "//userspace/devices/bin/lsdev:package",
+    "//userspace/diagnostics/iquery:package",
+  ]
+  shell_commands = [
+    {
+      bootfs_package = true
+      package = "bootpkg"
+      components = [ "bootpkg" ]
+    },
+    {
+      bootfs_package = true
+      package = "driver"
+      components = [ "driver" ]
+    },
+    {
+      bootfs_package = true
+      package = "lsdev"
+      components = [ "lsdev" ]
+    },
+    {
+      bootfs_package = true
+      package = "iquery"
+      components = [ "iquery" ]
+    },
+  ]
+  if (smos_minimal_assembly) {
+    bootfs_packages = []
+    shell_commands = []
+  }
+}
+
+# This is a temporary AIB hold wlanphy driver. This driver will eventually
+# be moved to bootstrap AIB and this AIB will be removed.
+assembly_input_bundle("wlanphy_driver") {
+  if (!smos_minimal_assembly) {
+    base_driver_packages = [
+      {
+        package_target = "//userspace/connectivity/wlan/drivers/wlanphy:wlanphy"
+        driver_components = [ "meta/wlanphy.cm" ]
+      },
+    ]
+  }
+}
+
+# AIB for the bt-transport-uart driver.
+assembly_input_bundle("bt_transport_uart_driver") {
+  base_driver_packages = [
+    {
+      package_target = "//userspace/connectivity/bluetooth/hci/transport/uart:uart"
+      driver_components = [ "meta/bt-transport-uart.cm" ]
+    },
+  ]
+}
+
+# AIB for the bus-pci driver
+assembly_input_bundle("bus_pci_driver") {
+  boot_driver_packages = [
+    {
+      package_target = "//userspace/devices/bus/drivers/pci:bus-pci-package"
+      driver_components = [ "meta/bus-pci.cm" ]
+    },
+  ]
+}
+
+# AIB for the bus-kpci driver
+assembly_input_bundle("bus_kpci_driver") {
+  boot_driver_packages = [
+    {
+      package_target = "//userspace/devices/bus/drivers/pci:bus-kpci-package"
+      driver_components = [ "meta/bus-kpci.cm" ]
+    },
+  ]
+}
+
+# AIB for the realtek-8211f driver
+assembly_input_bundle("realtek_8211f_driver") {
+  boot_driver_packages = [
+    {
+      package_target =
+          "//userspace/connectivity/ethernet/drivers/realtek-8211f:package"
+      driver_components = [ "meta/realtek-8211f.cm" ]
+    },
+  ]
+}
+
+# AIB for the xHCI driver
+assembly_input_bundle("xhci_driver") {
+  boot_driver_packages = [
+    {
+      package_target = "//userspace/devices/usb/drivers/xhci:package"
+      driver_components = [ "meta/xhci.cm" ]
+    },
+  ]
+}
+
+# AIB for the fake-battery driver
+assembly_input_bundle("fake_battery_driver") {
+  base_driver_packages = [
+    {
+      package_target = "//userspace/power/fake-powersource:fake-battery"
+      driver_components = [ "meta/fake_battery.cm" ]
+    },
+  ]
+}
+
+# AIB for the fake-powersensor driver
+assembly_input_bundle("fake_power_sensor") {
+  base_packages = [ "//userspace/power/fake-powersensor:fake_power_sensor_package" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/power/fake-powersensor/meta/fake-power-sensor.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# AIB for the sdhci driver
+assembly_input_bundle("sdhci_driver") {
+  boot_driver_packages = [
+    {
+      package_target = "//userspace/devices/block/drivers/sdhci:package"
+      driver_components = [ "meta/sdhci.cm" ]
+    },
+  ]
+}
+
+# Trusted execution environment.
+assembly_input_bundle("trusted_execution_environment") {
+  bootfs_packages = [
+    "//userspace/tee/manager:ta-manager",
+    "//userspace/tee/binder-proxy",
+    "//userspace/tee",
+  ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/tee/meta/tee.bootstrap_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# SMOS device control utilities. Hardware drivers remain board-specific; these
+# tools are available for probing the corresponding capabilities when present.
+assembly_input_bundle("smos_device_tools") {
+  bootfs_files_labels = [
+    "//userspace/devices/cpu/bin/cpuctl:bootfs",
+    "//userspace/devices/suspend/bin/suspendctl:bootfs",
+    "//userspace/devices/tee/bin:bootfs",
+  ]
+}
+
+# SMOS FXT tracing tools. The trace command writes files directly consumable
+# by Perfetto's Fuchsia trace importer.
+assembly_input_bundle("smos_trace_tools") {
+  bootfs_files_labels = [ "//userspace/performance/trace:bootfs" ]
+  bootfs_packages = [
+    "//userspace/performance/ktrace_provider",
+    "//userspace/performance/trace_manager",
+  ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "root"
+      components = [
+        {
+          component_name = "root"
+          shards = [ "//userspace/performance/trace_manager/meta/trace_manager.root_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# The most minimal AIB that is included in eng assembled systems that are meant
+# to be standalone.
+#
+assembly_input_bundle("bootstrap_eng") {
+  testonly = true
+  bootfs_files_labels = [
+    # tools
+    "//userspace/devices/acpi/bin/acpidump:bootfs",
+    "//userspace/devices/block/bin/biotime:bootfs",
+    "//userspace/devices/block/bin/gpt:bootfs",
+    "//userspace/devices/block/bin/iochk:bootfs",
+    "//userspace/devices/block/bin/iotime:bootfs",
+    "//userspace/devices/block/bin/lsblk:bootfs",
+    "//userspace/devices/block/bin/sdio:bootfs",
+    "//userspace/devices/cpu/bin/cpuctl:bootfs",
+    "//userspace/devices/gpio/bin/gpioutil:bootfs",
+    "//userspace/devices/i2c/bin:bootfs",
+    "//userspace/devices/power/bin/lspwr:bootfs",
+    "//userspace/devices/ram/bin/ram-info:bootfs",
+    "//userspace/devices/serial/bin/serialutil:bootfs",
+    "//userspace/devices/spi/bin/spiutil:bootfs",
+    "//userspace/devices/spmi/bin/spmi-ctl:bootfs",
+    "//userspace/devices/suspend/bin/suspendctl:bootfs",
+    "//userspace/devices/thermal/bin/temperature-cli:bootfs",
+    "//userspace/devices/thermal/bin/thermal-cli:bootfs",
+    "//userspace/devices/usb/bin/lsusb:bootfs",
+    "//userspace/security/bin/syscall-check:bootfs",
+    "//userspace/sys/tools/package:bootfs",
+    "//userspace/ui/backlight/bin/backlight:bootfs",
+    "//userspace/ui/input/bin/hid:bootfs",
+    "//userspace/ui/tools/print-input-report:bootfs",
+
+    # tests
+    "//userspace/devices/block/bin/blktest:bootfs",
+    "//userspace/devices/tee/bin:bootfs",
+    "//userspace/graphics/display/bin/display-test:bootfs",
+    "//userspace/zircon/tests/evil:bootfs",
+  ]
+
+  # Do not automatically include these tools, but build them to keep them from
+  # bit-rotting.
+  deps = [
+    "//userspace/devices/pwm/bin/pwmctl:bootfs",
+    "//userspace/ui/light/bin/lights-cli:bootfs",
+    "//userspace/zircon/testing/mutex_pi_exerciser:bootfs",
+  ]
+  if (smos_minimal_assembly) {
+    bootfs_files_labels = []
+    deps = []
+  }
+}
+
+# lspci shell utility. Used in products that use PCI and have shell commands enabled.
+#
+assembly_input_bundle("lspci") {
+  bootfs_files_labels = [ "//userspace/devices/pci/bin:bootfs" ]
+}
+
+# The kernel_debug_broker AIB is included by all eng and userdebug products.
+#
+assembly_input_bundle("kernel_debug_broker_userdebug") {
+  bootfs_packages = [ "//userspace/bringup/bin/kernel_debug_broker:pkg" ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/bringup/bin/kernel_debug_broker/meta/kernel_debug_broker_userdebug.bootstrap_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("kernel_debug_broker_user") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/bringup/bin/kernel_debug_broker/meta/kernel_debug_broker_user.bootstrap_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Legacy AIB for migration purposes.
+assembly_input_bundle("paver_legacy") {
+  bootfs_packages = [ "//userspace/bringup/bin/paver:package" ]
+}
+
+# The console AIB is included by all eng and userdebug products, and can be
+# optionally included by user products.
+#
+assembly_input_bundle("console") {
+  bootfs_packages = [
+    "//userspace/bringup/bin/console:package",
+    "//userspace/bringup/bin/console-launcher:package",
+  ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/bringup/bin/console/meta/console.shard.cml" ]
+        },
+      ]
+    },
+  ]
+  if (smos_minimal_assembly) {
+    compiled_packages = []
+    compiled_packages = [
+      {
+        bootfs_package = true
+        name = "bootstrap"
+        components = [
+          {
+            component_name = "bootstrap"
+            shards = [
+              "//platform/products/smos_boot/meta/console.bootstrap_shard.cml",
+            ]
+          },
+        ]
+      },
+    ]
+  }
+}
+
+# The ptysvc AIB is included by all eng and userdebug products.
+#
+assembly_input_bundle("ptysvc") {
+  bootfs_packages = [ "//userspace/bringup/bin/ptysvc:package" ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards =
+              [ "//userspace/bringup/bin/ptysvc/meta/ptysvc.bootstrap_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# The virtcon AIB is included by all eng and userdebug products, and can be
+# optionally included by user products.
+#
+assembly_input_bundle("virtcon") {
+  bootfs_files_labels = [
+    # TODO(120776) The boot animation is configured via a global GN arg, which
+    # needs to be migrated to a path provided by the product to assembly, which
+    # then places it in the appropriate path in bootfs.
+    #
+    # As such, this isn't something that should be added to a platform bundle,
+    # but the migration with the products that use that GN arg is sufficiently
+    # complicated that this is clearer that trying to do a removal of the
+    # default boot animation in those products that shouldn't include it (if
+    # it's included by default via `//platform/products/common/bringup.gni`).
+    "//userspace/bringup/bin/virtcon:boot_animation",
+  ]
+
+  bootfs_packages = [ "//userspace/bringup/bin/virtcon:package" ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards =
+              [ "//userspace/bringup/bin/virtcon/meta/virtual-console.shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# The netsvc AIB is included by all eng products.
+#
+assembly_input_bundle("netsvc") {
+  bootfs_packages = [ "//userspace/bringup/bin/netsvc:package" ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/bringup/bin/netsvc/meta/netsvc.shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# All eng build type products will include this Assembly Input Bundle.
+# These kernel args should be refactored so that the AIBs have logical names.
+#
+assembly_input_bundle("kernel_args_eng") {
+  kernel_cmdline = [
+    "console.shell=true",
+    "kernel.enable-debugging-syscalls=true",
+    "kernel.enable-serial-syscalls=true",
+    "netsvc.all-features=true",
+    "netsvc.disable=false",
+  ]
+  if (smos_minimal_assembly) {
+    kernel_cmdline = []
+    kernel_cmdline = [
+      "console.shell=true",
+      "kernel.enable-debugging-syscalls=true",
+      "kernel.enable-serial-syscalls=true",
+      "netsvc.disable=true",
+    ]
+  }
+}
+
+# All userdebug build type products will include this Assembly Input Bundle.
+# These kernel args should be refactored so that the AIBs have logical names.
+#
+assembly_input_bundle("kernel_args_userdebug") {
+  kernel_cmdline = [
+    "console.shell=false",
+    "kernel.enable-debugging-syscalls=false",
+    "kernel.enable-serial-syscalls=output-only",
+    "netsvc.disable=true",
+  ]
+}
+
+# All user build type products will include this Assembly Input Bundle.
+#
+# These are all the default values, so this AIB can be safely removed, but we
+# are keeping it around for now so that we can assert that nothing changed
+# during refactor.
+#
+# These kernel args should be refactored so that the AIBs have logical names.
+assembly_input_bundle("kernel_args_user") {
+  kernel_cmdline = [
+    "console.shell=false",
+    "kernel.enable-debugging-syscalls=false",
+    "kernel.enable-serial-syscalls=false",
+    "netsvc.disable=true",
+  ]
+}
+
+# Added when a board supports the PMM checker (ie, it's real hardware that can
+# do this without a large performance penalty), and when desired by the product
+# (based on build-type).
+assembly_input_bundle("kernel_pmm_checker_enabled") {
+  kernel_cmdline = [
+    # Enable PMM checker to detect certain kinds of buffer overrun and
+    # use-after-free bugs.
+    "kernel.pmm-checker.enable=true",
+
+    # Use a small fill size to minimize performance impact.  In practice,
+    # corruption tends to happen at the start of a page so filling/checking only
+    # the first 16 bytes provides decent coverage without sacrificing
+    # performance.
+    "kernel.pmm-checker.fill-size=16",
+  ]
+}
+
+# Added when a board might support the PMM checker, but wants to defer to a run
+# time check to determine if it's real hardware or not.
+assembly_input_bundle("kernel_pmm_checker_enabled_auto") {
+  kernel_cmdline = [
+    # Enable PMM checker to detect certain kinds of buffer overrun and
+    # use-after-free bugs.
+    "kernel.pmm-checker.enable=auto",
+
+    # Use a small fill size to minimize performance impact.  In practice,
+    # corruption tends to happen at the start of a page so filling/checking only
+    # the first 16 bytes provides decent coverage without sacrificing
+    # performance.
+    "kernel.pmm-checker.fill-size=16",
+  ]
+}
+
+# sl4f: Scripting Layer for Fuchsia
+#
+# Often used for manipulating device during E2E tests.
+assembly_input_bundle("sl4f") {
+  base_packages = [
+    # We currently include SL4F in base to support E2E tests that
+    # either do not download fuchsia packages or cannot start
+    # package serving due to network limitations.
+    "//userspace/testing/sl4f",
+    "//userspace/sys/bin/start_sl4f",
+  ]
+  shell_commands = [
+    {
+      package = "start_sl4f"
+      components = [ "start_sl4f" ]
+    },
+  ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/testing/sl4f/meta/sl4f_assembly.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Includes the bin/clock and clkctl developer tools
+assembly_input_bundle("clock_development_tools") {
+  bootfs_files_labels = [ "//userspace/devices/clock/bin/clock:bootfs" ]
+}
+
+# Includes the CLIs necessary for the Fuchsia installer.
+assembly_input_bundle("partitioning_tools") {
+  bootfs_files_labels = [
+    "//userspace/storage/bin/disk-pave:bootfs",
+    "//userspace/storage/bin/mount:bootfs",
+    "//userspace/storage/bin/umount:bootfs",
+    "//userspace/storage/tools/logs/run-with-logs:bootfs",
+  ]
+}
+
+########
+#
+# The /core realm AIBs
+#
+# These are the Assembly Input Bundles that are included by all assembled
+# systems that include the `/core` realm.
+
+# core_realm
+#
+# This AIB adds the `/core` realm itself, and it's mandatory children.  The
+# other AIBs in this group add shards and optional children of `/core`.
+#
+# This is "less than minimal".  "utility" systems include this to get a `/core`
+# realm, but do not include the `common_standard` AIB as that brings in too much
+# functionality for these specialized systems.
+#
+# All children in `/core` receive InspectSink and LogSink.
+#
+assembly_input_bundle("core_realm") {
+  bootfs_packages = [
+    "//userspace/sys/pkg/bin/pkg-cache",
+    "//userspace/sys/startup:package",
+  ]
+  base_packages = [
+    # This is a required dependency of pkg-cache
+    "//userspace/sys/pkg/bin/system-update-committer",
+
+    # Build-Information
+    "//userspace/developer/build_info:build-info-service",
+
+    # Developer.
+    "//userspace/developer/forensics:pkg",
+  ]
+
+  base_driver_packages = [
+    {
+      # Fallback driver for uart nodes.
+      package_target = "//userspace/devices/serial/drivers/serial:package"
+      driver_components = [ "meta/serial.cm" ]
+    },
+  ]
+
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "root"
+      components = [
+        {
+          component_name = "root"
+          shards = [ "//userspace/sys/core/meta/core.root_shard.cml" ]
+        },
+      ]
+    },
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [
+            "//userspace/devices/bin/driver_framework/meta/base_drivers.bootstrap_shard.cml",
+            "//userspace/sys/pkg/bin/pkg-cache/meta/pkg-cache.bootstrap_shard.cml",
+          ]
+        },
+      ]
+    },
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/sys/core/meta/core.cml",
+
+            # TODO:  These shards should be folded into the above
+            # `core.cml` file itself as they are never omitted from it.
+            "//userspace/developer/build_info/meta/build_info.core_shard.cml",
+            "//userspace/developer/forensics/forensics.core_shard.cml",
+            "//sdk/lib/inspect/offer.shard.cml",
+          ]
+        },
+      ]
+
+      # These are not included into the core.cml directly, but may be included
+      # via other shards.
+      component_includes = [
+        {
+          source = "//sdk/lib/inspect/offer.shard.cml"
+          destination = "inspect/offer.shard.cml"
+        },
+        {
+          source = "//sdk/lib/syslog/offer.shard.cml"
+          destination = "syslog/offer.shard.cml"
+        },
+      ]
+      foreach(
+          include,
+          [
+            "//userspace/connectivity/bluetooth/profiles/bt-a2dp/meta/bt-a2dp-common.core_shard.cml",
+            "//userspace/intl/intl_services/meta/intl.core_shard.base.cml",
+            "//userspace/recovery/system/meta/core_shards/base.shard.cml",
+            "//userspace/recovery/system/meta/core_shards/ui.shard.cml",
+            "//userspace/session/bin/session_manager/meta/session_manager.core_shard.cml",
+            "//userspace/settings/service/meta/setui_service_base.core_shard.cml",
+            "//userspace/testing/sl4f/meta/sl4f_base.core_shard.cml",
+            "//userspace/ui/meta/ui_routes_base.shard.cml",
+          ]) {
+        component_includes += [
+          {
+            source = include
+            destination = rebase_path(include, "//")
+          },
+        ]
+      }
+    },
+    {
+      name = "system-update-realm"
+      components = [
+        {
+          component_name = "system-update-realm"
+
+          shards = [ "//userspace/sys/pkg/meta/system-update-realm.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# core_realm_networking
+#
+# This AIB adds all the children of `/core` that are expected to be present if
+# networking is enabled.
+#
+# It does _not_ include either the `network` or `netstack` packages themselves,
+# as which specific variant of those is added is controllable by the product, so
+# they are in separate AIBs.
+#
+# "Utility" systems get this in the 'user' build-type only if they request that
+# networking is added.  All other build-types (and all "standard" systems) get
+# this AIB by mandatory inclusion.
+assembly_input_bundle("core_realm_networking") {
+  base_packages = [
+    # Hardware Information
+    "//userspace/hwinfo",
+
+    # System Time
+    "//userspace/sys/time/timekeeper:timekeeper-without-config",
+    "//userspace/sys/time/httpsdate_time_source:httpsdate-time-source-pull",
+
+    # Other
+    "//userspace/sys/stash:pkg",
+  ]
+}
+
+# If config allows, timekeeper will be given some persistent storage to use.
+# Should only be allowed in eng builds.
+assembly_input_bundle("timekeeper_persistence") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/sys/time/timekeeper/timekeeper-persistence.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# The bundle supporting wake alarms through Timekeeper.
+assembly_input_bundle("timekeeper_wake_alarms") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/sys/time/timekeeper/timekeeper-wake-alarms.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Network realm definition.
+#
+# This AIB defines the base network package, which lays out the network realm.
+# It must be used in conjunction with network_realm_packages or
+# network_realm_packages_gub.
+assembly_input_bundle("network_realm") {
+  compiled_packages = [
+    {
+      name = "network"
+      components = [
+        {
+          component_name = "network"
+          shards = [ "//userspace/connectivity/network/meta/common.shard.cml" ]
+        },
+      ]
+      component_includes = [
+        {
+          source = "//sdk/lib/inspect/offer.shard.cml"
+          destination = "inspect/offer.shard.cml"
+        },
+        {
+          source = "//sdk/lib/trace/offer.shard.cml"
+          destination = "trace/offer.shard.cml"
+        },
+        {
+          source = "//sdk/lib/syslog/offer.shard.cml"
+          destination = "syslog/offer.shard.cml"
+        },
+      ]
+    },
+  ]
+}
+
+# Network realm packages without unified binary.
+#
+# This AIB includes all the packages that are common across all products that
+# require networking. It provides the network realm using packages that utilize
+# separate, more-optimized, binaries, trading space for performance. This is
+# the default implementation used.
+#
+# It is mutually-exclusive with 'network_realm_packages_gub'.
+assembly_input_bundle("network_realm_packages") {
+  base_packages = [
+    "//userspace/connectivity/network/dhcpv4/server:package",
+    "//userspace/connectivity/network/dhcpv6/client:package",
+    "//userspace/connectivity/network/dns:package",
+    "//userspace/connectivity/policy/http-client:package",
+    "//userspace/connectivity/policy/reachability:package",
+  ]
+}
+
+# Network realm packages with unified binary.
+#
+# This AIB is equivalent to network_realm_packages. It provides the network
+# realm using packages that utilize a "grand unified binary" (GUB), saving space
+# at the cost of a minor loss in performance.  This is for space- constrained
+# devices that don't have the space for the non-GUB binaries.
+#
+# It is mutually-exclusive with 'network_realm_packages'.
+assembly_input_bundle("network_realm_packages_gub") {
+  base_packages = [
+    "//userspace/connectivity/network/dhcpv4/server:package_gub",
+    "//userspace/connectivity/network/dhcpv6/client:package_gub",
+    "//userspace/connectivity/network/dns:package_gub",
+    "//userspace/connectivity/policy/http-client:package_gub",
+    "//userspace/connectivity/policy/reachability:package_gub",
+  ]
+}
+
+# networking_with_virtualization
+#
+# This AIB adds the networking capabilities that include virtualization support.
+# It is mutually-exclusive with networking_basic.
+#
+assembly_input_bundle("networking_with_virtualization") {
+  base_packages = [ "//userspace/connectivity/policy/netcfg:package-advanced" ]
+  compiled_packages = [
+    {
+      name = "network"
+      components = [
+        {
+          component_name = "network"
+          shards = [ "//userspace/connectivity/network/meta/network-with-virtualization.shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Basic networking.
+#
+# This AIB adds the basic networking capabilities. It is mutually-exclusive with
+# networking_with_virtualization.
+#
+# It must be used in conjunction with either network_basic_packages or
+# network_basic_packages_gub.
+assembly_input_bundle("networking_basic") {
+  compiled_packages = [
+    {
+      name = "network"
+      components = [
+        {
+          component_name = "network"
+          shards = [ "//userspace/connectivity/network/meta/network-basic.shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Basic networking packages without unified binary.
+#
+# This AIB provides packages for the networking_basic configuration. It is
+# mutually exlucisve with networking_basic_packages_gub.
+assembly_input_bundle("networking_basic_packages") {
+  base_packages = [ "//userspace/connectivity/policy/netcfg:package-basic" ]
+}
+
+# Basic networking packages with unified binary.
+#
+# This AIB provides space-saving equivalent packages for the networking_basic
+# configuration as found in networking_basic_packages. It is mutually exlucisve
+# with networking_basic_packages.
+assembly_input_bundle("networking_basic_packages_gub") {
+  base_packages = [ "//userspace/connectivity/policy/netcfg:package-basic_gub" ]
+}
+
+# networking_test_collection
+#
+# Includes a test collection inside the network realm that has access to all
+# networking administrative capabilities.
+assembly_input_bundle("networking_test_collection") {
+  testonly = true
+  compiled_packages = [
+    {
+      name = "network"
+      components = [
+        {
+          component_name = "network"
+          shards =
+              [ "//userspace/connectivity/network/meta/test-collection.shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# This is common across all eng-mode products that include the core realm.
+#
+# This is mutually-exclusive with the `core_realm_user_and_userdebug` AIB.
+#
+assembly_input_bundle("core_realm_eng") {
+  testonly = true
+  base_packages = [
+    "//userspace/sys/pkg/bin/pkg-resolver:pkg-resolver-eng",
+
+    # Dash launcher should be available in every engineering-mode product.
+    "//userspace/sys/tools/debug-dash-launcher",
+
+    # The fs_realm component should be available in every engineering-mode product.
+    "//userspace/storage/fs_realm",
+    "//userspace/storage/bin:fs_realm_tools",
+  ]
+  shell_commands = [
+    {
+      package = "fs_realm_tools"
+      components = [
+        "mkfs",
+        "fsck",
+        "mount",
+        "umount",
+      ]
+    },
+  ]
+
+  # wlancfg's donut tool.
+  on_demand = [ "//userspace/connectivity/wlan/wlancfg/tool:donut" ]
+  shell_commands += [
+    {
+      package = "donut"
+      components = [ "donut" ]
+    },
+  ]
+
+  # Moved here from //platform/bundles/packages/prod:cmdutils
+  on_demand += [
+    "//userspace/sys/smos-bin:date_pkg",
+    "//userspace/sys/smos-bin:du_pkg",
+    "//userspace/sys/smos-bin:find_pkg",
+    "//userspace/sys/smos-bin:pwd_pkg",
+    "//userspace/sys/smos-bin:tree_pkg",
+    "//userspace/sys/smos-bin:wc_pkg",
+    "//userspace/zircon/bin/time:time",
+    "//userspace/zircon/bin/uname:uname",
+  ]
+  shell_commands += [
+    {
+      package = "date"
+      components = [ "date" ]
+    },
+    {
+      package = "du"
+      components = [ "du" ]
+    },
+    {
+      package = "find"
+      components = [ "find" ]
+    },
+    {
+      package = "pwd"
+      components = [ "pwd" ]
+    },
+    {
+      package = "tree"
+      components = [ "tree" ]
+    },
+    {
+      package = "wc"
+      components = [ "wc" ]
+    },
+    {
+      package = "time"
+      components = [ "time" ]
+    },
+    {
+      package = "uname"
+      components = [ "uname" ]
+    },
+  ]
+
+  # Included with //platform/bundles/tools.
+  shell_commands += [
+    {
+      package = "sched"
+      components = [ "sched" ]
+    },
+    {
+      package = "far"
+      components = [ "far" ]
+    },
+    {
+      package = "trace"
+      components = [ "trace" ]
+    },
+    {
+      package = "camera_benchmark"
+      components = [ "camera_benchmark_bin" ]
+    },
+    {
+      package = "camera_sensor_cli"
+      components = [ "camera_sensor_cli_bin" ]
+    },
+    {
+      package = "lowpanctl"
+      components = [ "lowpanctl" ]
+    },
+    {
+      package = "nc"
+      components = [ "nc" ]
+    },
+    {
+      package = "sockscripter"
+      components = [ "sockscripter" ]
+    },
+    {
+      package = "iperf3"
+      components = [ "iperf3" ]
+    },
+    {
+      package = "tcpdump"
+      components = [ "tcpdump" ]
+    },
+    {
+      package = "mdns-util"
+      components = [ "mdns-util" ]
+    },
+    {
+      package = "net-cli"
+      components = [ "net" ]
+    },
+
+    {
+      package = "dai-info"
+      components = [ "dai-info" ]
+    },
+    {
+      package = "bt-bredr-profile"
+      components = [ "bt-bredr-profile" ]
+    },
+    {
+      package = "bt-cli"
+      components = [ "bt-cli" ]
+    },
+    {
+      package = "bt-le-central"
+      components = [ "bt-le-central" ]
+    },
+    {
+      package = "bt-le-peripheral"
+      components = [ "bt-le-peripheral" ]
+    },
+    {
+      package = "bt-pairing-tool"
+      components = [ "bt-pairing-tool" ]
+    },
+    {
+      package = "bt-snoop-cli"
+      components = [ "bt-snoop-cli" ]
+    },
+    {
+      package = "bt-fct-hci"
+      components = [ "bt-fct-hci" ]
+    },
+    {
+      package = "bt-hci-tool"
+      components = [ "bt-hci-tool" ]
+    },
+    {
+      package = "bt-avdtp-tool"
+      components = [ "bt-avdtp-tool" ]
+    },
+    {
+      package = "bt-avrcp-controller"
+      components = [ "bt-avrcp-controller" ]
+    },
+    {
+      package = "display-tool"
+      components = [ "display-tool" ]
+    },
+    {
+      package = "display-tweak"
+      components = [ "display-tweak" ]
+    },
+    {
+      package = "magma-info"
+      components = [ "magma-info" ]
+    },
+    {
+      package = "mediasession_cli_tool"
+      components = [ "mediasession_cli_tool" ]
+    },
+    {
+      package = "fdr_cli"
+      components = [ "fdr" ]
+    },
+    {
+      package = "export-ffs"
+      components = [ "export-ffs" ]
+    },
+    {
+      package = "activity-ctl"
+      components = [ "activity_ctl" ]
+    },
+    {
+      package = "log"
+      components = [ "log" ]
+    },
+    {
+      package = "input"
+      components = [ "input" ]
+    },
+    {
+      package = "boringssl_tool"
+      components = [ "bssl" ]
+    },
+    {
+      package = "curl"
+      components = [ "curl" ]
+    },
+    {
+      package = "scp"
+      components = [ "scp" ]
+    },
+    {
+      package = "ssh-keygen"
+      components = [ "ssh-keygen" ]
+    },
+    {
+      package = "ssh"
+      components = [ "ssh" ]
+    },
+  ]
+
+  # Other manually-included shell commands
+  shell_commands += [
+    {
+      package = "cowsay"
+      components = [ "cowsay" ]
+    },
+  ]
+
+  # Keep the small set of external commands needed by the dash environment.
+  base_packages += [ "//userspace/sys/smos-bin:cat_pkg" ]
+  base_packages += [ "//userspace/sys/smos-bin:hexdump_pkg" ]
+  on_demand += [ "//userspace/sys/smos-bin:env_pkg" ]
+  shell_commands += [
+    {
+      package = "cat"
+      components = [ "cat" ]
+    },
+    {
+      package = "hexdump"
+      components = [ "hexdump" ]
+    },
+    {
+      package = "env"
+      components = [ "env" ]
+    },
+  ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            # The process_resolver core shard (either the base-resolver or
+            # pkg-resolver variant) should only be present in
+            # the `core_realm_development_access` AIB, but it's required
+            # here to avoid a userdebug and eng variant of that AIB.
+            #
+            # eng uses the pkg-resolver, as opposed to the base-resolver,
+            # to support ephemeral resolution of shell packages.
+            "//userspace/sys/process-resolver/meta/process_resolver.pkg-resolver.core_shard.cml",
+
+            "//userspace/sys/core/meta/core-env-full-resolver.core_shard.cml",
+            "//userspace/sys/core/meta/lavapipe.core_shard.cml",
+            "//userspace/sys/core/meta/unrestricted-storage.core_shard.cml",
+            "//userspace/sys/tools/debug-dash-launcher/meta/debug_dash_launcher.core_shard.cml",
+            "//userspace/storage/fs_realm/meta/fs_realm.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# This is common across all user and userdebug products that include the core
+# realm.
+#
+# This is mutually-exclusive with the `core_realm_eng` AIB.
+#
+assembly_input_bundle("core_realm_user_and_userdebug") {
+  base_packages = [ "//userspace/sys/pkg/bin/pkg-resolver" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            # user and userdebug only have the base resolver, not the full
+            # resolver.
+            "//userspace/sys/core/meta/core-env-base-resolver.core_shard.cml",
+
+            # The process_resolver core shard (either the base-resolver or
+            # pkg-resolver variant) should only be present in
+            # the `core_realm_development_access` AIB, but it's required
+            # here to avoid a userdebug and eng variant of that AIB.
+            #
+            # user and userdebug only have the base-resolver, not the
+            # pkg-resolver.
+            "//userspace/sys/process-resolver/meta/process_resolver.base-resolver.core_shard.cml",
+
+            # Lavapipe is only enabled on eng builds.
+            "//userspace/sys/core/meta/lavapipe-disabled.core_shard.cml",
+
+            # user and userdebug restrict access to the Storage capability
+            # to registered component ids.
+            "//userspace/sys/core/meta/restricted-storage.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# This is the AIB that adds the services necessary for developers to access a
+# target running Fuchsia from their development host using tools like `ffx`.
+#
+# This is included with all eng and userdebug build-type systems.
+#
+assembly_input_bundle("core_realm_development_access") {
+  base_packages = [
+    # SSH is necessary for remote access for development
+    "//userspace/developer/sshd-host",
+
+    # Process resolver enables cli commands to be resolved to components.
+    "//userspace/sys/process-resolver",
+
+    # ffx's remote-control (remote access) components:
+    "//userspace/developer/remote-control:remote-control-package",
+
+    # The developer snapshot tool.
+    "//userspace/developer/forensics/snapshot:pkg",
+
+    # log_listener shell tool.
+    "//userspace/diagnostics/log_listener:log_listener_shell_pkg",
+  ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/developer/debug/debug_agent/meta/debug_agent.core_shard.cml",
+            "//userspace/developer/remote-control/meta/laboratory.core_shard.cml",
+            "//userspace/developer/remote-control/meta/remote-control-base.core_shard.cml",
+            "//userspace/developer/sshd-host/meta/sshd-host.core_shard.cml",
+            "//userspace/developer/toolbox/meta/toolbox.core_shard.cml",
+          ]
+        },
+      ]
+    },
+    {
+      bootfs_package = true
+      name = "toolbox"
+      components = [
+        {
+          component_name = "toolbox"
+          shards = [ "//userspace/developer/remote-control/meta/remote-control.toolbox_shard.cml" ]
+        },
+      ]
+    },
+  ]
+  shell_commands = [
+    {
+      package = "remote-control"
+      components = [
+        "fdomain_runner",
+        "remote_control_runner",
+        "remote_control_bin",
+      ]
+    },
+    {
+      package = "snapshot"
+      components = [ "snapshot" ]
+    },
+    {
+      package = "log_listener_shell"
+      components = [ "log_listener" ]
+    },
+  ]
+}
+
+# Configuration that goes along with core_realm_development_access which is
+# suitable for userdebug builds.
+assembly_input_bundle("core_realm_development_access_userdebug") {
+  config_data_labels = [ "//userspace/developer/sshd-host:config" ]
+}
+
+# Configuration that goes along with core_realm_development_access which is
+# suitable for eng builds.
+assembly_input_bundle("core_realm_development_access_eng") {
+  config_data_labels = [ "//userspace/developer/sshd-host:config_eng" ]
+}
+
+assembly_input_bundle("bootstrap_realm_development_access") {
+  bootfs_files_labels = [ "//userspace/sys/smos-bin:bootfs" ]
+  bootfs_packages = [
+    "//userspace/sys/process-resolver",
+    "//userspace/sys/tools/debug-dash-launcher",
+  ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [
+            "//userspace/sys/process-resolver/meta/process_resolver.bootstrap_shard.cml",
+            "//userspace/sys/tools/debug-dash-launcher/meta/debug_dash_launcher.bootstrap_shard.cml",
+          ]
+        },
+      ]
+    },
+    {
+      bootfs_package = true
+      name = "root"
+      components = [
+        {
+          component_name = "root"
+          shards = [
+            "//userspace/sys/process-resolver/meta/process_resolver.root_shard.cml",
+            "//userspace/sys/tools/debug-dash-launcher/meta/debug_dash_launcher.root_shard.cml",
+          ]
+        },
+      ]
+    },
+    {
+      bootfs_package = true
+      name = "toolbox"
+      components = [
+        {
+          component_name = "toolbox"
+          shards = [ "//userspace/sys/tools/debug-dash-launcher/meta/debug_dash_launcher.toolbox_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("bootstrap_realm_vsock_development_access") {
+  bootfs_files_labels = [
+    "//userspace/developer/vsock-sshd-host:bootfs",
+    "//userspace/developer/remote-control/runner:bootfs",
+  ]
+  bootfs_packages = [
+    # SSH is necessary for remote access for development
+    "//userspace/developer/vsock-sshd-host",
+
+    # ffx's remote-control (remote access) components:
+    "//userspace/developer/remote-control:remote-control-package",
+  ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [
+            "//userspace/developer/remote-control/meta/remote-control.bootstrap_shard.cml",
+            "//userspace/developer/vsock-sshd-host/meta/vsock-sshd-host.bootstrap_shard.cml",
+          ]
+        },
+      ]
+    },
+    {
+      bootfs_package = true
+      name = "toolbox"
+      components = [
+        {
+          component_name = "toolbox"
+          shards = [ "//userspace/developer/remote-control/meta/remote-control.vsock_toolbox_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("mdns_fuchsia_device_wired_service") {
+  config_data_labels =
+      [ "//userspace/connectivity/network/mdns/service:mdns_fuchsia_udp_config" ]
+}
+
+assembly_input_bundle("core_realm_development_access_rcs_usb") {
+  base_driver_packages = [
+    {
+      package_target = "//userspace/connectivity/overnet/usb:overnet-usb-package"
+      driver_components = [
+        "meta/overnet-usb-service.cm",
+        "meta/overnet-usb.cm",
+      ]
+    },
+  ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/developer/remote-control/meta/remote-control-with-usb.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("core_realm_development_access_rcs_no_usb") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/developer/remote-control/meta/remote-control.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Development and debug support tools for general networking
+assembly_input_bundle("development_support_tools_connectivity_networking") {
+  base_packages = [
+    "//userspace/connectivity/network/tools/nc",
+    "//userspace/connectivity/network/tools/sockscripter:package",
+    "//userspace/connectivity/network/mdns/util:mdns-util",
+    "//userspace/connectivity/network/net-cli",
+    "//third_party/iperf:iperf3_pkg",
+    "//third_party/tcpdump",
+  ]
+}
+
+# Development and debug support tools for wlan
+assembly_input_bundle("development_support_tools_connectivity_wlan") {
+  base_packages = [ "//userspace/connectivity/wlan/wlancfg/tool:donut" ]
+}
+
+# Development and debug support tools for the Thread protocol
+assembly_input_bundle("development_support_tools_connectivity_thread") {
+  flexible_packages = [ "//userspace/connectivity/lowpan/tools/lowpanctl" ]
+}
+
+assembly_input_bundle("radar_proxy_with_injector") {
+  base_packages =
+      [ "//userspace/devices/radar/bin/radar-proxy:radar-proxy-with-injector" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/devices/radar/bin/radar-proxy/meta/radar-proxy-with-injector.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("radar_proxy_without_injector") {
+  base_packages =
+      [ "//userspace/devices/radar/bin/radar-proxy:radar-proxy-without-injector" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/devices/radar/bin/radar-proxy/meta/radar-proxy-without-injector.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("feedback_remote_device_id_provider") {
+  config_data_labels = [
+    "//userspace/developer/forensics:feedback_remote_device_id_provider_for_assembly",
+  ]
+}
+
+assembly_input_bundle("feedback_large_disk") {
+  config_data_labels =
+      [ "//userspace/developer/forensics:feedback_large_disk_product_config" ]
+}
+
+assembly_input_bundle("feedback_upload_config") {
+  config_data_labels = [ "//userspace/developer/forensics:feedback_upload_config" ]
+}
+
+assembly_input_bundle("feedback_userdebug_config") {
+  config_data_labels = [ "//userspace/developer/forensics:feedback_userdebug_config" ]
+}
+
+assembly_input_bundle("feedback_user_config") {
+  config_data_labels = [ "//userspace/developer/forensics:feedback_user_config" ]
+}
+
+assembly_input_bundle("factory_reset_trigger") {
+  base_packages = [ "//userspace/recovery/factory-reset-trigger" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/recovery/factory-reset-trigger/meta/factory-reset-trigger.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+########
+#
+# The "standard" AIBs
+#
+# These historically corresponded to the use of "minimal.gni" as a basis for
+# other products.
+#
+# All components here receive InspectSink and LogSink.
+#
+# TODO(https://fxbug.dev/42065169) Move the contents of common_standard to the right
+# feature- or subsystem-specific AIBs (if not to the core realm AIBs).
+#
+# WARNING:  The only way to remove items from this AIB for a given product is to
+# move them to other AIBs that are included by all other products.
+#
+assembly_input_bundle("common_standard") {
+  memory_buckets = [ "//userspace/developer/memory/buckets/buckets.json5" ]
+
+  bootfs_files_labels = [ "//userspace/sys/core:bootfs" ]
+
+  base_packages = [
+    # The SWD stack artifacts that enable OTAs
+    "//userspace/sys/pkg/bin/system-updater",
+
+    # Cobalt
+    "//userspace/cobalt/bin/app:cobalt",
+    "//userspace/cobalt/bin/system-metrics:cobalt_system_metrics",
+
+    # Diagnostics
+    "//userspace/diagnostics/persistence:diagnostics-persistence",
+    "//userspace/diagnostics/sampler",
+
+    # Internationalization
+    "//userspace/intl/tzdata_provider:tzdata_provider_pkg",
+
+    # Security
+    "//userspace/security/bin/root_ssl_certificates",
+
+    # Activity
+    "//userspace/sys/activity",
+
+    # Connectivity
+    "//userspace/connectivity/network/mdns/service:mdns",
+
+    # Memory pressure monitoring
+    "//userspace/developer/memory/pressure_signaler",
+  ]
+
+  config_data = [
+    {
+      # Ideally we would reference a config_data_for_assembly() target instead,
+      # but they don't support deps yet, which is needed here.
+      package_name = "cobalt"
+      label = "//userspace/cobalt/bin/app:global_metrics_registry_gen"
+      files = [
+        {
+          # This file is generated by GN, but its contents are always the same
+          # (the template which generates it is basically a macro, and has no
+          # product-controlled GN arguments or metadata).
+          source = "$root_gen_dir/userspace/cobalt/bin/app/global_metrics_registry.pb"
+          destination = "global_metrics_registry.pb"
+        },
+      ]
+    },
+    {
+      package_name = "triage-detect"
+      files = [
+        {
+          source =
+              "//userspace/diagnostics/config/triage/detect/session-detect.triage"
+          destination = "session-detect.triage"
+        },
+        {
+          source = "//userspace/diagnostics/config/triage/detect/sysmem-detect.triage"
+          destination = "sysmem-detect.triage"
+        },
+        {
+          source = "//userspace/diagnostics/config/triage/detect/wlan-detect.triage"
+          destination = "wlan-detect.triage"
+        },
+      ]
+    },
+    {
+      package_name = "diagnostics-persistence"
+      files = [
+        {
+          source = "//userspace/diagnostics/config/persistence/netstack.persist"
+          destination = "netstack.persist"
+        },
+        {
+          source = "//userspace/diagnostics/config/persistence/wlan.persist"
+          destination = "wlan.persist"
+        },
+      ]
+    },
+  ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/diagnostics/realm/meta/diagnostics.core_shard.cml",
+            "//userspace/diagnostics/persistence/meta/diagnostics-persistence.core_shard.cml",
+            "//userspace/diagnostics/sampler/meta/sampler.core_shard.cml",
+            "//userspace/connectivity/network/meta/persistence.core_shard.cml",
+            "//userspace/intl/tzdata_provider/meta/tzdata_provider.core_shard.cml",
+            "//userspace/sys/pkg/bin/system-updater/meta/system_updater.core_shard.cml",
+            "//userspace/developer/memory/pressure_signaler/meta/memory_pressure_signaler.core_shard.cml",
+          ]
+        },
+      ]
+    },
+    {
+      name = "diagnostics"
+      components = [
+        {
+          component_name = "diagnostics"
+          shards = [
+            "//userspace/diagnostics/realm/meta/diagnostics_realm.cml",
+            "//sdk/lib/inspect/offer.shard.cml",
+          ]
+        },
+      ]
+      component_includes = [
+        {
+          source = "//sdk/lib/inspect/offer.shard.cml"
+          destination = "inspect/offer.shard.cml"
+        },
+      ]
+    },
+    {
+      name = "system-update-realm"
+      components = [
+        {
+          component_name = "system-update-realm"
+          shards = [ "//userspace/sys/pkg/bin/system-updater/meta/system_updater.system_update_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# This is exclusive to user builds on the minimal support level.
+#
+assembly_input_bundle("standard_user") {
+  config_data = [
+    {
+      package_name = "cobalt"
+      files = [
+        {
+          source = "//userspace/cobalt/bin/app/configs/user_config.json"
+          destination = "config.json"
+        },
+      ]
+    },
+  ]
+}
+
+# This is exclusive to userdebug builds on the minimal support level.
+#
+assembly_input_bundle("standard_userdebug") {
+  config_data = [
+    {
+      package_name = "cobalt"
+      files = [
+        {
+          source = "//userspace/cobalt/bin/app/configs/userdebug_config.json"
+          destination = "config.json"
+        },
+      ]
+    },
+    {
+      package_name = "triage-detect"
+      files = [
+        {
+          source = "//userspace/diagnostics/detect/configs/enable-filing.json"
+          destination = "config.json"
+        },
+        {
+          source = "//userspace/diagnostics/detect/configs/netstack-detect.triage"
+          destination = "netstack-detect.triage"
+        },
+        {
+          source = "//userspace/diagnostics/detect/configs/cobalt-detect.triage"
+          destination = "cobalt-detect.triage"
+        },
+      ]
+    },
+  ]
+}
+
+# This is common across all eng-mode products, at the minimal or higher service
+# level.
+#
+assembly_input_bundle("standard_eng") {
+  testonly = true
+  base_packages = [
+    # Used to resolve ephemeral components.
+    "//userspace/sys/full-resolver:full-resolver-pkg",
+  ]
+  cache_packages = [
+    # Backend for ffx process command.
+    "//userspace/developer/process_explorer:process_explorer_package",
+    "//userspace/devices/bin/driver_playground:pkg",
+    "//userspace/power/metrics-logger:metrics-logger-pkg",
+  ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/developer/process_explorer/meta/process_explorer.core_shard.cml",
+            "//userspace/devices/bin/driver_playground/meta/driver_playground.core_shard.cml",
+            "//userspace/performance/trace_manager/meta/trace_manager.core_shard.cml",
+            "//userspace/power/metrics-logger/meta/metrics-logger.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  config_data = [
+    {
+      package_name = "cobalt"
+      files = [
+        {
+          source = "//userspace/cobalt/bin/app/configs/default_config.json"
+          destination = "config.json"
+        },
+      ]
+    },
+  ]
+}
+
+# This is common across all eng-mode and user-debug products, at the minimal or
+# higher service level.
+#
+assembly_input_bundle("standard_userdebug_and_eng") {
+  base_packages = [
+    "//userspace/diagnostics/detect:triage-detect",
+    "//userspace/sys/pkg/bin/pkgctl",
+    "//userspace/sys/pkg/bin/update",
+  ]
+  shell_commands = [
+    {
+      package = "pkgctl"
+      components = [ "pkgctl" ]
+    },
+    {
+      package = "update-bin"
+      components = [ "update" ]
+    },
+  ]
+  compiled_packages = [
+    {
+      name = "diagnostics"
+      components = [
+        {
+          component_name = "diagnostics"
+          shards = [ "//userspace/diagnostics/detect/meta/detect.realm_shard.cml" ]
+        },
+      ]
+    },
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/diagnostics/detect/meta/detect.core_shard.cml" ]
+        },
+      ]
+    },
+    {
+      bootfs_package = true
+      name = "root"
+      components = [
+        {
+          component_name = "root"
+          shards = [
+            "//userspace/diagnostics/detect/meta/detect_userdebug.root_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Assembly support for memory_monitor (v1).
+assembly_input_bundle("memory_monitor") {
+  base_packages = [
+    # memory_monitor with profiling disabled.
+    "//userspace/developer/memory/monitor:monitor_without_memory_sampler",
+  ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/developer/memory/monitor/meta/memory_monitor.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Assembly support for memory_monitor (v1) with memory profiling enabled.
+assembly_input_bundle("memory_monitor_with_memory_sampler") {
+  base_packages = [
+    # memory_monitor with profiling enabled.
+    "//userspace/developer/memory/monitor:monitor_with_memory_sampler",
+    "//userspace/performance/memory/sampler:memory_sampler",
+  ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/developer/memory/monitor/meta/memory_monitor.core_shard.cml",
+            "//userspace/developer/memory/monitor/meta/memory_monitor_with_memory_sampler.core_shard.cml",
+            "//userspace/performance/memory/sampler/meta/memory_sampler.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("memory_monitor_critical_reports") {
+  config_data = [
+    {
+      package_name = "memory_monitor"
+      files = [
+        {
+          source = "//userspace/developer/memory/monitor/config/send_critical_pressure_crash_reports"
+          destination = "send_critical_pressure_crash_reports"
+        },
+      ]
+    },
+  ]
+}
+
+# Assembly support for memory_monitor2.
+assembly_input_bundle("memory_monitor2") {
+  base_packages = [ "//userspace/performance/memory/attribution/monitor:monitor" ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/performance/memory/attribution/monitor/meta/memory_monitor2.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("detect_user") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "root"
+      components = [
+        {
+          component_name = "root"
+          shards =
+              [ "//userspace/diagnostics/detect/meta/detect_user.root_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+########
+#
+# Feature- and Subsystem-specific AIBs
+#
+# These are optionally present in all products that include the `/core` realm
+# (via the `:core_realm` AIB).  Each should list which feature_set_level and
+# build type that it is valid for.
+
+########
+#
+# Bluetooth Support
+
+# Bluetooth profile support: A2DP
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("bluetooth_a2dp") {
+  flexible_packages = [ "//userspace/connectivity/bluetooth/profiles/bt-a2dp" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/bluetooth/profiles/bt-a2dp/meta/bt-a2dp-eager.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# For configurations without A2DP support to enable A2DP testing.
+#
+# feature_set_levels: standard
+# build-types: eng
+#
+assembly_input_bundle("bluetooth_a2dp_with_consumer") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/connectivity/bluetooth/profiles/bt-a2dp/meta/bt-a2dp-eager-with-audio-consumer.core_shard.cml",
+            "//userspace/media/audio/consumer/meta/audio_consumer.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Bluetooth profile support: AVRCP
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("bluetooth_avrcp") {
+  flexible_packages = [
+    "//userspace/connectivity/bluetooth/profiles/bt-avrcp",
+    "//userspace/connectivity/bluetooth/profiles/bt-avrcp-target",
+  ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/bluetooth/profiles/bt-avrcp/meta/bt-avrcp.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Bluetooth core support
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("bluetooth_core") {
+  flexible_packages = [ "//userspace/connectivity/bluetooth/core/bt-host" ]
+  base_packages = [
+    "//userspace/connectivity/bluetooth/core/bt-init",
+    "//userspace/connectivity/bluetooth/profiles/bt-rfcomm",
+  ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/bluetooth/core/bt-init/meta/bt-init.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Bluetooth profile support: Device Identification
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("bluetooth_device_id") {
+  flexible_packages =
+      [ "//userspace/connectivity/bluetooth/profiles/bt-device-id:without-config" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/bluetooth/profiles/bt-device-id/meta/bt-device-id.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Bluetooth profile support: HFP - AG
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("bluetooth_hfp_ag") {
+  flexible_packages = [
+    "//userspace/connectivity/bluetooth/profiles/bt-hfp-audio-gateway:without-config",
+  ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/bluetooth/profiles/bt-hfp-audio-gateway/meta/bt-hfp-audio-gateway.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Bluetooth profile support: MAP - MCE
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("bluetooth_map_mce") {
+  flexible_packages = [ "//userspace/connectivity/bluetooth/profiles/bt-map-mce" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/bluetooth/profiles/bt-map-mce/meta/bt-map-mce.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Bluetooth snoop support
+#
+# feature_set_levels: minimal
+# build-types: all
+# This AIB provides packages for the Bluetooth snoop configuration which lazily starts. It is
+# mutually exclusive with the `bluetooth_snoop_eager` AIB.
+#
+assembly_input_bundle("bluetooth_snoop_lazy") {
+  base_packages = [ "//userspace/connectivity/bluetooth/tools/bt-snoop" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/bluetooth/tools/bt-snoop/meta/bt-snoop.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Bluetooth snoop support
+#
+# feature_set_levels: minimal
+# build-types: all
+# This AIB provides packages for the Bluetooth snoop configuration which eagerly starts at device
+# boot. It is mutually exclusive with the `bluetooth_snoop_lazy` AIB.
+#
+assembly_input_bundle("bluetooth_snoop_eager") {
+  base_packages = [ "//userspace/connectivity/bluetooth/tools/bt-snoop" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/bluetooth/tools/bt-snoop/meta/bt-snoop-eager.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Support for Pandora Bluetooth test interface server and virtual HCI with Rootcanal.
+#
+# feature_set_levels: standard
+# build-types: eng
+#
+assembly_input_bundle("bluetooth_pandora") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/connectivity/bluetooth/testing/pandora/bt-pandora-server/meta/bt-pandora-server.core_shard.cml",
+            "//userspace/connectivity/bluetooth/tools/bt-rootcanal/meta/bt-rootcanal.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+#
+# Diagnostics Triage Support
+
+# Triage-detect support for magma arm mali devices
+assembly_input_bundle("diagnostics_triage_detect_mali") {
+  config_data_labels = [ "//userspace/diagnostics/config/triage:mali-detect" ]
+}
+
+# Driver Framework Support
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("driver_framework") {
+  bootfs_packages = [
+    "//userspace/devices/bin/devfs:package",
+    "//userspace/devices/bin/driver_host:package",
+    "//userspace/devices/bin/driver_manager:package",
+    "//userspace/devices/bin/driver_manager/devfs:package",
+    "//userspace/devices/bin/driver-index:package",
+  ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/devices/bin/driver_framework/meta/driver_framework.bootstrap_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Full Package Driver Support
+#
+# feature_set_levels: minimal
+# build-types: eng
+#
+assembly_input_bundle("full_drivers") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/devices/bin/driver_framework/meta/full_drivers.bootstrap_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Core starnix support.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: minimal
+# valid build-types: all
+#
+assembly_input_bundle("starnix_support") {
+  flexible_packages = [ "//userspace/starnix/runner:starnix_package" ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "root"
+      components = [
+        {
+          component_name = "root"
+          shards = [ "//userspace/starnix/runner/meta/starnix_runner.root_shard.cml" ]
+        },
+      ]
+    },
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/starnix/runner/meta/starnix_runner.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+  bootfs_files_labels = [ "//userspace/starnix/config:bootfs" ]
+}
+
+# Core adb support. Does not include daemon. Daemon should be included separately.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: minimal
+# valid build-types: all
+#
+assembly_input_bundle("adb_support") {
+  base_driver_packages = [
+    {
+      package_target = "//userspace/developer/adb/drivers/usb-adb-function:package"
+      driver_components = [ "meta/usb-adb-function.cm" ]
+    },
+  ]
+}
+
+# Core Nanohub support. Does not include driver. Driver should be included separately.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: minimal
+# valid build-types: all
+#
+assembly_input_bundle("nanohub_support") {
+  base_packages = [
+    "//userspace/starnix/modules/nanohub:sockettunnel",
+    "//userspace/starnix/modules/nanohub:google_nanohub",
+  ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/starnix/modules/nanohub/meta/sockettunnel.core_shard.cml",
+            "//userspace/starnix/modules/nanohub/meta/nanohub.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# This AIB enables minimal testing support for bootstrap environments, and is meant to be used with
+# the `bootstrap_eng` AIB.
+#
+# This includes testing support in the bootfs packages.
+assembly_input_bundle("testing_support_bootstrap") {
+  testonly = true
+
+  bootfs_packages = [
+    # The test runner command.
+    "//userspace/sys/run_test_suite:package",
+
+    # test-manager and all of its runners, dependencies, and testing realms
+    # are in the same package and loaded using relative urls.
+    "//userspace/sys/test_manager:pkg_for_bootstrap",
+  ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [
+            "//userspace/sys/test_manager/meta/test_manager.bootstrap_shard.cml",
+            "//userspace/sys/testing/meta/test_realm.bootstrap_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+
+  shell_commands = [
+    {
+      bootfs_package = true
+      package = "run-test-suite"
+      components = [ "run-test-suite" ]
+    },
+  ]
+}
+
+# This AIB enables testing support, and is meant to be used with either the
+# `common_standard_eng` and `common_standard_userdebug` AIBs.
+#
+# This includes testing support in the platform `base` package set, not just
+# via `universe`
+assembly_input_bundle("testing_support") {
+  testonly = true
+  base_packages = [ "//userspace/performance/trace_manager" ]
+  bootfs_files_labels = [ "//userspace/tests/microbenchmarks/config:bootfs" ]
+  cache_packages = [
+    # test-manager and all of its runners:
+    "//userspace/sys/test_manager:pkg",
+    "//userspace/sys/test_runners/elf:elf-test-runner",
+    "//userspace/sys/test_runners/elf:elf-test-ambient-exec-runner",
+    "//userspace/sys/test_runners/elf:elf-test-create-raw-processes-runner",
+    "//userspace/sys/test_runners/elf:elf-test-create-raw-processes-ambient-exec-runner",
+    "//userspace/sys/test_runners/fuzz:fuzz-test-runner",
+    "//userspace/sys/test_runners/gotests:go-test-runner",
+    "//userspace/sys/test_runners/gtest:gtest-runner",
+    "//userspace/sys/test_runners/gtest:zxtest-runner",
+    "//userspace/sys/test_runners/gunit:gunit-runner",
+    "//userspace/sys/test_runners/inspect:inspect-test-runner",
+    "//userspace/sys/test_runners/lib_loader_cache:lib_loader_runner_cache",
+    "//userspace/sys/test_runners/rust:rust-test-create-raw-processes-runner",
+    "//userspace/sys/test_runners/rust:rust-test-next-vdso-runner",
+    "//userspace/sys/test_runners/rust:rust-test-runner",
+    "//userspace/sys/test_runners/starnix:starnix-test-runners",
+    "//userspace/sys/test_runners/stress_test:stress-test-runner",
+    "//userspace/connectivity/network/testing/netemul/runner:package",
+
+    # required dependencies of test-manager
+    "//userspace/sys/testing:testing",  # The test_realm component's package
+    "//userspace/lib/fuchsia-component-test/realm_builder_server:pkg",
+    "//userspace/sys/fuzzing:fuzz-manager",
+    "//userspace/sys/fuzzing:fuzz-registry",
+    "//userspace/sys/fuzzing/fuzzctl",
+    "//userspace/sys/run_test_suite",
+
+    # CPU profiler
+    "//userspace/performance/experimental/profiler",
+  ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "root"
+      components = [
+        {
+          component_name = "root"
+          shards = [ "//userspace/sys/testing/meta/test_realm.root_shard.cml" ]
+        },
+      ]
+    },
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/performance/experimental/profiler/meta/profiler.core_shard.cml",
+            "//userspace/sys/test_manager/meta/test_manager.core_shard.cml",
+            "//userspace/sys/fuzzing/meta/fuzzing.core-shard.cml",
+            "//userspace/sys/testing/meta/test_realm.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  shell_commands = [
+    {
+      package = "run_test_suite"
+      components = [ "run-test-suite" ]
+    },
+    {
+      package = "fuzzctl"
+      components = [ "fuzz_ctl" ]
+    },
+  ]
+}
+
+# Basic camera support
+#
+assembly_input_bundle("camera") {
+  flexible_packages = [
+    "//userspace/camera/bin/device:camera_device",
+    "//userspace/camera/bin/device_watcher:camera_device_watcher",
+  ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/camera/meta/camera.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+  memory_buckets = [ "//userspace/developer/memory/buckets/camera_buckets.json5" ]
+}
+
+assembly_input_bundle("factory_data") {
+  flexible_packages = [ "//userspace/factory/factory_store_providers" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/factory/factory_store_providers/meta/factory_store_providers.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# AIB containing bootfs resources needed by all fshost variants
+#
+# There are "pervasively routed" capability shards included here because there
+# is currently no better mechanism for providing them to the fshost component itself.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+#
+assembly_input_bundle("fshost_common") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/storage/fshost/meta/fshost.bootstrap_shard.cml" ]
+        },
+      ]
+    },
+    {
+      bootfs_package = true
+      name = "fshost"
+      packages = [ "//userspace/storage/fshost:pkg" ]
+      components = [
+        {
+          component_name = "fshost"
+          shards = [
+            "//userspace/storage/fshost/meta/base_fshost.cml",
+            "//userspace/storage/lib/fs_management/client.shard.cml",
+            "//userspace/storage/fshost/meta/config.cml",
+          ]
+        },
+      ]
+      component_includes = [
+        {
+          source = "//sdk/lib/inspect/client.shard.cml"
+          destination = "inspect/client.shard.cml"
+        },
+        {
+          source = "//sdk/lib/inspect/offer.shard.cml"
+          destination = "inspect/offer.shard.cml"
+        },
+        {
+          source = "//sdk/lib/inspect/use.shard.cml"
+          destination = "inspect/use.shard.cml"
+        },
+        {
+          source = "//sdk/lib/syslog/client.shard.cml"
+          destination = "syslog/client.shard.cml"
+        },
+        {
+          source = "//sdk/lib/syslog/offer.shard.cml"
+          destination = "syslog/offer.shard.cml"
+        },
+        {
+          source = "//sdk/lib/syslog/use.shard.cml"
+          destination = "syslog/use.shard.cml"
+        },
+        {
+          source = "//userspace/storage/lib/fs_management/client.shard.cml"
+          destination = "userspace/storage/lib/fs_management/client.shard.cml"
+        },
+        {
+          source = "//userspace/storage/fshost/meta/fxblob_fshost_base.shard.cml"
+          destination = "userspace/storage/fshost/meta/fxblob_fshost_base.shard.cml"
+        },
+        {
+          source = "//userspace/storage/fshost/meta/non_storage_host_gpt.shard.cml"
+          destination = "userspace/storage/fshost/meta/non_storage_host_gpt.shard.cml"
+        },
+        {
+          source = "//userspace/storage/fshost/meta/storage_host_base.shard.cml"
+          destination = "userspace/storage/fshost/meta/storage_host_base.shard.cml"
+        },
+        {
+          source = "//userspace/storage/fshost/meta/storage_host_gpt.shard.cml"
+          destination = "userspace/storage/fshost/meta/storage_host_gpt.shard.cml"
+        },
+        {
+          source = "//userspace/storage/fshost/meta/storage_host_fvm.cml"
+          destination = "userspace/storage/fshost/meta/storage_host_fvm.cml"
+        },
+        {
+          source = "//userspace/storage/fshost/meta/storage_host_fvm_base.shard.cml"
+          destination =
+              "userspace/storage/fshost/meta/storage_host_fvm_base.shard.cml"
+        },
+        {
+          source = "//sdk/lib/trace/client.shard.cml"
+          destination = "trace/client.shard.cml"
+        },
+        {
+          source = "//sdk/lib/trace/offer.shard.cml"
+          destination = "trace/offer.shard.cml"
+        },
+        {
+          source = "//sdk/lib/trace/use.shard.cml"
+          destination = "trace/use.shard.cml"
+        },
+      ]
+    },
+  ]
+}
+
+# AIB adding support for storage, needed by all fshost variants that use anything more than bootfs
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+#
+assembly_input_bundle("fshost_storage") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "fshost"
+      components = [
+        {
+          component_name = "fshost"
+          shards = [ "//userspace/storage/fshost/meta/core_fshost.cml" ]
+        },
+      ]
+    },
+  ]
+  bootfs_packages = [ "//userspace/storage/memfs:package" ]
+}
+
+# AIB for fshost's storage-host configuration with GPT+Fxfs.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+#
+assembly_input_bundle("fshost_storage_host_fxfs") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "fshost"
+      components = [
+        {
+          component_name = "fshost"
+          shards = [
+            "//userspace/storage/fshost/meta/fxblob_fshost.cml",
+            "//userspace/storage/fshost/meta/fxblob_fshost_base.shard.cml",
+            "//userspace/storage/fshost/meta/storage_host_base.shard.cml",
+            "//userspace/storage/fshost/meta/storage_host_gpt.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  bootfs_packages = [
+    "//userspace/storage/gpt/component:package",
+    "//userspace/storage/fxfs:package",
+    "//userspace/storage/crypt/fxfs:package",
+  ]
+}
+
+# AIB for fshost's storage-host configuration with GPT+FVM+Minfs.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+#
+assembly_input_bundle("fshost_storage_host_gpt_fvm_minfs") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "fshost"
+      components = [
+        {
+          component_name = "fshost"
+          shards = [
+            "//userspace/storage/fshost/meta/fvm_minfs_fshost.cml",
+            "//userspace/storage/fshost/meta/fvm_minfs_fshost_base.shard.cml",
+            "//userspace/storage/fshost/meta/storage_host_base.shard.cml",
+            "//userspace/storage/fshost/meta/storage_host_fvm.cml",
+            "//userspace/storage/fshost/meta/storage_host_fvm_base.shard.cml",
+            "//userspace/storage/fshost/meta/storage_host_gpt.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  bootfs_packages = [
+    "//userspace/storage/gpt/component:package",
+    "//userspace/storage/blobfs/bin:package",
+    "//userspace/storage/minfs/bin:package",
+    "//userspace/storage/fvm:package",
+  ]
+}
+
+# AIB for fshost's storage-host configuration with FVM+Minfs.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+#
+assembly_input_bundle("fshost_storage_host_fvm_minfs") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "fshost"
+      components = [
+        {
+          component_name = "fshost"
+          shards = [
+            "//userspace/storage/fshost/meta/fvm_minfs_fshost.cml",
+            "//userspace/storage/fshost/meta/fvm_minfs_fshost_base.shard.cml",
+            "//userspace/storage/fshost/meta/non_storage_host_gpt.shard.cml",
+            "//userspace/storage/fshost/meta/storage_host_base.shard.cml",
+            "//userspace/storage/fshost/meta/storage_host_fvm.cml",
+            "//userspace/storage/fshost/meta/storage_host_fvm_base.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  bootfs_packages = [
+    "//userspace/storage/blobfs/bin:package",
+    "//userspace/storage/minfs/bin:package",
+    "//userspace/storage/fvm:package",
+  ]
+}
+
+# AIB containing the fshost with fxfs.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+#
+assembly_input_bundle("fshost_fxfs") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "fshost"
+      components = [
+        {
+          component_name = "fshost"
+          shards = [
+            "//userspace/storage/fshost/meta/fxblob_fshost.cml",
+            "//userspace/storage/fshost/meta/fxblob_fshost_base.shard.cml",
+            "//userspace/storage/fshost/meta/non_storage_host_gpt.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  memory_buckets = [ "//userspace/developer/memory/buckets/fxfs_buckets.json5" ]
+  bootfs_packages = [
+    "//userspace/storage/fxfs:package",
+    "//userspace/storage/crypt/fxfs:package",
+  ]
+}
+
+# AIB containing fshost with an fvm and blobfs only.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+#
+assembly_input_bundle("fshost_fvm") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "fshost"
+      components = [
+        {
+          component_name = "fshost"
+          shards = [
+            "//userspace/storage/fshost/meta/fvm_blobfs_fshost.cml",
+            "//userspace/storage/fshost/meta/fvm_blobfs_fshost_base.shard.cml",
+            "//userspace/storage/fshost/meta/fvm_fshost.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  if (!smos_boot_build) {
+    memory_buckets = [ "//userspace/developer/memory/buckets/blobfs_buckets.json5" ]
+  }
+  bootfs_packages = [ "//userspace/storage/blobfs/bin:package" ]
+}
+
+# AIB containing fshost with an fvm and fxfs to hold the data.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+#
+assembly_input_bundle("fshost_fvm_fxfs") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "fshost"
+      components = [
+        {
+          component_name = "fshost"
+          shards = [
+            "//userspace/storage/fshost/meta/fvm_fxfs_fshost.cml",
+            "//userspace/storage/fshost/meta/fvm_fxfs_fshost_base.shard.cml",
+            "//userspace/storage/fshost/meta/non_storage_host_gpt.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  memory_buckets = [ "//userspace/developer/memory/buckets/fxfs_buckets.json5" ]
+  bootfs_packages = [
+    "//userspace/storage/fxfs:package",
+    "//userspace/storage/crypt/fxfs:package",
+  ]
+}
+
+# AIB containing fshost support for minfs. Not compatible with fxfs.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+#
+assembly_input_bundle("fshost_fvm_minfs") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "fshost"
+      components = [
+        {
+          component_name = "fshost"
+          shards = [
+            "//userspace/storage/fshost/meta/fvm_minfs_fshost.cml",
+            "//userspace/storage/fshost/meta/fvm_minfs_fshost_base.shard.cml",
+            "//userspace/storage/fshost/meta/non_storage_host_gpt.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  if (!smos_boot_build) {
+    memory_buckets = [ "//userspace/developer/memory/buckets/minfs_buckets.json5" ]
+  }
+  bootfs_packages = [ "//userspace/storage/minfs/bin:package" ]
+}
+
+# AIB containing fshost support for minfs-to-fxfs migration.
+# Should be included with fshost_fxfs_fxblob or fshost_fxfs when migration
+# is necessary.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+# requires: one of fshost_fxfs*
+#
+assembly_input_bundle("fshost_fvm_minfs_migration") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "fshost"
+      components = [
+        {
+          component_name = "fshost"
+          shards = [
+            "//userspace/storage/fshost/meta/fvm_minfs_fshost.cml",
+            "//userspace/storage/fshost/meta/fvm_minfs_fshost_base.shard.cml",
+            "//userspace/storage/fshost/meta/fvm_fxfs_fshost.cml",
+            "//userspace/storage/fshost/meta/fvm_fxfs_fshost_base.shard.cml",
+            "//userspace/storage/fshost/meta/non_storage_host_gpt.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  memory_buckets = [
+    "//userspace/developer/memory/buckets/fxfs_buckets.json5",
+    "//userspace/developer/memory/buckets/minfs_buckets.json5",
+  ]
+  bootfs_packages = [
+    "//userspace/storage/fxfs:package",
+    "//userspace/storage/crypt/fxfs:package",
+    "//userspace/storage/minfs/bin:package",
+  ]
+}
+
+# AIB containing fshost support for f2fs
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: all
+# valid build-types: all
+#
+assembly_input_bundle("fshost_fvm_f2fs") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "fshost"
+      components = [
+        {
+          component_name = "fshost"
+          shards = [
+            "//userspace/storage/fshost/meta/fvm_f2fs_fshost.cml",
+            "//userspace/storage/fshost/meta/fvm_f2fs_fshost_base.shard.cml",
+            "//userspace/storage/fshost/meta/non_storage_host_gpt.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  bootfs_packages = [ "//userspace/storage/f2fs/bin:package" ]
+}
+
+# Automatic garbage collection for mutable storage
+#
+# feature_set_levels: minimal
+# build-types:all
+#
+assembly_input_bundle("storage_cache_manager") {
+  base_packages = [ "//userspace/sys/cache_manager" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards =
+              [ "//userspace/sys/cache_manager/meta/cache_manager.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("system_update_checker") {
+  testonly = true
+  base_packages = [ "//userspace/sys/pkg/bin/system-update-checker" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/sys/pkg/bin/system-update-checker/meta/system_update_checker.core_shard.cml" ]
+        },
+      ]
+    },
+    {
+      name = "system-update-realm"
+      components = [
+        {
+          component_name = "system-update-realm"
+          shards = [ "//userspace/sys/pkg/bin/system-update-checker/meta/system_update_checker.system_update_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("omaha_client") {
+  base_packages = [ "//userspace/sys/pkg/bin/omaha-client:omaha-client-unconfigured" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/sys/pkg/bin/omaha-client/meta/omaha_client_service.core_shard.cml" ]
+        },
+      ]
+    },
+    {
+      name = "system-update-realm"
+      components = [
+        {
+          component_name = "system-update-realm"
+          shards = [ "//userspace/sys/pkg/bin/omaha-client/meta/omaha_client_service.system_update_shard.cml" ]
+        },
+      ]
+    },
+  ]
+
+  config_data = [
+    {
+      package_name = "triage-detect"
+      files = [
+        {
+          source = "//userspace/diagnostics/config/triage/detect/omaha-client-detect.triage"
+          destination = "omaha-client-detect.triage"
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("omaha_client_empty_eager_config") {
+  config_data = [
+    {
+      package_name = "omaha-client"
+      label = "//userspace/sys/pkg/bin/omaha-client:empty_eager_package_config_eager_package_config_script"
+      files = [
+        {
+          source = "$root_build_dir/gen/userspace/sys/pkg/bin/omaha-client/empty_eager_package_config/omaha_client/eager_package_config.json"
+          destination = "eager_package_config.json"
+        },
+      ]
+    },
+    {
+      package_name = "pkg-resolver"
+      label = "//userspace/sys/pkg/bin/omaha-client:empty_eager_package_config_eager_package_config_script"
+      files = [
+        {
+          source = "$root_build_dir/gen/userspace/sys/pkg/bin/omaha-client/empty_eager_package_config/pkg_resolver/eager_package_config.json"
+          destination = "eager_package_config.json"
+        },
+      ]
+    },
+  ]
+}
+
+# Used on builds that do not include an update checker, i.e. neither system_update_checker nor omaha_client.
+# This is needed to expose the update protocols from `void` in #system-update.
+assembly_input_bundle("no_update_checker") {
+  compiled_packages = [
+    {
+      name = "system-update-realm"
+      components = [
+        {
+          component_name = "system-update-realm"
+          shards =
+              [ "//userspace/sys/pkg/meta/no_update_checker.system_update_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Include the system-update-configurator component as part of the SWD subsystem.
+assembly_input_bundle("system_update_configurator") {
+  base_packages = [ "//userspace/sys/pkg/bin/system-update-configurator" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/sys/pkg/bin/system-update-configurator/meta/core-shard.cml",
+          ]
+        },
+      ]
+    },
+    {
+      name = "system-update-realm"
+      components = [
+        {
+          component_name = "system-update-realm"
+          shards = [ "//userspace/sys/pkg/bin/system-update-configurator/meta/system-update-shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("pkgfs_disable_executability_restrictions") {
+  system_packages =
+      [ "//userspace/sys/pkg/bin/pkg-cache:disable-executability-restrictions" ]
+}
+
+# AIB to enable virtualization support.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: minimal
+# valid build-types: all
+#
+assembly_input_bundle("virtualization_support") {
+  if (smos_minimal_assembly && current_cpu == "arm64") {
+    bootfs_files_labels =
+        [ "//platform/products/smos_boot/virtualization:guest_cli" ]
+    bootfs_packages = [ "//platform/products/smos_boot/virtualization:host" ]
+    compiled_packages = [
+      {
+        bootfs_package = true
+        name = "bootstrap"
+        components = [
+          {
+            component_name = "bootstrap"
+            shards = [ "//platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml" ]
+          },
+        ]
+      },
+    ]
+  } else if (!smos_minimal_assembly && current_cpu != "riscv64") {
+    # TODO(https://fxbug.dev/42079015): Move to the list above once build errors are resolved.
+    base_packages = [ "//userspace/virtualization/bin/vmm_launcher" ]
+    compiled_packages = [
+      {
+        name = "core"
+        components = [
+          {
+            component_name = "core"
+            shards = [
+              "//userspace/connectivity/network/meta/virtualization.core_shard.cml",
+              "//userspace/virtualization/bin/vmm_launcher/meta/vmm_launcher.core_shard.cml",
+              "//userspace/virtualization/bin/guest_manager/meta/debian_guest_manager.core_shard.cml",
+              "//userspace/virtualization/bin/guest_manager/meta/termina_guest_manager.core_shard.cml",
+              "//userspace/virtualization/bin/guest_manager/meta/zircon_guest_manager.core_shard.cml",
+            ]
+          },
+        ]
+      },
+    ]
+  }
+}
+
+# AIB to enable running Fuchsia as a virtualized guest.
+#
+# optional: product must specify its inclusion
+# valid feature_set_levels: minimal
+# valid build-types: all
+#
+assembly_input_bundle("paravirtualization_support") {
+  base_packages = [ "//userspace/paravirtualization/vsock:vsock_service" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/paravirtualization/vsock/meta/vsock_service.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("paravirtualization_support_bootstrap") {
+  bootfs_packages = [ "//userspace/paravirtualization/vsock:vsock_service" ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/paravirtualization/vsock/meta/vsock_service.bootstrap_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# AIB to include Netstack2 as the netstack for use by base networking.
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("netstack2") {
+  # The Go toolchain used for netstack2 does not support RISC-V.
+  if (current_cpu != "riscv64") {
+    base_packages = [ "//userspace/connectivity/network:netstack2" ]
+    compiled_packages = [
+      {
+        name = "network"
+        components = [
+          {
+            component_name = "network"
+            shards = [ "//userspace/connectivity/network/meta/netstack2.shard.cml" ]
+          },
+        ]
+      },
+    ]
+  }
+}
+
+# Netstack3 as the netstack for use by base networking.
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+# To be used in conjunction with netstack3_packages or netstack3_packages_gub.
+#
+assembly_input_bundle("netstack3") {
+  compiled_packages = [
+    {
+      name = "network"
+      components = [
+        {
+          component_name = "network"
+          shards = [ "//userspace/connectivity/network/meta/netstack3.shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Netstack3 packages without unified binary.
+#
+# This AIB provides packages for the netstack3 configuration. It is mutually
+# exclusive with netstack3_packages_gub.
+assembly_input_bundle("netstack3_packages") {
+  base_packages = [ "//userspace/connectivity/network:netstack3" ]
+}
+
+# Netstack3 packages without unified binary.
+#
+# This AIB provides space-saving equivalent packages for the netstack3
+# configuration as found in netstack3_packages. It is mutually exclusive with
+# netstack3_packages.
+assembly_input_bundle("netstack3_packages_gub") {
+  base_packages = [ "//userspace/connectivity/network:netstack3_gub" ]
+}
+
+# Enable netpol network-socket-proxy. Either this or
+# network-socket-proxy-disabled must be included.
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+# To be used in conjunction with socket_proxy_packages or socket_proxy_packages_gub.
+#
+assembly_input_bundle("socket-proxy-enabled") {
+  compiled_packages = [
+    {
+      name = "network"
+      components = [
+        {
+          component_name = "network"
+          shards = [
+            "//userspace/connectivity/network/meta/socket-proxy-enabled.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Disable netpol network-socket-proxy. Either this or
+# network-socket-proxy-enabled must be included.
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("socket-proxy-disabled") {
+  compiled_packages = [
+    {
+      name = "network"
+      components = [
+        {
+          component_name = "network"
+          shards = [
+            "//userspace/connectivity/network/meta/socket-proxy-disabled.shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Netpol socket-proxy packages without unified binary.
+#
+# This AIB provides packages for the socket-proxy-enabled configuration. It is mutually
+# exclusive with socket_proxy_packages_gub.
+assembly_input_bundle("socket_proxy_packages") {
+  base_packages = [ "//userspace/connectivity/policy/socket-proxy:package" ]
+}
+
+# Netpol socket-proxy packages with unified binary.
+#
+# This AIB provides packages for the socket-proxy-enabled configuration. It is mutually
+# exclusive with socket_proxy_packages.
+assembly_input_bundle("socket_proxy_packages_gub") {
+  base_packages = [ "//userspace/connectivity/policy/socket-proxy:package_gub" ]
+}
+
+# Netstack-migration as the netstack for use by base networking.
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+# Must be used in conjunction with netstack_migration_packages or
+# netstack_migration_packages_gub.
+assembly_input_bundle("netstack_migration") {
+  # The Go toolchain used for netstack2 does not support RISC-V and
+  # netstack_migration contains netstack2.
+  if (current_cpu != "riscv64") {
+    compiled_packages = [
+      {
+        name = "network"
+        components = [
+          {
+            component_name = "network"
+            shards = [
+              "//userspace/connectivity/network/meta/netstack-migration.shard.cml",
+            ]
+          },
+        ]
+      },
+      {
+        name = "core"
+        components = [
+          {
+            component_name = "core"
+            shards = [ "//userspace/connectivity/network/meta/netstack-migration.core.shard.cml" ]
+          },
+        ]
+      },
+    ]
+  }
+}
+
+# Netstack migration packages without unified binary.
+#
+# This AIB provides packages for the netstack_migration configuration. It is
+# mutually exclusive with netstack_migration_packages_gub.
+assembly_input_bundle("netstack_migration_packages") {
+  if (current_cpu != "riscv64") {
+    base_packages = [ "//userspace/connectivity/network:netstack-migration" ]
+  }
+}
+
+# Netstack migration packages with unified binary.
+#
+# This AIB provides packages for the netstack_migration configuration. It is
+# mutually exclusive with netstack_migration_packages.
+assembly_input_bundle("netstack_migration_packages_gub") {
+  if (current_cpu != "riscv64") {
+    base_packages = [ "//userspace/connectivity/network:netstack-migration_gub" ]
+  }
+}
+
+# Includes network-tun functionality.
+assembly_input_bundle("network_tun") {
+  flexible_packages = [ "//userspace/connectivity/network/tun/network-tun" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/network/tun/network-tun/meta/network-tun.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Includes thread LoWPAN functionality.
+assembly_input_bundle("thread_lowpan") {
+  base_packages = [
+    "//userspace/connectivity/lowpan/drivers/lowpan-ot-driver",
+    "//userspace/connectivity/lowpan/service:lowpanservice",
+  ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/connectivity/lowpan/service/meta/lowpanservice.core_shard.cml",
+            "//userspace/connectivity/lowpan/drivers/lowpan-ot-driver/meta/lowpan-ot-driver.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+  memory_buckets =
+      [ "//userspace/developer/memory/buckets/thread_lowpan_buckets.json5" ]
+}
+
+# WLAN policy component
+#
+# feature_set_levels: utility, minimal
+# build-types: all
+#
+# Not included in utility + user by default, but otherwise is included.
+assembly_input_bundle("wlan_policy") {
+  base_packages = [
+    "//userspace/connectivity/location/regulatory_region",
+    "//userspace/connectivity/wlan/wlancfg",
+  ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards =
+              [ "//userspace/connectivity/wlan/wlancfg/meta/wlancfg.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# WLAN development support
+#
+# feature_set_levels: utility, minimal
+# build-types: eng, userdebug
+#
+assembly_input_bundle("wlan_development") {
+  base_packages = [ "//userspace/connectivity/wlan/tools/wlantool:wlan-dev" ]
+  shell_commands = [
+    {
+      package = "wlan"
+      components = [ "wlan-dev" ]
+    },
+  ]
+}
+
+# WLAN support for WEP and WPA
+#
+# feature_set_levels: utility, minimal
+# build-types: all
+#
+# Not included in utility + user by default, but otherwise is included.
+assembly_input_bundle("wlan_legacy_privacy_support") {
+  base_packages = [ "//userspace/connectivity/wlan/wlandevicemonitor:wlandevicemonitor-legacy-privacy" ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/wlan/wlandevicemonitor/meta/wlandevicemonitor.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# WLAN support for WPA2 and later
+#
+# feature_set_levels: utility, minimal
+# build-types: all
+#
+# Not included in utility + user by default, but otherwise is included.
+assembly_input_bundle("wlan_contemporary_privacy_only_support") {
+  base_packages =
+      [ "//userspace/connectivity/wlan/wlandevicemonitor:wlandevicemonitor" ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/wlan/wlandevicemonitor/meta/wlandevicemonitor.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# WLAN support for drivers that provide their own MAC
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("wlan_fullmac_support") {
+  base_driver_packages = [
+    {
+      package_target = "//userspace/connectivity/wlan/drivers/wlanif"
+      driver_components = [ "meta/wlanif.cm" ]
+    },
+  ]
+}
+
+# WLAN support for drivers that utilize a software MAC
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("wlan_softmac_support") {
+  base_driver_packages = [
+    {
+      package_target = "//userspace/connectivity/wlan/drivers/wlansoftmac"
+      driver_components = [ "meta/wlansoftmac.cm" ]
+    },
+  ]
+}
+
+# WLAN support for interfacing with starnix.
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("wlan_wlanix") {
+  base_packages = [ "//userspace/connectivity/wlan/wlanix" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards =
+              [ "//userspace/connectivity/wlan/wlanix/meta/wlanix.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Emergency Location provider
+#
+# feature_set_levels: standard
+# build-types: all
+assembly_input_bundle("location_emergency") {
+  flexible_packages = [ "//userspace/connectivity/location/emergency" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/connectivity/location/emergency/meta/emergency.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Intel High-Definition Audio class driver
+#
+# feature_set_levels: standard
+# build-types: eng
+#
+assembly_input_bundle("intel_hda") {
+  boot_driver_packages = [
+    {
+      package_target = "//userspace/media/audio/drivers/intel-hda/codecs/hdmi:package"
+      package_set = "bootfs"
+      driver_components = [ "meta/hdmi-audio-codec.cm" ]
+    },
+    {
+      package_target =
+          "//userspace/media/audio/drivers/intel-hda/codecs/realtek:package"
+      package_set = "bootfs"
+      driver_components = [ "meta/realtek-audio-codec.cm" ]
+    },
+    {
+      package_target = "//userspace/media/audio/drivers/intel-hda/controller:package"
+      package_set = "bootfs"
+      driver_components = [ "meta/intel-hda.cm" ]
+    },
+    {
+      package_target = "//userspace/media/audio/drivers/intel-hda/codecs/qemu:package"
+      package_set = "bootfs"
+      driver_components = [ "meta/qemu-audio-codec.cm" ]
+    },
+  ]
+  bootfs_files_labels = [ "//userspace/media/audio/bin/ihda:bootfs" ]
+}
+
+# Support for interactive debugging/development of platform audio
+#
+# feature_set_levels: standard
+# build-types: eng
+#
+assembly_input_bundle("audio_development_support") {
+  base_driver_packages = [
+    {
+      package_target = "//userspace/media/audio/drivers/virtual-audio-legacy"
+      driver_components = [ "meta/virtual-audio-legacy-driver.cm" ]
+    },
+  ]
+
+  cache_packages = [ "//userspace/media/audio/services/ffxdaemon:audio_ffx_daemon" ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/media/audio/services/ffxdaemon/meta/audio_ffx_daemon.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Tools for interactive debugging/development of audio drivers
+#
+# feature_set_levels: standard (requires AIB "audio_development_support")
+# build-types: eng
+#
+assembly_input_bundle("audio_driver_development_tools") {
+  cache_packages = [
+    "//userspace/media/audio/tools/audio-codec-ctl",
+    "//userspace/media/audio/tools/audio-driver-ctl",
+    "//userspace/media/audio/tools/dsputil",
+    "//userspace/media/audio/tools/virtual_audio_util",
+  ]
+
+  # From //userspace/media/audio/tools.
+  shell_commands = [
+    {
+      package = "audio-codec-ctl"
+      components = [ "audio-codec-ctl" ]
+    },
+    {
+      package = "audio-driver-ctl"
+      components = [ "audio-driver-ctl" ]
+    },
+    {
+      package = "dsputil"
+      components = [ "dsputil" ]
+    },
+    {
+      package = "virtual_audio_util"
+      components = [ "virtual_audio" ]
+    },
+  ]
+}
+
+# Tools for interactive debugging/development of platform full-stack audio
+#
+# feature_set_levels: standard (requires AIB "audio_core")
+# build-types: eng
+#
+assembly_input_bundle("audio_full_stack_development_tools") {
+  cache_packages = [
+    "//userspace/media/audio/tools/audio-capture-timestamp-validator",
+    "//userspace/media/audio/tools/audio-effects-ctl",
+    "//userspace/media/audio/tools/audio_listener",
+    "//userspace/media/audio/tools/signal_generator",
+    "//userspace/media/audio/tools/vol",
+    "//userspace/media/audio/tools/wav_player",
+    "//userspace/media/audio/tools/wav_recorder",
+  ]
+
+  # From //userspace/media/audio/tools.
+  shell_commands = [
+    {
+      package = "audio-capture-timestamp-validator"
+      components = [ "audio-capture-timestamp-validator" ]
+    },
+    {
+      package = "audio-effects-ctl"
+      components = [ "audio-effects-ctl" ]
+    },
+    {
+      package = "audio_listener"
+      components = [ "audio_listener" ]
+    },
+    {
+      package = "signal_generator"
+      components = [ "signal_generator" ]
+    },
+    {
+      package = "vol"
+      components = [ "vol" ]
+    },
+    {
+      package = "wav_player"
+      components = [ "wav_player" ]
+    },
+    {
+      package = "wav_recorder"
+      components = [ "wav_recorder" ]
+    },
+  ]
+}
+
+# Component that manages platform audio devices
+#
+# feature_set_levels: standard
+# build-types: all
+#
+assembly_input_bundle("audio_device_registry") {
+  flexible_packages = [ "//userspace/media/audio/services/device_registry" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/media/audio/services/device_registry/meta/audio_device_registry.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Component that routes audio on Smart Displays
+#
+# feature_set_levels: standard
+# build-types: all
+#
+assembly_input_bundle("audio_core") {
+  base_packages = [ "//userspace/media/audio/audio_core" ]
+}
+
+assembly_input_bundle("audio_core_routing") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards =
+              [ "//userspace/media/audio/audio_core/meta/audio_core.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("audio_core_use_adc_device") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/media/audio/audio_core/meta/audio_core.core_shard.use_adc_device.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Component that plays audio files using audio_core protocols.
+#
+# feature_set_levels: standard (requires AIB "audio_core")
+# build-types: all
+#
+assembly_input_bundle("soundplayer") {
+  flexible_packages = [ "//userspace/media/sounds/soundplayer" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/media/sounds/soundplayer/meta/soundplayer.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Platform-provided video and audio decoders and encoders.
+#
+# feature_set_levels: standard
+# build-types: all
+#
+assembly_input_bundle("media_codecs") {
+  if (current_cpu != "riscv64") {
+    flexible_packages = [ "//userspace/media/codec:codec_factory" ]
+  }
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards =
+              [ "//userspace/media/codec/factory/meta/codec_factory.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("video_development_support") {
+  testonly = true
+  cache_packages = [ "//userspace/media/codec/examples:encode-file" ]
+  shell_commands = [
+    {
+      package = "encode-file"
+      components = [ "encode-file" ]
+    },
+  ]
+}
+
+# Service that allows active media players (sessions) to be published and discovered.
+#
+# feature_set_levels: standard
+# build-types: all
+#
+assembly_input_bundle("media_sessions") {
+  flexible_packages = [ "//userspace/media/sessions:mediasession" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/media/sessions/meta/mediasession.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Session manager support
+#
+# feature_set_levels: minimal
+# build-types: all
+assembly_input_bundle("session_manager") {
+  base_packages = [ "//userspace/session/bin/session_manager" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/session/bin/session_manager/meta/session_manager.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Element manager support
+#
+# feature_set_levels: minimal
+# build-types: all
+assembly_input_bundle("element_manager") {
+  flexible_packages = [ "//userspace/session/bin/element_manager" ]
+}
+
+# UI support
+#
+# feature_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("ui") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/ui/meta/ui.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# UI support for eng build types
+#
+# feature_set_levels: minimal
+# build-types: eng
+#
+icu_assembly_input_bundle("ui_eng") {
+  icu_cache_packages = [
+    "//userspace/ui/a11y/bin/a11y_manager:a11y-manager",
+
+    "//userspace/ui/bin/scene_manager:scene_manager",
+  ]
+  cache_packages = [
+    "//userspace/graphics/display/bin/coordinator-connector",
+    "//userspace/ui/bin/text:text_manager",
+    "//userspace/ui/scenic:scenic_pkg",
+    "//userspace/ui/bin/virtual_keyboard_manager",
+  ]
+}
+
+# UI support for user and userdebug build types
+#
+# feature_set_levels: minimal
+# build-types: user, userdebug
+#
+icu_assembly_input_bundle("ui_user_and_userdebug") {
+  icu_base_packages = [
+    "//userspace/ui/a11y/bin/a11y_manager:a11y-manager",
+
+    "//userspace/ui/bin/scene_manager:scene_manager",
+  ]
+  base_packages = [
+    "//userspace/graphics/display/bin/coordinator-connector",
+    "//userspace/ui/bin/text:text_manager",
+    "//userspace/ui/scenic:scenic_pkg",
+    "//userspace/ui/bin/virtual_keyboard_manager",
+  ]
+}
+
+# UI support for eng build types
+#
+# feature_set_levels: minimal
+# build-types: eng
+#
+assembly_input_bundle("ui_package_eng") {
+  cache_packages = [ "//userspace/ui:ui_package" ]
+}
+
+# UI support for user and userdebug build types
+#
+# feature_set_levels: minimal
+# build-types: user, userdebug
+#
+assembly_input_bundle("ui_package_user_and_userdebug") {
+  base_packages = [ "//userspace/ui:ui_package" ]
+}
+
+# UI support for builds wants synthetic device support
+#
+# Use PlatformUiConfig.with_synthetic_device_support to select this bundle
+# over ui_package_eng / ui_package_user_and_userdebug.
+#
+# feature_set_levels: minimal
+# build-types: eng, userdebug
+#
+assembly_input_bundle(
+    "ui_package_eng_userdebug_with_synthetic_device_support") {
+  flexible_packages = [ "//userspace/ui:ui_with_synthetic_device_support_package" ]
+}
+
+# Fan support
+#
+# feature_set_levels: utility, minimal
+# build-types: all
+#
+assembly_input_bundle("fan") {
+  base_packages = [ "//userspace/devices/thermal/bin/fan-controller" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/devices/thermal/bin/fan-controller/meta/fan-controller.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Battery support
+#
+# feature_set_levels: utility, minimal
+# build-types: all
+#
+assembly_input_bundle("battery_manager") {
+  base_packages = [ "//userspace/power/battery-manager" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/power/battery-manager/meta/battery_manager.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# TopologyTestDaemon support
+#
+# feature_set_levels: all
+# build-types: eng
+#
+assembly_input_bundle("topology_test_daemon") {
+  testonly = true
+  base_packages = [ "//userspace/power/topology-test-daemon:package" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/power/topology-test-daemon/meta/topology-test-daemon.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Power metrics recorder support
+#
+# feature_set_levels: minimal
+# build-types: all
+assembly_input_bundle("power_metrics_recorder") {
+  base_packages = [ "//userspace/power/metrics-logger:metrics-logger-standalone-pkg" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/power/metrics-logger/meta/metrics-logger-standalone.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Sensors support
+#
+# features_set_levels: utility, minimal
+# build-types: all
+#
+assembly_input_bundle("sensors_framework") {
+  base_packages = [ "//userspace/sensors" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/sensors/meta/sensors.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Sensor playback support.
+#
+# features_set_levels: utility, minimal
+# build-types: eng
+#
+assembly_input_bundle("sensors_framework_eng") {
+  base_packages = [ "//userspace/sensors:sensors_eng" ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/sensors/meta/sensors_eng.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Brightness Manager support
+#
+# features_set_levels: minimal
+# build-types: all
+#
+assembly_input_bundle("brightness_manager") {
+  flexible_packages =
+      [ "//userspace/ui/bin/brightness_manager:brightness_manager_pkg" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/ui/bin/brightness_manager/meta/brightness_manager.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Legacy Power Framework support. Avoids including more modern power framework components.
+#
+# feature_set_levels: all
+# build-types: all
+#
+assembly_input_bundle("legacy_power_framework") {
+  bootfs_packages = [ "//userspace/power/power-manager:package" ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/power/meta/power-framework.shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Power Framework CPU Manager.
+#
+# feature_set_levels: all
+# build-types: all
+#
+assembly_input_bundle("cpu_manager") {
+  bootfs_packages = [ "//userspace/power/cpu-manager:package" ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/power/meta/cpu-manager.bootstrap_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Power Framework System Activity Governor.
+#
+# feature_set_levels: all
+# build-types: eng, userdebug
+#
+assembly_input_bundle("power_framework_sag") {
+  bootfs_packages = [ "//userspace/power/system-activity-governor:package" ]
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/power/meta/sag.shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Power Framework power broker.
+#
+# feature_set_levels: all except embeddable
+# build-types: eng, userdebug
+#
+assembly_input_bundle("power_framework_broker") {
+  bootfs_packages = [ "//userspace/power/broker:package" ]
+}
+
+# Power Framework System Activity Governor for testing. This provides extra controls over the
+# internal state that should only happen for testing.
+#
+# feature_set_levels: all except embeddable
+# build-types: eng
+#
+assembly_input_bundle("power_framework_testing_sag") {
+  bootfs_packages = [
+    "//userspace/power/system-activity-governor:config-use-suspender",
+    "//userspace/power/system-activity-governor:config-wait-for-token",
+    "//userspace/power/system-activity-governor/fake:package",
+    "//userspace/power/testing/fake-suspend:fake-suspend-pkg",
+  ]
+}
+
+# An AIB for our power test related platform drivers.
+assembly_input_bundle("power_test_platform_drivers") {
+  boot_driver_packages = [
+    {
+      package_target = "//userspace/power/testing/system-integration/example/test-driver:power-system-integration-example-test-driver"
+      driver_components =
+          [ "meta/power-system-integration-example-test-driver.cm" ]
+    },
+  ]
+}
+
+# TODO(https://fxbug.dev/335526423): Remove when migrated to power testing phase 2.
+#
+# Bootstrap shard for the power_framework_testing_sag.
+#
+# feature_set_levels: all except embeddable
+# build-types: eng
+#
+assembly_input_bundle(
+    "power_framework_testing_sag_bootstrap_shard_deprecated") {
+  compiled_packages = [
+    {
+      bootfs_package = true
+      name = "bootstrap"
+      components = [
+        {
+          component_name = "bootstrap"
+          shards = [ "//userspace/power/meta/testing-sag.shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Power framework cli tools and ffx power support components
+#
+# feature_set_levels: utility
+# build-types: eng, userdebug
+#
+assembly_input_bundle("power_framework_development_support") {
+  base_packages = [
+    "//userspace/devices/hrtimer/bin:hrtimer-ctl",
+    "//userspace/power/system-activity-governor-controller:package",
+  ]
+
+  # When the power framework becomes available on user builds by default,
+  # these tools should be moved to core_realm_development_access
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/power/system-activity-governor-controller/meta/system-activity-governor-controller.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+
+  shell_commands = [
+    {
+      package = "hrtimer-ctl"
+      components = [ "hrtimer-ctl" ]
+    },
+  ]
+}
+
+# Example assembly input bundle for testing
+#
+# Restricted for testing assembly itself (and to provide example code)
+#
+assembly_input_bundle("example_assembly_bundle") {
+  testonly = true
+  compiled_packages = [
+    # Main definition for another package
+    {
+      name = "for-test"
+
+      # Test that multiple components work
+      components = [
+        {
+          component_name = "bar"
+          shards = [ "//userspace/tests/assembly/assemble_image/compiled_package/meta/test.cml" ]
+        },
+        {
+          component_name = "baz"
+          shards = [ "//userspace/tests/assembly/assemble_image/compiled_package/meta/test.cml" ]
+        },
+      ]
+
+      # Test that component includes for bootfs packages work
+      component_includes = [
+        {
+          source = "//userspace/tests/assembly/assemble_image/compiled_package/meta/test.include.cml"
+
+          destination = "test/include.cml"
+        },
+      ]
+    },
+
+    {
+      name = "for-test2"
+      components = [
+        {
+          component_name = "qux"
+          shards = [ "//userspace/tests/assembly/assemble_image/compiled_package/meta/test.cml" ]
+        },
+      ]
+
+      # Test that component includes for bootfs packages work
+      component_includes = [
+        {
+          source = "//userspace/tests/assembly/assemble_image/compiled_package/meta/test.include.cml"
+
+          destination = "test/include.cml"
+        },
+      ]
+
+      # Test that bootfs packages work
+      bootfs_package = true
+    },
+
+    # Add a shard to the `core` package which should have a main definition
+    # in the legacy bundle
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/tests/assembly/assemble_image/compiled_package/meta/test.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+########
+#
+# Hardware Support AIBs
+#
+# These are used to provide support for specific hardware
+
+# Emulator Support
+#
+# This is the "emulator support" bundle, which provides the kernel that can be
+# booted by an emulator, and which knows how to then boot the Fuchsia kernel
+# itself (Zircon).
+#
+assembly_input_bundle("emulator_support") {
+  qemu_kernel = qemu_boot_shim.path
+  deps = qemu_boot_shim.deps
+}
+
+# Assembly may select at most one bundle with `intl_services` name prefix.
+icu_assembly_input_bundle("intl_services") {
+  icu_base_packages = [ "//userspace/intl/intl_services:pkg" ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/intl/intl_services/meta/intl.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+# Assembly may select at most one bundle with `intl_services` name prefix.
+icu_assembly_input_bundle("intl_services_small") {
+  icu_base_packages = [ "//userspace/intl/intl_services:pkg_small" ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/intl/intl_services/meta/intl_small_timezones.core_shard.cml",
+            "//userspace/intl/intl_services/meta/intl_small.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Assembly may select at most one bundle with `intl_services` name prefix.
+icu_assembly_input_bundle("intl_services_small_with_timezone") {
+  icu_base_packages = [
+    "//userspace/intl/intl_services:pkg_small",
+    "//userspace/intl/time_zone_info_service:pkg",
+  ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/intl/intl_services/meta/intl_small.core_shard.cml",
+            "//userspace/intl/time_zone_info_service/meta/time-zone-info-service.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+icu_assembly_input_bundle("setui") {
+  icu_base_packages = [ "//userspace/settings/service:setui_service" ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards =
+              [ "//userspace/settings/service/meta/setui_service.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+  memory_buckets = [ "//userspace/developer/memory/buckets/setui_buckets.json5" ]
+}
+
+icu_assembly_input_bundle("setui_with_camera") {
+  icu_base_packages = [ "//userspace/settings/service:setui_service" ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/settings/service/meta/setui_service_with_camera.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+  memory_buckets = [ "//userspace/developer/memory/buckets/setui_buckets.json5" ]
+}
+
+# Legacy fonts setup: fonts sourced from config-data.
+assembly_input_bundle("fonts") {
+  base_packages = [ "//userspace/fonts:pkg" ]
+}
+
+# Hermetic fonts setup: fonts sourced from a component.
+assembly_input_bundle("fonts_hermetic") {
+  base_packages = [
+    "//userspace/fonts/asset_providers:server.package",
+    "//userspace/fonts/asset_providers:provider.package",
+  ]
+}
+
+assembly_input_bundle("tee_manager") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/security/bin/tee_manager/meta/tee_manager.core_shard.cml",
+          ]
+        },
+      ]
+    },
+    {
+      name = "tee_manager"
+      packages = [ "//userspace/security/bin/tee_manager:pkg" ]
+      components = [
+        {
+          component_name = "tee_manager"
+          shards = []
+        },
+      ]
+      component_includes = [
+        {
+          source = "//sdk/lib/syslog/client.shard.cml"
+          destination = "syslog/client.shard.cml"
+        },
+        {
+          source = "//userspace/security/bin/tee_manager/meta/tee_manager.base.cml"
+          destination = "tee_manager.base.cml"
+        },
+        {
+          source = "//sdk/lib/inspect/offer.shard.cml"
+          destination = "inspect/offer.shard.cml"
+        },
+        {
+          source = "//sdk/lib/syslog/offer.shard.cml"
+          destination = "syslog/offer.shard.cml"
+        },
+        {
+          source = "//sdk/lib/inspect/use.shard.cml"
+          destination = "inspect/use.shard.cml"
+        },
+        {
+          source = "//sdk/lib/syslog/use.shard.cml"
+          destination = "syslog/use.shard.cml"
+        },
+      ]
+    },
+  ]
+}
+
+# Static resources files to make available to product assembly subsystems.
+assembly_resources_directory("resources") {
+  sources = [
+    "//userspace/sys/core/core_component_id_index.json5",
+    build_info_files.version,
+
+    # Platform configs for the component_manager config.
+    "//userspace/security/policy/component_manager_policy.json5",
+    "//userspace/security/policy/component_manager_policy_base.json5",
+    "//userspace/security/policy/component_manager_policy_build_type_base.json5",
+    "//userspace/security/policy/component_manager_policy_eng.json5",
+    "//userspace/security/policy/component_manager_policy_user.json5",
+    "//userspace/security/policy/component_manager_policy_userdebug.json5",
+    "//userspace/security/policy/subsystems/component_manager_policy_starnix.json5",
+    "//userspace/sys/component_manager/configs/bootfs_config.json5",
+
+    # Networking resources.
+    "//userspace/connectivity/policy/netcfg/config/netcfg_default.json",
+
+    # ICU resources.
+    "${icu_tzres_path}/metaZones.res",
+    "${icu_tzres_path}/timezoneTypes.res",
+    "${icu_tzres_path}/zoneinfo64.res",
+    "${root_gen_dir}/userspace/lib/icu/tzdata/revision.txt",
+
+    # Diagnostics sampler resources.
+    "${root_gen_dir}/userspace/diagnostics/config/sampler/default_sampler_config.json5",
+
+    # Core shard templates.
+    "//userspace/connectivity/weave/meta/weavestack.core_shard.cml.template",
+    "//userspace/developer/forensics/flash_ts_feedback_id/meta/flash_ts_feedback_id.core_shard.cml.template",
+    "//userspace/lib/assembly/platform_configuration/src/subsystems/meta/tee-clients.core_shard.cml",
+    "//userspace/media/audio/meta/multizone_leader.core_shard.cml.template",
+    "//userspace/media/audio/meta/multizone_leader.core_shard_eng.cml",
+
+    # Default recovery logo
+    "//userspace/recovery/system/res/fuchsia-logo.riv",
+  ]
+  deps = [
+    "//release/info:version",
+    "//userspace/diagnostics/config/sampler:default-config",
+    "//userspace/lib/icu/tzdata:revision",
+  ]
+  if (smos_minimal_assembly) {
+    sources = []
+    sources = [
+      "${root_gen_dir}/userspace/diagnostics/config/sampler/default_sampler_config.json5",
+      "//userspace/security/policy/component_manager_policy.json5",
+      "//userspace/security/policy/component_manager_policy_base.json5",
+      "//userspace/security/policy/component_manager_policy_build_type_base.json5",
+      "//userspace/security/policy/component_manager_policy_userdebug.json5",
+      "//userspace/sys/core/core_component_id_index.json5",
+      "//userspace/sys/component_manager/configs/bootfs_config.json5",
+      build_info_files.version,
+    ]
+    deps = []
+    deps = [
+      "//release/info:version",
+      "//userspace/diagnostics/config/sampler:default-config",
+    ]
+  }
+}
+
+# Sets a low timeout for rebooting when the device runs out-of-memory.
+assembly_input_bundle("kernel_oom_reboot_timeout_low") {
+  kernel_cmdline = [ "kernel.oom.reboot-timeout-ms=8000" ]
+}
+
+# Enables jobkilling when the device runs out-of-memory.
+assembly_input_bundle("kernel_oom_behavior_jobkill") {
+  kernel_cmdline = [ "kernel.oom.behavior=jobkill" ]
+}
+
+# Disable kernel oom handling behavior.
+assembly_input_bundle("kernel_oom_behavior_disable") {
+  kernel_cmdline = [ "kernel.oom.enable=false" ]
+}
+
+# Enables log output to legacy serial console.
+assembly_input_bundle("kernel_serial_legacy") {
+  kernel_cmdline = [ "kernel.serial=legacy" ]
+}
+
+# Enables in kernel compression of anonymous memory with some common configuration options.
+assembly_input_bundle("kernel_anonymous_memory_compression") {
+  kernel_cmdline = [
+    "kernel.compression.strategy=lz4",
+    "kernel.compression.storage-strategy=tri_page",
+    "kernel.compression.reclaim_anonymous=true",
+    "kernel.compression.reclaim_zero_forks=true",
+    "kernel.compression.at_memory_pressure=true",
+  ]
+}
+
+# Enables in kernel contiguous physical pages with some common configuration options.
+assembly_input_bundle("kernel_contiguous_physical_pages") {
+  # Physical page loaning and borrowing.
+  #
+  # "k ppb stats" (see also "k ppb help") can be used to check whether the
+  # vast majority of loaned pages are absorbed by using them for pager-backed
+  # VMOs when running a relevant workload (not just mostly idle), or if some
+  # loaned pages remain stranded even as the system approaches OOM. As long as
+  # loaned free pages hits a low fraction of this value before any overall
+  # OOM, pages aren't being stranded when it really matters.
+  kernel_cmdline = [
+    "kernel.ppb.loan=true",
+    "kernel.ppb.borrow-in-supplypages=true",
+    "kernel.ppb.borrow-on-mru=true",
+    "kernel.ppb.replace-on-unloan=true",
+  ]
+}
+
+# Extends compression to happen eagerly as part of queue rotation, only has meaning if
+# "kernel_compression" is also included.
+assembly_input_bundle("kernel_anonymous_memory_compression_eager_lru") {
+  kernel_cmdline = [ "kernel.page-scanner.lru-action=compress_only" ]
+}
+
+# Performs eviction continuously while under memory pressure instead of only once when the pressure
+# level changes.
+assembly_input_bundle("kernel_evict_continuous") {
+  kernel_cmdline = [ "kernel.oom.evict-continuous=true" ]
+}
+
+# Makes the kernel age pages faster; this allows more pages to be reclaimed by reducing the working
+# set.
+assembly_input_bundle("kernel_page_scanner_aging_fast") {
+  kernel_cmdline = [ "kernel.page-scanner.min-aging-interval-ms=0" ]
+}
+
+assembly_input_bundle("kernel_logs_in_reboot_info") {
+  kernel_cmdline = [ "kernel.render-dlog-to-crashlog=true" ]
+}
+
+assembly_input_bundle("kernel_arm64_event_stream_disable") {
+  kernel_cmdline = [ "kernel.arm64.event-stream.enable=false" ]
+}
+
+assembly_input_bundle("kernel_page_table_eviction_never") {
+  kernel_cmdline = [ "kernel.page-scanner.page-table-eviction-policy=never" ]
+}
+
+assembly_input_bundle("kernel_page_table_eviction_on_request") {
+  kernel_cmdline =
+      [ "kernel.page-scanner.page-table-eviction-policy=on_request" ]
+}
+
+# Assembly selects whether to include this AIB or not.
+assembly_input_bundle("zoneinfo") {
+  base_packages = [ "//userspace/intl/tzdata_provider:zoneinfo_provider_pkg" ]
+
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/intl/tzdata_provider/meta/zoneinfo_provider.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Assembly support for performing factory resets
+#
+# feature set levels: standard (always), utility (optionally)
+# build types: all
+assembly_input_bundle("factory_reset") {
+  base_packages = [ "//userspace/recovery/factory_reset:factory_reset_pkg" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [
+            "//userspace/recovery/factory_reset/meta/factory_reset.core_shard.cml",
+          ]
+        },
+      ]
+    },
+  ]
+}
+
+# Assembly support for recovery-fdr
+assembly_input_bundle("recovery_fdr") {
+  base_packages = [ "//userspace/recovery/system:system_recovery_fdr" ]
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/recovery/system/meta/core_shards/system_recovery_fdr.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("session_manager_enable_pkg_cache") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/session/bin/session_manager/meta/session_manager_enable_pkg_cache.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}
+
+assembly_input_bundle("session_manager_disable_pkg_cache") {
+  compiled_packages = [
+    {
+      name = "core"
+      components = [
+        {
+          component_name = "core"
+          shards = [ "//userspace/session/bin/session_manager/meta/session_manager_disable_pkg_cache.core_shard.cml" ]
+        },
+      ]
+    },
+  ]
+}

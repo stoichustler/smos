@@ -1,0 +1,95 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/test.gni")
+
+fuchsia_component_manifest("manifest") {
+  component_name = "console"
+  manifest = "meta/console.cml"
+}
+
+source_set("common") {
+  visibility = [ ":*" ]
+  sources = [
+    "console.cc",
+    "console.h",
+    "fifo.cc",
+    "fifo.h",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.boot:fuchsia.boot_cpp",
+    "//sdk/fidl/fuchsia.hardware.pty:fuchsia.hardware.pty_cpp",
+    "//sdk/fidl/fuchsia.kernel:fuchsia.kernel_cpp",
+    "//sdk/fidl/fuchsia.logger:fuchsia.logger_cpp",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/fit",
+    "//zircon/system/ulib/zircon-internal",
+    "//zircon/system/ulib/zx",
+  ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/lib/component/outgoing/cpp",
+    "//sdk/lib/fdio",
+    "//userspace/lib/fxl",
+    "//zircon/system/ulib/cmdline",
+    "//zircon/system/ulib/fbl",
+  ]
+
+  # TODO(https://fxbug.dev/42085293): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-vla-cxx-extension" ]
+}
+
+executable("console") {
+  sources = [ "main.cc" ]
+  deps = [
+    ":common",
+    "//sdk/lib/component/incoming/cpp",
+    "//sdk/lib/component/outgoing/cpp",
+    "//sdk/lib/fdio",
+    "//userspace/sys/lib/stdout-to-debuglog/cpp",
+  ]
+}
+
+fuchsia_component("component") {
+  cm_label = ":manifest"
+  deps = [ ":console" ]
+
+  # console uses the boot log.
+  # The includes checker wants the syslog shard because console gets the
+  # injected dep on the legacy syslog backend.
+  check_includes = false
+}
+
+fuchsia_package("package") {
+  package_name = "console"
+  deps = [ ":component" ]
+}
+
+test("console-test") {
+  sources = [
+    "console-test.cc",
+    "fifo-test.cc",
+  ]
+  deps = [
+    ":common",
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//zircon/system/ulib/mock-boot-arguments",
+    "//zircon/system/ulib/sync",
+    "//zircon/system/ulib/zxtest",
+  ]
+}
+
+fuchsia_unittest_package("console-test-pkg") {
+  package_name = "console-test"
+  deps = [ ":console-test" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":console-test-pkg" ]
+}

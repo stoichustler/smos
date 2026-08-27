@@ -1,0 +1,19 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.unknown") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Unknown"
+
+  sources = [ "unknown.fidl" ]
+
+  public_deps = [ "//zircon/vdso/zx" ]
+
+  enable_banjo = true
+  enable_hlcpp = true
+  enable_rust_next = true
+}

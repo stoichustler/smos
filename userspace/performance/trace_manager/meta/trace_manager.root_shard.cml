@@ -1,0 +1,23 @@
+// Copyright 2026 The Fuchsia Authors.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+    children: [
+        {
+            name: "core",
+            url: "fuchsia-boot:///trace_manager#meta/trace_manager.cm",
+            startup: "eager",
+            environment: "#elf-env",
+        },
+    ],
+    offer: [
+        {
+            protocol: [
+                "fuchsia.boot.ReadOnlyLog",
+                "fuchsia.kernel.DebugResource",
+            ],
+            from: "parent",
+            to: "#core",
+        },
+    ],
+}

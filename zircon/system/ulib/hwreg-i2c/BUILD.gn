@@ -1,0 +1,20 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/cpp/sdk_source_set.gni")
+import("//release/zircon/zx_library.gni")
+
+zx_library("hwreg-i2c") {
+  sdk = "source"
+  sdk_headers = [ "hwreg/i2c.h" ]
+  sources = []
+
+  public_deps = [
+    # <hwreg/i2c.h> has #include <fidl/fuchsia.hardware.i2c/cpp/wire.h>.
+    "//sdk/fidl/fuchsia.hardware.i2c:fuchsia.hardware.i2c_cpp",
+
+    # <hwreg/i2c.h> has #include <hwreg/bitfields.h>
+    "//zircon/system/ulib/hwreg:hwreg",
+  ]
+}

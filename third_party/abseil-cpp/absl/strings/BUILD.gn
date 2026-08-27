@@ -1,0 +1,367 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Please do not add more entries to this list. We plan to remove
+# abseil-cpp from the Fuchsia platform source tree once cobalt
+# moves out-of-tree.
+visibility = [
+  "$cobalt_root/*",
+  "//third_party/abseil-cpp/*",
+  "//third_party/gvisor_syscall_tests/*",
+  "//third_party/tink/*",
+]
+
+source_set("string_view") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "string_view.cc" ]
+  public = [ "string_view.h" ]
+
+  deps = [
+    "//third_party/abseil-cpp/absl/base",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:nullability",
+    "//third_party/abseil-cpp/absl/base:throw_delegate",
+  ]
+}
+
+source_set("strings") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [
+    "ascii.cc",
+    "charconv.cc",
+    "escaping.cc",
+    "internal/charconv_bigint.cc",
+    "internal/charconv_parse.cc",
+    "internal/damerau_levenshtein_distance.cc",
+    "internal/memutil.cc",
+    "internal/stringify_sink.cc",
+    "match.cc",
+    "numbers.cc",
+    "str_cat.cc",
+    "str_replace.cc",
+    "str_split.cc",
+    "substitute.cc",
+  ]
+  public = [
+    "ascii.h",
+    "charconv.h",
+    "escaping.h",
+    "has_absl_stringify.h",
+    "internal/charconv_bigint.h",
+    "internal/charconv_parse.h",
+    "internal/damerau_levenshtein_distance.h",
+    "internal/has_absl_stringify.h",
+    "internal/memutil.h",
+    "internal/stl_type_traits.h",
+    "internal/str_join_internal.h",
+    "internal/str_split_internal.h",
+    "internal/string_constant.h",
+    "internal/stringify_sink.h",
+    "match.h",
+    "numbers.h",
+    "str_cat.h",
+    "str_join.h",
+    "str_replace.h",
+    "str_split.h",
+    "string_view.h",
+    "strip.h",
+    "substitute.h",
+  ]
+
+  deps = [
+    ":charset",
+    ":internal",
+    ":string_view",
+    "//third_party/abseil-cpp/absl/base",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:endian",
+    "//third_party/abseil-cpp/absl/base:nullability",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+    "//third_party/abseil-cpp/absl/base:throw_delegate",
+    "//third_party/abseil-cpp/absl/memory",
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+    "//third_party/abseil-cpp/absl/numeric:bits",
+    "//third_party/abseil-cpp/absl/numeric:int128",
+  ]
+}
+
+source_set("internal") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [
+    "internal/escaping.cc",
+    "internal/ostringstream.cc",
+    "internal/utf8.cc",
+  ]
+  public = [
+    "internal/escaping.h",
+    "internal/ostringstream.h",
+    "internal/resize_uninitialized.h",
+    "internal/utf8.h",
+  ]
+
+  deps = [
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:endian",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+  ]
+}
+
+source_set("has_ostream_operator") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  public = [ "has_ostream_operator.h" ]
+
+  deps = [ "//third_party/abseil-cpp/absl/base:config" ]
+}
+
+source_set("charset") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  public = [ "charset.h" ]
+
+  deps = [
+    ":string_view",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+  ]
+}
+
+source_set("cord_internal") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [
+    "internal/cord_internal.cc",
+    "internal/cord_rep_btree.cc",
+    "internal/cord_rep_btree_navigator.cc",
+    "internal/cord_rep_btree_reader.cc",
+    "internal/cord_rep_consume.cc",
+    "internal/cord_rep_crc.cc",
+  ]
+  public = [
+    "internal/cord_data_edge.h",
+    "internal/cord_internal.h",
+    "internal/cord_rep_btree.h",
+    "internal/cord_rep_btree_navigator.h",
+    "internal/cord_rep_btree_reader.h",
+    "internal/cord_rep_consume.h",
+    "internal/cord_rep_crc.h",
+    "internal/cord_rep_flat.h",
+  ]
+
+  deps = [
+    ":strings",
+    "//third_party/abseil-cpp/absl/base:base_internal",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:endian",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+    "//third_party/abseil-cpp/absl/base:throw_delegate",
+    "//third_party/abseil-cpp/absl/container:compressed_tuple",
+    "//third_party/abseil-cpp/absl/container:container_memory",
+    "//third_party/abseil-cpp/absl/container:inlined_vector",
+    "//third_party/abseil-cpp/absl/container:layout",
+    "//third_party/abseil-cpp/absl/crc:crc_cord_state",
+    "//third_party/abseil-cpp/absl/functional:function_ref",
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+    "//third_party/abseil-cpp/absl/types:span",
+  ]
+}
+
+source_set("cordz_update_tracker") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  public = [ "internal/cordz_update_tracker.h" ]
+
+  deps = [ "//third_party/abseil-cpp/absl/base:config" ]
+}
+
+source_set("cord") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [
+    "cord.cc",
+    "cord_analysis.cc",
+    "cord_buffer.cc",
+  ]
+  public = [
+    "cord.h",
+    "cord_analysis.h",
+    "cord_buffer.h",
+  ]
+
+  deps = [
+    ":cord_internal",
+    ":cordz_functions",
+    ":cordz_info",
+    ":cordz_statistics",
+    ":cordz_update_scope",
+    ":cordz_update_tracker",
+    ":internal",
+    ":strings",
+    "//third_party/abseil-cpp/absl/base",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:endian",
+    "//third_party/abseil-cpp/absl/base:nullability",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+    "//third_party/abseil-cpp/absl/container:inlined_vector",
+    "//third_party/abseil-cpp/absl/crc:crc32c",
+    "//third_party/abseil-cpp/absl/crc:crc_cord_state",
+    "//third_party/abseil-cpp/absl/functional:function_ref",
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+    "//third_party/abseil-cpp/absl/numeric:bits",
+    "//third_party/abseil-cpp/absl/types:optional",
+    "//third_party/abseil-cpp/absl/types:span",
+  ]
+}
+
+source_set("cordz_handle") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "internal/cordz_handle.cc" ]
+  public = [ "internal/cordz_handle.h" ]
+
+  deps = [
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:no_destructor",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+    "//third_party/abseil-cpp/absl/synchronization",
+  ]
+}
+
+source_set("cordz_info") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "internal/cordz_info.cc" ]
+  public = [ "internal/cordz_info.h" ]
+
+  deps = [
+    ":cord_internal",
+    ":cordz_functions",
+    ":cordz_handle",
+    ":cordz_statistics",
+    ":cordz_update_tracker",
+    "//third_party/abseil-cpp/absl/base",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+    "//third_party/abseil-cpp/absl/container:inlined_vector",
+    "//third_party/abseil-cpp/absl/debugging:stacktrace",
+    "//third_party/abseil-cpp/absl/synchronization",
+    "//third_party/abseil-cpp/absl/time",
+    "//third_party/abseil-cpp/absl/types:span",
+  ]
+}
+
+source_set("cordz_update_scope") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  public = [ "internal/cordz_update_scope.h" ]
+
+  deps = [
+    ":cord_internal",
+    ":cordz_info",
+    ":cordz_update_tracker",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+  ]
+}
+
+source_set("cordz_sample_token") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "internal/cordz_sample_token.cc" ]
+  public = [ "internal/cordz_sample_token.h" ]
+
+  deps = [
+    ":cordz_handle",
+    ":cordz_info",
+    "//third_party/abseil-cpp/absl/base:config",
+  ]
+}
+
+source_set("cordz_functions") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [ "internal/cordz_functions.cc" ]
+  public = [ "internal/cordz_functions.h" ]
+
+  deps = [
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+    "//third_party/abseil-cpp/absl/profiling:exponential_biased",
+  ]
+}
+
+source_set("cordz_statistics") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  public = [ "internal/cordz_statistics.h" ]
+
+  deps = [
+    ":cordz_update_tracker",
+    "//third_party/abseil-cpp/absl/base:config",
+  ]
+}
+
+source_set("str_format") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  public = [ "str_format.h" ]
+
+  deps = [
+    ":str_format_internal",
+    ":string_view",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:nullability",
+    "//third_party/abseil-cpp/absl/types:span",
+  ]
+}
+
+source_set("str_format_internal") {
+  public_configs = [ "//third_party/abseil-cpp:abseil_config" ]
+
+  sources = [
+    "internal/str_format/arg.cc",
+    "internal/str_format/bind.cc",
+    "internal/str_format/extension.cc",
+    "internal/str_format/float_conversion.cc",
+    "internal/str_format/output.cc",
+    "internal/str_format/parser.cc",
+  ]
+  public = [
+    "internal/str_format/arg.h",
+    "internal/str_format/bind.h",
+    "internal/str_format/checker.h",
+    "internal/str_format/constexpr_parser.h",
+    "internal/str_format/extension.h",
+    "internal/str_format/float_conversion.h",
+    "internal/str_format/output.h",
+    "internal/str_format/parser.h",
+  ]
+
+  deps = [
+    ":strings",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/container:fixed_array",
+    "//third_party/abseil-cpp/absl/container:inlined_vector",
+    "//third_party/abseil-cpp/absl/functional:function_ref",
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+    "//third_party/abseil-cpp/absl/numeric:bits",
+    "//third_party/abseil-cpp/absl/numeric:int128",
+    "//third_party/abseil-cpp/absl/numeric:representation",
+    "//third_party/abseil-cpp/absl/types:optional",
+    "//third_party/abseil-cpp/absl/types:span",
+    "//third_party/abseil-cpp/absl/utility",
+  ]
+}

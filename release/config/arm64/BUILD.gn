@@ -1,0 +1,45 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Platform baseline.
+# This tracks the minimum hardware requirements for Fuchsia on AArch64.
+config("arm64") {
+  cflags = [
+    "-march=armv8-a+simd+crc+crypto",
+    "-mtune=generic",
+  ]
+  ldflags = cflags
+  asmflags = cflags
+
+  # For supported target features see:
+  # rustc --target=aarch64-unknown-fuchsia --print target-features
+  # `armv8a` and `simd` features are assumed by the target triple
+  # `aarch64-unknown-fuchsia`.
+  rustflags = [
+    "-Ctarget-feature=+crc,+aes,+sha2",
+    "-Zsanitizer=shadow-call-stack",
+  ]
+}
+
+config("cortex-a53") {
+  cflags = [ "-mcpu=cortex-a53" ]
+  ldflags = cflags
+  asmflags = cflags
+
+  # TODO(https://fxbug.dev/42168343): consider the below.
+  #rustflags = [ "-Ctarget-cpu=cortex-a53" ]
+
+  rustflags = [ "-Ctarget-feature=+crc,+aes,+sha2,+neon" ]
+
+  # The CPU doesn't support the new atomics, so don't pay conditionalization
+  # overhead at runtime.
+  configs = [ ":no-outline-atomics" ]
+}
+
+# The compiler default for aarch64 targets uses outcalls to compiler-rt
+# (libgcc) functions that can do runtime switching between old and new atomic
+# insns.  This needs to be disabled when the standard runtime is not available.
+config("no-outline-atomics") {
+  cflags = [ "-mno-outline-atomics" ]
+}

@@ -1,0 +1,35 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+# NOTE: fuchsia.sys2 is slowly being unpacked into a set of
+# `fuchsia.component.*` libraries.
+fidl("fuchsia.sys2") {
+  sdk_category = "partner_internal"
+  sdk_area = "Unknown"
+  stable = true
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.component",
+    "//sdk/fidl/fuchsia.component.decl",
+    "//sdk/fidl/fuchsia.component.runner",
+    "//sdk/fidl/fuchsia.data",
+    "//sdk/fidl/fuchsia.io",
+    "//sdk/fidl/fuchsia.process",
+    "//sdk/fidl/fuchsia.url",
+    "//zircon/vdso/zx",
+  ]
+
+  sources = [
+    "crash_introspect.fidl",
+    "lifecycle_controller.fidl",
+    "realm.fidl",
+    "route_validator.fidl",
+    "storage_admin.fidl",
+    "system_controller.fidl",
+  ]
+
+  enable_hlcpp = true
+}

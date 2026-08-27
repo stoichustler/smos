@@ -1,0 +1,477 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/cpp/library_headers.gni")
+
+group("tests") {
+  testonly = true
+  deps = [ "tests" ]
+}
+
+config("include") {
+  include_dirs = [ "include" ]
+}
+
+# This needs to be static_library rather than source_set, as we need
+# Unix linking rules to apply. This is so that only the object files
+# corresponding to the used functions will be linked to the final binary.
+static_library("ddk") {
+  public = [
+    "include/lib/ddk/binding_driver.h",
+    "include/lib/ddk/binding_priv.h",
+    "include/lib/ddk/debug.h",
+    "include/lib/ddk/device.h",
+    "include/lib/ddk/driver.h",
+    "include/lib/ddk/hw/arch_ops.h",
+    "include/lib/ddk/hw/inout.h",
+    "include/lib/ddk/io-buffer.h",
+    "include/lib/ddk/metadata.h",
+    "include/lib/ddk/protodefs.h",
+    "include/lib/ddk/trace/event.h",
+  ]
+
+  if (is_fuchsia) {
+    sources = [
+      "io-buffer.c",
+      "macros.h",
+    ]
+  }
+
+  public_configs = [ ":include" ]
+
+  public_deps = [
+    # <ddk/io-buffer.h> has #include <zircon/syscalls.h>.
+
+    "//sdk/lib/async:async",
+    "//sdk/lib/driver/runtime:driver_runtime",
+    "//sdk/lib/zbi-format",
+    "//zircon/system/ulib/ddk-platform-defs",
+    "//zircon/system/ulib/syslog:syslog-headers",
+  ]
+  if (is_fuchsia) {
+    public_deps += [
+      "//zircon/system/ulib/trace",
+      "//zircon/system/ulib/trace-engine",
+    ]
+  }
+
+  deps = [ "//zircon/system/ulib/sync" ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # New drivers should be written for DFv2. If you need to target a board stuck on DFv1,
+  # it is acceptable to add an entry to this list.
+  #
+  # To remove items from the allowlist, please send a change to one of the OWNERS of
+  # this file to remove an element from the visibility list below.
+  #
+  # Please allowlist entire directories rather than individual targets as it
+  # requires less allowlist churn over time.
+  visibility = [
+    "//examples/drivers/transport/banjo:*",
+    "//examples/drivers/transport/banjo/v1:*",
+    "//sdk/banjo/*",
+    "//sdk/fidl/*",
+    "//sdk/lib/driver/devicetree/visitors/*",
+    "//sdk/lib/driver_test_realm:*",
+    "//userspace/camera/drivers/bus/aml_mipicsi:*",
+    "//userspace/camera/drivers/controller:*",
+    "//userspace/camera/drivers/hw_accel/gdc:*",
+    "//userspace/camera/drivers/hw_accel/ge2d:*",
+    "//userspace/camera/drivers/test_utils:*",
+    "//userspace/camera/drivers/usb_video:*",
+    "//userspace/connectivity/bluetooth/hci/passthrough:*",
+    "//userspace/connectivity/bluetooth/hci/transport/uart:*",
+    "//userspace/connectivity/bluetooth/hci/vendor/atheros:*",
+    "//userspace/connectivity/bluetooth/hci/vendor/broadcom:*",
+    "//userspace/connectivity/bluetooth/hci/vendor/intel:*",
+    "//userspace/connectivity/ethernet/drivers/aml-ethernet:*",
+    "//userspace/connectivity/ethernet/drivers/asix-88179:*",
+    "//userspace/connectivity/ethernet/drivers/asix-88179:*",
+    "//userspace/connectivity/ethernet/drivers/asix-88179:*",
+    "//userspace/connectivity/ethernet/drivers/asix-88772b:*",
+    "//userspace/connectivity/ethernet/drivers/dwmac:*",
+    "//userspace/connectivity/ethernet/drivers/ethernet/netdevice-migration:*",
+    "//userspace/connectivity/ethernet/drivers/realtek-8111:*",
+    "//userspace/connectivity/ethernet/drivers/realtek-8211f:*",
+    "//userspace/connectivity/ethernet/drivers/rndis-function:*",
+    "//userspace/connectivity/ethernet/drivers/rndis-host:*",
+    "//userspace/connectivity/ethernet/drivers/usb-cdc-ecm:*",
+    "//userspace/connectivity/ethernet/drivers/usb-cdc-function:*",
+    "//userspace/connectivity/network/drivers/network-device:*",
+    "//userspace/connectivity/network/drivers/network-device/device:*",
+    "//userspace/connectivity/network/drivers/network-device/mac:*",
+    "//userspace/connectivity/openthread/drivers/ot-radio:*",
+    "//userspace/connectivity/openthread/tests/fake-drivers/fake-ot-radio:*",
+    "//userspace/connectivity/openthread/third_party/openthread/spinel-framer:*",
+    "//userspace/connectivity/overnet/usb:*",
+    "//userspace/connectivity/telephony/drivers/qmi-fake-transport:*",
+    "//userspace/connectivity/telephony/drivers/qmi-usb-transport:*",
+    "//userspace/connectivity/telephony/tests/fake-drivers/at-fake-transport:*",
+    "//userspace/connectivity/telephony/tests/fake-drivers/fake-transport-base:*",
+    "//userspace/connectivity/telephony/tests/fake-drivers/usb-qmi-function:*",
+    "//userspace/connectivity/wlan/drivers/lib/log/cpp:*",
+    "//userspace/connectivity/wlan/drivers/lib/log/cpp/test:*",
+    "//userspace/connectivity/wlan/drivers/lib/timer:*",
+    "//userspace/connectivity/wlan/drivers/wlanif:*",
+    "//userspace/connectivity/wlan/drivers/wlanif/test:*",
+    "//userspace/connectivity/wlan/drivers/wlanphy:*",
+    "//userspace/connectivity/wlan/drivers/wlansoftmac:*",
+    "//userspace/developer/adb/drivers/usb-adb-function:*",
+    "//userspace/devices/bin/driver_manager:*",
+    "//userspace/devices/bin/driver_manager:*",
+    "//userspace/devices/bin/driver_manager/devfs:*",
+    "//userspace/devices/block/drivers/block-verity:*",
+    "//userspace/devices/block/drivers/bootpart:*",
+    "//userspace/devices/block/drivers/core:*",
+    "//userspace/devices/block/drivers/ftl:*",
+    "//userspace/devices/block/drivers/gpt:*",
+    "//userspace/devices/block/drivers/mbr:*",
+    "//userspace/devices/block/drivers/pci-sdhci:*",
+    "//userspace/devices/block/drivers/ramdisk:*",
+    "//userspace/devices/block/drivers/sdhci:*",
+    "//userspace/devices/block/drivers/ums-function:*",
+    "//userspace/devices/block/drivers/usb-mass-storage:*",
+    "//userspace/devices/block/drivers/zxcrypt:*",
+    "//userspace/devices/block/lib/common:*",
+    "//userspace/devices/board/drivers/astro:*",
+    "//userspace/devices/board/drivers/astro/post-init:*",
+    "//userspace/devices/board/drivers/integration-test:*",
+    "//userspace/devices/board/drivers/machina:*",
+    "//userspace/devices/board/drivers/nelson:*",
+    "//userspace/devices/board/drivers/nelson/post-init:*",
+    "//userspace/devices/board/drivers/qemu-arm64:*",
+    "//userspace/devices/board/drivers/qemu-riscv64:*",
+    "//userspace/devices/board/drivers/sherlock:*",
+    "//userspace/devices/board/drivers/sherlock/post-init:*",
+    "//userspace/devices/board/drivers/vim3:*",
+    "//userspace/devices/board/drivers/x86:*",
+    "//userspace/devices/board/lib/acpi:*",
+    "//userspace/devices/board/lib/smbios:*",
+    "//userspace/devices/bus/drivers/pci:*",
+    "//userspace/devices/bus/drivers/pci:*",
+    "//userspace/devices/bus/drivers/pci/test:*",
+    "//userspace/devices/bus/drivers/platform:*",
+    "//userspace/devices/bus/drivers/platform/test:*",
+    "//userspace/devices/bus/lib/device-protocol-pdev:*",
+    "//userspace/devices/bus/lib/platform-bus-composites:*",
+    "//userspace/devices/bus/lib/virtio:*",
+    "//userspace/devices/clock/drivers/amlogic-clk:*",
+    "//userspace/devices/clock/drivers/clock:*",
+    "//userspace/devices/cpu/drivers/aml-cpu:*",
+    "//userspace/devices/cpu/drivers/aml-cpu-legacy:*",
+    "//userspace/devices/gpio/bin/gpioutil:*",
+    "//userspace/devices/gpio/drivers/ti-tca6408a:*",
+    "//userspace/devices/gpio/lib/fuchsia.hardware.gpio:*",
+    "//userspace/devices/i2c/drivers/i2c:*",
+    "//userspace/devices/i2c/drivers/intel-i2c:*",
+    "//userspace/devices/i2c/lib/device-protocol-i2c-channel:*",
+    "//userspace/devices/lib/acpi:*",
+    "//userspace/devices/lib/acpi/mock:*",
+    "//userspace/devices/lib/acpi/test:*",
+    "//userspace/devices/lib/amlogic:*",
+    "//userspace/devices/lib/dev-operation:*",
+    "//userspace/devices/lib/driver:*",
+    "//userspace/devices/lib/fidl:*",
+    "//userspace/devices/lib/fragment-irq:*",
+    "//userspace/devices/lib/goldfish/pipe_io:*",
+    "//userspace/devices/lib/iommu:*",
+    "//userspace/devices/lib/nxp:*",
+    "//userspace/devices/light-sensor/drivers/ams-light:*",
+    "//userspace/devices/mcu/drivers/vim3-mcu:*",
+    "//userspace/devices/misc/drivers/compat:*",
+    "//userspace/devices/misc/drivers/test:*",
+    "//userspace/devices/misc/drivers/test-parent:*",
+    "//userspace/devices/ml/drivers/aml-nna:*",
+    "//userspace/devices/ml/drivers/usb-harriet:*",
+    "//userspace/devices/nand/drivers/aml-rawnand:*",
+    "//userspace/devices/nand/drivers/aml-spinand:*",
+    "//userspace/devices/nand/drivers/broker:*",
+    "//userspace/devices/nand/drivers/nand:*",
+    "//userspace/devices/nand/drivers/nandpart:*",
+    "//userspace/devices/nand/drivers/ram-nand:*",
+    "//userspace/devices/nand/drivers/skip-block:*",
+    "//userspace/devices/pci/lib/device-protocol-pci:*",
+    "//userspace/devices/pci/lib/pci:*",
+    "//userspace/devices/power/drivers/aml-meson-power:*",
+    "//userspace/devices/power/drivers/aml-pwm-regulator:*",
+    "//userspace/devices/power/drivers/fusb302:*",
+    "//userspace/devices/power/drivers/nelson-brownout-protection:*",
+    "//userspace/devices/power/drivers/power:*",
+    "//userspace/devices/power/drivers/ti-ina231:*",
+    "//userspace/devices/pwm/drivers/aml-pwm:*",
+    "//userspace/devices/pwm/drivers/aml-pwm-init:*",
+    "//userspace/devices/pwm/drivers/pwm:*",
+    "//userspace/devices/ram/drivers/aml-ram:*",
+    "//userspace/devices/rtc/drivers/aml-rtc:*",
+    "//userspace/devices/rtc/drivers/intel-rtc:*",
+    "//userspace/devices/rtc/drivers/pl031-rtc:*",
+    "//userspace/devices/rtc/lib/rtc:*",
+    "//userspace/devices/securemem/drivers/aml-securemem:*",
+    "//userspace/devices/serial/drivers/aml-uart:*",
+    "//userspace/devices/serial/drivers/ftdi:*",
+    "//userspace/devices/serial/drivers/ftdi/test:*",
+    "//userspace/devices/serial/drivers/uart16550:*",
+    "//userspace/devices/serial/drivers/usb-cdc-acm:*",
+    "//userspace/devices/spi/bin/spiutil:*",
+    "//userspace/devices/temperature/drivers/shtv3:*",
+    "//userspace/devices/temperature/drivers/tmp112:*",
+    "//userspace/devices/testing/devmgr-integration-test-shim:*",
+    "//userspace/devices/testing/driver-integration-test-shim:*",
+    "//userspace/devices/testing/fake-dma-buffer/test:*",
+    "//userspace/devices/testing/fake-mmio-reg/test:*",
+    "//userspace/devices/testing/goldfish/fake_pipe:*",
+    "//userspace/devices/testing/mock-ddk:*",
+    "//userspace/devices/testing/no_ddk:*",
+    "//userspace/devices/tests/banjo-proxy:*",
+    "//userspace/devices/tests/bind-fail-test:*",
+    "//userspace/devices/tests/bind-test-v2:*",
+    "//userspace/devices/tests/bindlib-codegen-test:*",
+    "//userspace/devices/tests/ddk-environment-test:*",
+    "//userspace/devices/tests/ddk-fallback-test:*",
+    "//userspace/devices/tests/ddk-fallback-test-v2:*",
+    "//userspace/devices/tests/ddk-fidl-test:*",
+    "//userspace/devices/tests/ddk-firmware-test:*",
+    "//userspace/devices/tests/ddk-lifecycle:*",
+    "//userspace/devices/tests/ddk-metadata-test:*",
+    "//userspace/devices/tests/ddk-topology-test:*",
+    "//userspace/devices/tests/device-watcher:*",
+    "//userspace/devices/tests/driver-inspect-test:*",
+    "//userspace/devices/tests/driver-runtime:*",
+    "//userspace/devices/tests/driver-transport:*",
+    "//userspace/devices/tests/fidl-service:*",
+    "//userspace/devices/tests/isolateddevmgr:*",
+    "//userspace/devices/tests/sysdev:*",
+    "//userspace/devices/tests/v2/compat:*",
+    "//userspace/devices/tests/v2/compat-globals:*",
+    "//userspace/devices/tests/v2/compat-globals/root:*",
+    "//userspace/devices/tests/v2/compat-node-group/root:*",
+    "//userspace/devices/tests/v2/compat-runtime:*",
+    "//userspace/devices/tests/v2/compat-runtime-v1/root:*",
+    "//userspace/devices/tests/v2/compat/root:*",
+    "//userspace/devices/tests/v2/ddk-init-test:*",
+    "//userspace/devices/tests/v2/init-child-first:*",
+    "//userspace/devices/tests/v2/inspect:*",
+    "//userspace/devices/tests/v2/interop:*",
+    "//userspace/devices/tests/v2/services:*",
+    "//userspace/devices/thermal/drivers/aml-thermal:*",
+    "//userspace/devices/thermal/drivers/aml-thermal-s905d2g-legacy:*",
+    "//userspace/devices/thermal/drivers/aml-thermistor:*",
+    "//userspace/devices/thermal/drivers/aml-thermistor/test:*",
+    "//userspace/devices/usb/drivers/dwc2:*",
+    "//userspace/devices/usb/drivers/usb-bus:*",
+    "//userspace/devices/usb/drivers/usb-composite:*",
+    "//userspace/devices/usb/drivers/usb-hub:*",
+    "//userspace/devices/usb/drivers/usb-peripheral:*",
+    "//userspace/devices/usb/drivers/usb-peripheral-test:*",
+    "//userspace/devices/usb/drivers/usb-virtual-bus:*",
+    "//userspace/devices/usb/drivers/xhci:*",
+    "//userspace/devices/usb/lib/usb:*",
+    "//userspace/devices/usb/lib/usb-endpoint:*",
+    "//userspace/devices/usb/lib/usb/tests:*",
+    "//userspace/devices/usb/testing/usb-virtual-bus-launcher:*",
+    "//userspace/devices/usb/tests/usb-hci-test:*",
+    "//userspace/diagnostics/validator/logs/ddk/log-test-driver:*",
+    "//userspace/firmware/drivers/usb-fastboot-function:*",
+    "//userspace/graphics/display/lib/driver-framework-migration-utils/*",
+    "//userspace/graphics/drivers/aml-gpu:*",
+    "//userspace/graphics/drivers/misc/goldfish:*",
+    "//userspace/graphics/drivers/misc/goldfish_address_space:*",
+    "//userspace/graphics/drivers/misc/goldfish_control:*",
+    "//userspace/graphics/drivers/misc/goldfish_sync:*",
+    "//userspace/graphics/drivers/msd-arm-mali:*",
+    "//userspace/graphics/drivers/msd-intel-gen:*",
+    "//userspace/graphics/drivers/msd-intel-gen/src:*",
+    "//userspace/graphics/drivers/msd-vsi-vip:*",
+    "//userspace/graphics/lib/magma/src/sys_driver/dfv1:*",
+    "//userspace/graphics/magma/lib/magma/platform:*",
+    "//userspace/graphics/magma/lib/magma/platform/zircon:*",
+    "//userspace/graphics/magma/lib/magma_service/sys_driver/dfv1:*",
+    "//userspace/lib/ddk:*",
+    "//userspace/lib/ddk/tests:*",
+    "//userspace/lib/ddktl:*",
+    "//userspace/lib/ddktl/tests:*",
+    "//userspace/lib/metrics_buffer:*",
+    "//userspace/media/audio/drivers/aml-g12-pdm:*",
+    "//userspace/media/audio/drivers/aml-g12-tdm:*",
+    "//userspace/media/audio/drivers/aml-g12-tdm/test:*",
+    "//userspace/media/audio/drivers/codecs/alc5514:*",
+    "//userspace/media/audio/drivers/codecs/alc5663:*",
+    "//userspace/media/audio/drivers/codecs/max98373:*",
+    "//userspace/media/audio/drivers/codecs/max98927:*",
+    "//userspace/media/audio/drivers/codecs/tas27xx:*",
+    "//userspace/media/audio/drivers/codecs/tas5707:*",
+    "//userspace/media/audio/drivers/codecs/tas5720:*",
+    "//userspace/media/audio/drivers/codecs/tas58xx:*",
+    "//userspace/media/audio/drivers/intel-hda/codecs/hdmi:*",
+    "//userspace/media/audio/drivers/intel-hda/codecs/qemu:*",
+    "//userspace/media/audio/drivers/intel-hda/codecs/realtek:*",
+    "//userspace/media/audio/drivers/intel-hda/controller:*",
+    "//userspace/media/audio/drivers/lib/intel-hda:*",
+    "//userspace/media/audio/drivers/testing/realm:*",
+    "//userspace/media/audio/drivers/usb-audio:*",
+    "//userspace/media/audio/drivers/virtual-audio-legacy:*",
+    "//userspace/media/audio/lib/simple-audio-stream:*",
+    "//userspace/media/audio/lib/simple-audio-stream/tests:*",
+    "//userspace/media/drivers/amlogic_decoder:*",
+    "//userspace/media/lib/codec_impl:*",
+    "//userspace/security/lib/zxcrypt:*",
+    "//userspace/security/lib/zxcrypt/tests:*",
+    "//userspace/storage/fvm/driver:*",
+    "//userspace/storage/lib/block_client/cpp:*",
+    "//userspace/storage/lib/ramdevice_client/cpp:*",
+    "//userspace/testing/fuzzing/syzkaller:*",
+    "//userspace/ui/backlight/drivers/ti-lp8556:*",
+    "//userspace/ui/backlight/drivers/vim3-pwm-backlight:*",
+    "//userspace/ui/input/drivers/buttons:*",
+    "//userspace/ui/input/drivers/ctaphid:*",
+    "//userspace/ui/input/drivers/focaltech:*",
+    "//userspace/ui/input/drivers/goldfish_sensor:*",
+    "//userspace/ui/input/drivers/goodix:*",
+    "//userspace/ui/input/drivers/gt6853:*",
+    "//userspace/ui/input/drivers/hid:*",
+    "//userspace/ui/input/drivers/hid-input-report:*",
+    "//userspace/ui/input/drivers/hidctl:*",
+    "//userspace/ui/input/drivers/hidctl:*",
+    "//userspace/ui/input/drivers/i2c-hid:*",
+    "//userspace/ui/input/drivers/pc-ps2:*",
+    "//userspace/ui/input/drivers/usb-hid:*",
+    "//userspace/ui/input/lib/hid-input-report:*",
+    "//userspace/ui/input/tests/hid:*",
+    "//userspace/ui/light/drivers/aml-light:*",
+    "//userspace/ui/tools/print-input-report:*",
+    "//userspace/virtualization/bin/vmm:*",
+    "//third_party/pigweed/backends/pw_log:*",
+    "//vendor/*",
+    "//zircon/system/ulib/acpica:*",
+    "//zircon/system/ulib/driver-unit-test:*",
+    "//zircon/system/ulib/hwreg/test:*",
+    "//zircon/vdso/zx:*",
+  ]
+}
+
+library_headers("ddk-metadata-headers") {
+  headers = [
+    "ddk/metadata/bad-block.h",
+    "ddk/metadata/buttons.h",
+    "ddk/metadata/camera.h",
+    "ddk/metadata/display.h",
+    "ddk/metadata/nand.h",
+    "ddk/metadata/test.h",
+  ]
+
+  #  ________  _________  ________  ________
+  # |\   ____\|\___   ___\\   __  \|\   __  \
+  # \ \  \___|\|___ \  \_\ \  \|\  \ \  \|\  \
+  #  \ \_____  \   \ \  \ \ \  \\\  \ \   ____\
+  #   \|____|\  \   \ \  \ \ \  \\\  \ \  \___|
+  #     ____\_\  \   \ \__\ \ \_______\ \__\
+  #    |\_________\   \|__|  \|_______|\|__|
+  #    \|_________|
+  #
+  # New driver metadata should be defined in FIDL instead of C.
+  #
+  # To remove items from the allowlist, please send a change to one of the OWNERS of
+  # this file to remove an element from the visibility list below.
+  #
+  # Please allowlist entire directories rather than individual targets as it
+  # requires less allowlist churn over time.
+  visibility = [
+    "//sdk/lib/driver/devicetree/visitors/*",
+    "//sdk/lib/driver_test_realm:*",
+    "//userspace/camera/drivers/bus/aml_mipicsi:*",
+    "//userspace/camera/drivers/sensors/imx227:*",
+    "//userspace/devices/board/drivers/astro:*",
+    "//userspace/devices/board/drivers/astro/post-init:*",
+    "//userspace/devices/board/drivers/integration-test:*",
+    "//userspace/devices/board/drivers/nelson:*",
+    "//userspace/devices/board/drivers/nelson/post-init:*",
+    "//userspace/devices/board/drivers/sherlock:*",
+    "//userspace/devices/board/drivers/sherlock/post-init:*",
+    "//userspace/devices/board/drivers/vim3:*",
+    "//userspace/devices/bus/drivers/platform/test:*",
+    "//userspace/devices/clock/drivers/clock:*",
+    "//userspace/devices/gpio/drivers/gpio:*",
+    "//userspace/devices/i2c/drivers/i2c:*",
+    "//userspace/devices/i2c/drivers/intel-i2c:*",
+    "//userspace/devices/nand/drivers/nandpart:*",
+    "//userspace/devices/nand/drivers/ram-nand:*",
+    "//userspace/devices/power/drivers/power:*",
+    "//userspace/devices/serial/drivers/ftdi:*",
+    "//userspace/devices/serial/drivers/ftdi/test:*",
+    "//userspace/devices/testing/driver-integration-test-shim:*",
+    "//userspace/devices/usb/drivers/usb-peripheral:*",
+    "//userspace/devices/usb/lib/usb:*",
+    "//userspace/ui/input/drivers/buttons:*",
+    "//userspace/ui/input/drivers/goodix:*",
+    "//userspace/ui/input/drivers/hid-input-report:*",
+    "//userspace/ui/input/lib/hid:*",
+    "//userspace/ui/input/lib/hid-input-report:*",
+    "//userspace/ui/light/drivers/aml-light:*",
+  ]
+}
+
+library_headers("ddk-deprecated-binding-headers") {
+  headers = [ "lib/ddk/binding.h" ]
+  public_deps = [ ":ddk" ]
+  visibility = [
+    "//userspace/devices/board/drivers/astro:*",
+    "//userspace/devices/board/drivers/integration-test:*",
+    "//userspace/devices/board/drivers/nelson:*",
+    "//userspace/devices/board/drivers/qemu-arm64:*",
+    "//userspace/devices/board/drivers/sherlock:*",
+    "//userspace/devices/board/drivers/vim3:*",
+    "//userspace/devices/board/drivers/x86/*",
+    "//userspace/devices/board/lib/acpi/*",
+    "//userspace/devices/bus/drivers/platform/test:*",
+    "//userspace/lib/ddk/tests:*",
+  ]
+}
+
+library_headers("ddk-device-headers") {
+  headers = [ "lib/ddk/device.h" ]
+  public_deps = [ "//sdk/lib/driver/runtime:driver_runtime" ]
+}
+
+# Drivers should use //sdk/lib/mmio-ptr instead.
+library_headers("ddk-deprecated-mmio-headers") {
+  headers = [ "lib/ddk/hw/reg.h" ]
+  visibility = [
+    "//userspace/devices/bus/lib/virtio:*",
+    "//zircon/third_party/dev/ethernet/e1000:*",
+  ]
+}
+
+# Adds the metadata.h file to the SDK to be used with the driver compat
+# library.
+library_headers("ddk_metadata_only") {
+  headers = [ "lib/ddk/metadata.h" ]
+  public_deps = [ "//sdk/lib/zbi-format" ]
+}
+
+# Exports the metadata.h file to the SDK to support the transition
+# to DFv2.
+source_set("ddk_metadata") {
+  public_configs = [ ":include" ]
+  public = [ "include/lib/ddk/metadata.h" ]
+  deps = [ ":ddk_metadata_only" ]
+  public_deps = [ "//sdk/lib/zbi-format" ]
+}
+
+library_headers("ddk-hw-headers") {
+  headers = [
+    "lib/ddk/hw/arch_ops.h",
+    "lib/ddk/hw/inout.h",
+  ]
+}

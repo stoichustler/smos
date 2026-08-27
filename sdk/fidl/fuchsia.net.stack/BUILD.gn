@@ -1,0 +1,32 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.net.stack") {
+  sources = [ "stack.fidl" ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.net",
+    "//sdk/fidl/fuchsia.net.interfaces.admin",
+  ]
+  enable_hlcpp = true
+
+  # Visibility is locked down to facilitate driving down usages of deprecated APIs.
+  # See https://fxbug.dev/42081105.
+  visibility = [
+    "//userspace/connectivity/lib/fidl_fuchsia_net_stack_ext/*",
+    "//userspace/connectivity/lowpan/*",
+    "//userspace/connectivity/network/net-cli/*",
+    "//userspace/connectivity/network/netstack/*",
+    "//userspace/connectivity/network/netstack3/*",
+    "//userspace/connectivity/network/testing/netemul/*",
+    "//userspace/connectivity/network/tests/*",
+    "//userspace/connectivity/policy/netcfg/*",
+    "//userspace/connectivity/weave/adaptation/*",
+    "//userspace/lib/network/fidl_fuchsia_net_routes_ext/*",
+    "//userspace/virtualization/lib/guest_interaction/*",
+    "//third_party/openweave-core/src/inet/*",
+    "//third_party/tcpdump/tests/*",
+  ]
+}

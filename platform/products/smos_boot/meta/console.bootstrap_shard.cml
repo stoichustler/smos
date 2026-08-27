@@ -1,0 +1,264 @@
+// Copyright 2024 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+    children: [
+        {
+            name: "console",
+            url: "fuchsia-boot:///console#meta/console.cm",
+
+            // Usually, console is started when console-launcher starts. But, startup eager is
+            // required because in products with console.shell=false, console-launcher exits
+            // early and does not start console; it should be started in order to get serial logs.
+            startup: "eager",
+        },
+        {
+            name: "console-launcher",
+            url: "fuchsia-boot:///console-launcher#meta/console-launcher.cm",
+            startup: "eager",
+        },
+    ],
+    offer: [
+        {
+            config: [ "fuchsia.virtcon.Disable" ],
+            from: "parent",
+            to: "#console-launcher",
+            availability: "optional",
+        },
+
+        // Offer the kernel serial console to the console-launcher
+        {
+            protocol: "fuchsia.hardware.pty.Device",
+            from: "#console",
+            as: "console",
+            to: "#console-launcher",
+        },
+        {
+            protocol: "fuchsia.tracing.provider.Registry",
+            from: "parent",
+            to: "#console-launcher",
+            availability: "optional",
+        },
+        {
+            protocol: [
+                "fuchsia.boot.Arguments",
+                "fuchsia.boot.FactoryItems",
+                "fuchsia.boot.Items",
+                "fuchsia.boot.ReadOnlyLog",
+                "fuchsia.boot.WriteOnlyLog",
+                "fuchsia.exception.Handler",
+                "fuchsia.kernel.RootJob",
+                "fuchsia.kernel.RootJobForInspect",
+                "fuchsia.kernel.Stats",
+                "fuchsia.process.Launcher",
+            ],
+            from: "parent",
+            to: "#console-launcher",
+        },
+        {
+            protocol: [
+                "fuchsia.kernel.DebugResource",
+                "fuchsia.kernel.InfoResource",
+                "fuchsia.kernel.ProfileResource",
+            ],
+            from: "parent",
+            to: [ "#console-launcher" ],
+        },
+        {
+            protocol: [
+                "fuchsia.dash.Launcher",
+                "fuchsia.tracing.controller.Provisioner",
+            ],
+            from: "parent",
+            to: [ "#console-launcher" ],
+            availability: "optional",
+        },
+
+        {
+            protocol: "fuchsia.process.Resolver",
+            from: "parent",
+            to: "#console-launcher",
+        },
+        {
+            directory: "boot",
+            from: "parent",
+            to: "#console-launcher",
+            rights: [ "rx*" ],
+        },
+        {
+            protocol: [
+                "fuchsia.boot.Arguments",
+                "fuchsia.boot.WriteOnlyLog",
+                "fuchsia.kernel.DebugResource",
+            ],
+            from: "parent",
+            to: "#console",
+        },
+        {
+            protocol: [
+                "fuchsia.kernel.Counter",
+                "fuchsia.kernel.DebugBroker",
+            ],
+            from: "#kernel_debug_broker",
+            to: "#console-launcher",
+            source_availability: "unknown",
+        },
+        {
+            protocol: [ "fuchsia.driver.development.Manager" ],
+            from: "#driver_manager",
+            to: "#console-launcher",
+        },
+        {
+            protocol: [ "fuchsia.driver.registrar.DriverRegistrar" ],
+            from: "#driver_index",
+            to: "#console-launcher",
+        },
+        {
+            protocol: [
+                "fuchsia.scheduler.deprecated.ProfileProvider",
+                "fuchsia.scheduler.RoleManager",
+            ],
+            from: "#role_manager",
+            to: "#console-launcher",
+            source_availability: "unknown",
+        },
+        {
+            directory: "dev-topological",
+            from: "#devfs-with-pkg",
+            to: "#console-launcher",
+        },
+        {
+            directory: [
+                "pkgfs",
+                "root-ssl-certificates",
+                "system",
+            ],
+            from: "#pkg-cache",
+            to: "#console-launcher",
+            availability: "optional",
+            source_availability: "unknown",
+        },
+        {
+            directory: "bin",
+            from: "#pkg-shell-commands",
+            as: "base-bin",
+            to: "#console-launcher",
+            availability: "optional",
+            source_availability: "unknown",
+        },
+        {
+            directory: [
+                "blob",
+                "data",
+                "tmp",
+            ],
+            from: "#fshost",
+            to: "#console-launcher",
+            source_availability: "unknown",
+        },
+        {
+            protocol: [ "fuchsia.fshost.Admin" ],
+            from: "#fshost",
+            to: "#console-launcher",
+            source_availability: "unknown",
+        },
+        {
+            protocol: "fuchsia.device.NameProvider",
+            from: "#device_name_provider",
+            to: "#console-launcher",
+            source_availability: "unknown",
+        },
+        {
+            protocol: "fuchsia.hardware.pty.Device",
+            from: "#ptysvc",
+            to: "#console-launcher",
+            source_availability: "unknown",
+        },
+        {
+            protocol: "fuchsia.sysinfo.SysInfo",
+            from: "#sysinfo",
+            to: "#console-launcher",
+            source_availability: "unknown",
+        },
+        {
+            protocol: "fuchsia.hardware.power.statecontrol.Admin",
+            from: "#shutdown_shim",
+            to: "#console-launcher",
+        },
+        {
+            // Allow the `component` shell command to use component-manager introspection APIs.
+            protocol: [
+                "fuchsia.sys2.ConfigOverride.root",
+                "fuchsia.sys2.LifecycleController.root",
+                "fuchsia.sys2.RealmQuery.root",
+                "fuchsia.sys2.RouteValidator.root",
+            ],
+            from: "parent",
+            to: "#console-launcher",
+            availability: "optional",
+            source_availability: "unknown",
+        },
+        {
+            service: "fuchsia.hardware.spmi.DebugService",
+            from: "#boot-drivers",
+            to: "#console-launcher",
+        },
+        {
+            service: "fuchsia.hardware.nfc.Service",
+            from: "#boot-drivers",
+            to: "#console-launcher",
+        },
+        {
+            service: "fuchsia.hardware.usb.peripheral.Service",
+            from: "#boot-drivers",
+            to: "#console-launcher",
+        },
+        {
+            service: "fuchsia.gpu.magma.Service",
+            from: "#boot-drivers",
+            to: "#console-launcher",
+        },
+        {
+            service: "fuchsia.hardware.cpu.ctrl.Service",
+            from: "#boot-drivers",
+            to: "#console-launcher",
+        },
+        {
+            service: "fuchsia.hardware.pty.Service",
+            from: "#boot-drivers",
+            to: "#console-launcher",
+        },
+        {
+            dictionary: "diagnostics",
+            from: "self",
+            to: [
+                "#console",
+                "#console-launcher",
+            ],
+        },
+        {
+            protocol: [
+                "fuchsia.diagnostics.ArchiveAccessor",
+                "fuchsia.diagnostics.host.ArchiveAccessor",
+            ],
+            from: "#archivist/diagnostics-accessors",
+            to: "#console-launcher",
+        },
+        {
+            protocol: [
+                "fuchsia.diagnostics.LogSettings",
+                "fuchsia.logger.Log",
+            ],
+            from: "#archivist",
+            to: [
+                "#console",
+                "#console-launcher",
+            ],
+        },
+        {
+            service: "fuchsia.hardware.suspend.SuspendService",
+            from: "#boot-drivers",
+            to: "#console-launcher",
+        },
+    ],
+}

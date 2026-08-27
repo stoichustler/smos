@@ -1,0 +1,39 @@
+# Copyright 2026 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+use_bringup_assembly = false
+bootfs_only = false
+smos_minimal_assembly = true
+smos_without_icu = true
+fxfs_blob = false
+smos_zbi_name = "smos"
+smos_platform_aib_names = [
+  "embeddable",
+  "embeddable_eng",
+  "embeddable_userdebug",
+  "bootstrap",
+  "bootstrap_eng",
+  "bootstrap_realm_development_access",
+  "bootstrap_userdebug",
+  "component_manager",
+  "console",
+  "driver_framework",
+  "feedback_userdebug_config",
+  "emulator_support",
+  "fshost_common",
+  "fshost_fvm",
+  "fshost_fvm_minfs",
+  "fshost_storage",
+  "kernel_args_eng",
+  "kernel_args_userdebug",
+  "kernel_debug_broker_userdebug",
+  "ptysvc",
+  "resources",
+  "smos_device_tools",
+  "smos_trace_tools",
+  "virtualization_support",
+  "zircon",
+]
+fuchsia_product_assembly_config_label = "//platform/products/smos_boot"
+zedboot_product_assembly_config_label = "//platform/products/zedboot"

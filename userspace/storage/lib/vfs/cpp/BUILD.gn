@@ -1,0 +1,224 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/fuzz.gni")
+import("//release/test.gni")
+
+# TODO(https://fxbug.dev/336617685): Once //sdk/lib/vfs is available for public use, this library
+# should be restricted with a visibility list. Most targets only use functionality that the SDK VFS
+# library provides. The SDK VFS will form the API we commit to for pseudo-filesystems.
+static_library("cpp") {
+  friend = [ ":*" ]
+
+  public = [
+    "debug.h",
+    "shared_mutex.h",
+    "vfs.h",
+    "vfs_types.h",
+    "vnode.h",
+  ]
+
+  # Uncomment to enable some debug log messages
+  # defines = [ "FS_TRACE_DEBUG_ENABLED" ]
+
+  sources = [
+    "debug.cc",
+    "vfs.cc",
+    "vnode.cc",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/fdio:constants",
+    "//sdk/lib/fit",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/zx",
+  ]
+
+  if (is_fuchsia) {
+    public += [
+      "fuchsia_vfs.h",
+      "lazy_dir.h",
+      "managed_vfs.h",
+      "paged_vfs.h",
+      "paged_vnode.h",
+      "pager_thread_pool.h",
+      "pseudo_dir.h",
+      "pseudo_file.h",
+      "ref_counted.h",
+      "remote_dir.h",
+      "service.h",
+      "synchronous_vfs.h",
+      "ticker.h",
+      "vmo_file.h",
+      "watcher.h",
+    ]
+    sources += [
+      "connection/advisory_lock.cc",
+      "connection/advisory_lock.h",
+      "connection/connection.cc",
+      "connection/connection.h",
+      "connection/directory_connection.cc",
+      "connection/directory_connection.h",
+      "connection/file_connection.cc",
+      "connection/file_connection.h",
+      "connection/node_connection.cc",
+      "connection/node_connection.h",
+      "connection/remote_file_connection.cc",
+      "connection/remote_file_connection.h",
+      "connection/stream_file_connection.cc",
+      "connection/stream_file_connection.h",
+      "fuchsia_vfs.cc",
+      "lazy_dir.cc",
+      "managed_vfs.cc",
+      "paged_vfs.cc",
+      "paged_vnode.cc",
+      "pager_thread_pool.cc",
+      "pseudo_dir.cc",
+      "pseudo_file.cc",
+      "remote_dir.cc",
+      "service.cc",
+      "synchronous_vfs.cc",
+      "vfs_types.cc",
+      "vmo_file.cc",
+      "watcher.cc",
+    ]
+    public_deps += [
+      # Required for fs::FilesystemInfo
+      "//sdk/fidl/fuchsia.fs:fuchsia.fs_cpp",
+
+      # Required for fs::Vnode
+      "//sdk/lib/file-lock:cpp",
+
+      # Required for fs::FuchsiaVfs and fs::Connection
+      "//sdk/lib/async",
+
+      # Required for fs::PagedVnode
+      "//sdk/lib/async:async-cpp",
+    ]
+    deps = [
+      "//sdk/lib/fidl",
+      "//zircon/system/ulib/sync",
+    ]
+  }
+}
+
+source_set("test_support") {
+  public = [ "tests/dir_test_util.h" ]
+  public_deps = [ ":cpp" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":fs-connection-test",
+    ":fs-connection-test-pkg",
+    ":fs-fuzzers",
+    ":fs-vnode-test",
+    ":fs-vnode-test-pkg",
+    "inspect:tests",
+    "journal:tests",
+    "transaction:tests",
+  ]
+}
+
+test("fs-vnode-test") {
+  output_name = "fs-vnode-test"
+  sources = [
+    "tests/lazy_dir_tests.cc",
+    "tests/pseudo_dir_tests.cc",
+    "tests/pseudo_file_tests.cc",
+    "tests/remote_dir_tests.cc",
+    "tests/service_tests.cc",
+    "tests/teardown_tests.cc",
+    "tests/vfs_tests.cc",
+    "tests/vfs_types_tests.cc",
+    "tests/vmo_file_tests.cc",
+    "tests/watcher_test.cc",
+  ]
+  deps = [
+    ":death_test",
+    ":test_support",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp_testing",
+    "//sdk/lib/async",
+    "//sdk/lib/async:async-cpp",
+    "//sdk/lib/async-default",
+    "//sdk/lib/async-loop",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/async-testing",
+    "//sdk/lib/fdio",
+    "//sdk/lib/fidl",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/storage/lib/vfs/cpp",
+    "//third_party/googletest:gmock",
+    "//third_party/googletest:gtest",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/sync:sync-cpp",
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+expect_includes("death_test") {
+  includes = [ "//userspace/sys/test_runners/gtest/death_test.shard.cml" ]
+}
+
+test("fs-connection-test") {
+  output_name = "fs-connection-test"
+  sources = [
+    "tests/advisory_lock_tests.cc",
+    "tests/connection_contract_tests.cc",
+    "tests/connection_integration_tests.cc",
+    "tests/connection_rights_tests.cc",
+    "tests/paging_test.cc",
+  ]
+  deps = [
+    ":death_test",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp_testing",
+    "//sdk/lib/async",
+    "//sdk/lib/async:async-cpp",
+    "//sdk/lib/async-default",
+    "//sdk/lib/async-loop",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/fdio",
+    "//sdk/lib/fidl",
+    "//sdk/lib/zxio",
+    "//userspace/lib/fxl",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/storage/lib/vfs/cpp",
+    "//userspace/storage/memfs:cpp",
+    "//third_party/googletest:gmock",
+    "//third_party/googletest:gtest",
+    "//zircon/system/ulib/fbl",
+    "//zircon/system/ulib/sync",
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+fuchsia_library_fuzzer("vmo_file-fuzzer") {
+  sources = [ "tests/vmo_file-fuzzer.cc" ]
+  deps = [ "//userspace/storage/lib/vfs/cpp" ]
+}
+
+fuchsia_fuzzer_component("vmo-file-fuzzer-component") {
+  manifest = "meta/vmo_file-fuzzer.cml"
+  deps = [ ":vmo_file-fuzzer" ]
+}
+
+fuchsia_fuzzer_package("fs-fuzzers") {
+  cpp_fuzzer_components = [ ":vmo-file-fuzzer-component" ]
+}
+
+fuchsia_unittest_package("fs-connection-test-pkg") {
+  package_name = "fs-connection-test"
+  deps = [ ":fs-connection-test" ]
+}
+
+fuchsia_unittest_package("fs-vnode-test-pkg") {
+  package_name = "fs-vnode-test"
+  deps = [ ":fs-vnode-test" ]
+}

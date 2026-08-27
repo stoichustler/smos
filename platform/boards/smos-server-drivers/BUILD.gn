@@ -1,0 +1,58 @@
+# Copyright 2026 The Fuchsia Authors.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/board_input_bundle.gni")
+
+assert(current_toolchain == default_toolchain,
+       "The SMOS server driver bundle is defined only in the default toolchain.")
+assert(current_cpu == "arm64" || current_cpu == "riscv64",
+       "The SMOS server driver bundle supports arm64 and riscv64 only.")
+
+board_input_bundle("server") {
+  drivers = [
+    {
+      package_target = "//userspace/devices/bus/drivers/pci:bus-pci-package"
+      package_set = "bootfs"
+      driver_components = [ "meta/bus-pci.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/block/drivers/virtio:virtio_block_package"
+      package_set = "bootfs"
+      driver_components = [ "meta/virtio_block.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/misc/drivers/virtio-socket:package"
+      package_set = "bootfs"
+      driver_components = [ "meta/virtio_socket.cm" ]
+    },
+    {
+      package_target = "//userspace/devices/serial/drivers/virtio-console:package"
+      package_set = "bootfs"
+      driver_components = [ "meta/virtio_console.cm" ]
+    },
+  ]
+
+  if (current_cpu == "arm64") {
+    drivers += [
+      {
+        package_target = "//userspace/devices/board/drivers/qemu-arm64:package"
+        package_set = "bootfs"
+        driver_components = [ "meta/qemu-arm64.cm" ]
+      },
+      {
+        package_target = "//userspace/devices/rtc/drivers/pl031-rtc:package"
+        package_set = "bootfs"
+        driver_components = [ "meta/pl031-rtc.cm" ]
+      },
+    ]
+  } else {
+    drivers += [
+      {
+        package_target = "//userspace/devices/board/drivers/qemu-riscv64:package"
+        package_set = "bootfs"
+        driver_components = [ "meta/qemu-riscv64.cm" ]
+      },
+    ]
+  }
+}

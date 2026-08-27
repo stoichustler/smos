@@ -1,0 +1,198 @@
+// Copyright 2021 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+@available(added=HEAD)
+library fuchsia.fs.startup;
+
+using fuchsia.fxfs;
+using fuchsia.hardware.block;
+using fuchsia.io;
+using zx;
+
+/// Compression algorithm specifier.
+type CompressionAlgorithm = flexible enum {
+    ZSTD_CHUNKED = 0;
+    UNCOMPRESSED = 1;
+};
+
+/// An optional eviction policy override for pager-backed blobs for blobfs.
+type EvictionPolicyOverride = flexible enum {
+    /// Don't override the default cache policy.
+    NONE = 0;
+    /// Override the default cache policy for pager-backed blobs with kNeverEvict.
+    NEVER_EVICT = 1;
+    /// Override the default cache policy for pager-backed blobs with kEvictImmediately.
+    EVICT_IMMEDIATELY = 2;
+};
+
+/// Options for starting a filesystem.
+type StartOptions = resource struct {
+    /// Start the filesystem in read-only mode.
+    @allow_deprecated_struct_defaults
+    read_only bool = false;
+    /// Enable verbose logging.
+    @allow_deprecated_struct_defaults
+    verbose bool = false;
+    /// If true, run fsck after every transaction. This is for testing purposes only - it's very
+    /// slow to run a filesystem like this.
+    fsck_after_every_transaction bool;
+
+    /// A compression algorithm specifier for the filesystem to use when storing files (if the
+    /// filesystem supports it). Defaults to ZSTD_CHUNKED.
+    write_compression_algorithm CompressionAlgorithm;
+    /// An optional compression level for the filesystem to use when storing files (if the
+    /// filesystem and the configured |write_compression_algorithm| supports it). Setting to < 0
+    /// indicates no value (the filesystem chooses a default if necessary).
+    @allow_deprecated_struct_defaults
+    write_compression_level int32 = -1;
+
+    /// An optional eviction policy specifier for the filesystem to use for in-memory structures
+    /// (if the filesystem supports it), specifically for pager-backed files.
+    cache_eviction_policy_override EvictionPolicyOverride;
+
+    /// Set greater than zero to use profiling for the first N seconds after filesystem start.
+    /// Records the access patterns of objects for N seconds and if the profile already exists,
+    /// prefetch data and hold the vmos in cache for N seconds. Functionally this means that the
+    /// first launch with this option records the profile and all other launches with this option
+    /// will replay that profile.
+    startup_profiling_seconds uint32;
+};
+
+/// Options for how to format filesystems.
+type FormatOptions = table {
+    /// Enable verbose logging.
+    1: verbose bool;
+    /// If true, use the deprecated padded merkle tree blobfs format.
+    2: deprecated_padded_blobfs_format bool;
+    /// The initial number of inodes to allocate space for. If zero, a default is used. Only
+    /// supported for blobfs.
+    3: num_inodes uint64;
+    /// The number of fvm slices to preallocate for data when the filesystem is created.
+    4: fvm_data_slices uint32;
+    /// The number of sectors-per-cluster (for FAT filesystems).
+    5: sectors_per_cluster uint16;
+};
+
+/// Options for running consistency checks on filesystems.
+type CheckOptions = resource table {
+    /// An optional connection to a crypt client (for encrypted volumes).
+    1: crypt client_end:<fuchsia.fxfs.Crypt>;
+};
+
+// TODO(https://fxbug.dev/42172184): Figure out a more flexible configuration option strategy.
+@discoverable
+closed protocol Startup {
+    /// Start this filesystem, using the provided block device and Start options. When start is
+    /// called, the filesystem will populate its outgoing directory and then return.
+    strict Start(resource struct {
+        device client_end:fuchsia.hardware.block.Block;
+        options StartOptions;
+    }) -> () error zx.Status;
+
+    /// Format the provided block device with this filesystem.
+    strict Format(resource struct {
+        device client_end:fuchsia.hardware.block.Block;
+        options FormatOptions;
+    }) -> () error zx.Status;
+
+    /// Check the provided block device for filesystem consistency.
+    /// Note that some filesystems (e.g. Fxfs) support online fsck, in which case they can be
+    /// checked after being started.  In this case, the passed block device is ignored.
+    strict Check(resource struct {
+        device client_end:fuchsia.hardware.block.Block;
+        options CheckOptions;
+    }) -> () error zx.Status;
+};
+
+type MountOptions = resource table {
+    /// An optional connection to a crypt client (for encrypted volumes).
+    1: crypt client_end:<fuchsia.fxfs.Crypt>;
+
+    /// If true, mount as a blob filesystem.
+    2: as_blob bool;
+
+    /// URI containing implementation specific options.  For example, for FVM backed volumes, if
+    /// specified, this indicates the component URL for the filesystem should be mounted.  If
+    /// unspecified, FVM backed volumes will expose the volume as a block device.  At time of
+    /// writing, this is ignored by Fxfs.
+    3: uri string:1024;
+};
+
+closed protocol Volume {
+    /// Mounts the volume.  If the volume is encrypted, `options.crypt` should provide all key
+    /// access for the given volume.  `outgoing_directory` will contain the root and other services
+    /// exposed by the volume.  To lock the volume, call fuchsia.fs.Admin.Shutdown on the returned
+    /// handle.
+    // TODO(https://fxbug.dev/42181598): Try to share options with fuchsia.fs_startup StartOptions.
+    strict Mount(resource struct {
+        outgoing_directory server_end:fuchsia.io.Directory;
+        options MountOptions;
+    }) -> () error zx.Status;
+
+    /// Check the volume for consistency.  If the volume is encrypted, `options.crypt` should
+    /// provide all key access for the given volume.
+    strict Check(resource struct {
+        options CheckOptions;
+    }) -> () error zx.Status;
+
+    /// Set the limit in bytes on the volume. Setting it lower than current usage is accepted but
+    /// will prevent further increases.
+    strict SetLimit(struct {
+        bytes uint64;
+    }) -> () error zx.Status;
+
+    /// Get the allocation limit for the volume. A return value of 0 indicates that there
+    /// is no limit and the volume can be extended as long as there is available space on the
+    /// device.
+    ///
+    /// The volume may be larger than this limit if a smaller limit was applied after the
+    /// volume had already grown to the current size.
+    ///
+    /// The volume limit persists across reboots.
+    strict GetLimit() -> (struct {
+        bytes uint64;
+    }) error zx.Status;
+};
+
+/// Not all options are recognized by all implementations.  For example, at time of writing, Fxfs
+/// ignores all options.
+type CreateOptions = resource table {
+    /// Byte count for the initial size of the volume.  Some implementations might ignore this
+    /// setting.
+    1: initial_size uint64;
+
+    /// Unique GUID for the volume.  If unspecified, a GUID will be generated.
+    2: guid array<uint8, 16>;
+
+    /// Type GUID for the volume.  If unspecified, an implementation default is chosen.  Some
+    /// implementations might not support arbitrary volume types.
+    3: type_guid array<uint8, 16>;
+};
+
+/// fuchsia.fs.startup.Volumes is only used for creating volumes.  Other operations
+/// (e.g. enumeration and deletion) are serviced by the `volumes` directory offered by filesystems in their
+/// export root.  Volumes appear as files within this directory, and these files should also speak
+/// the `fuchsia.fs.startup.Volume` protocol.
+///
+/// `mount_options` affects how the resulting volume is mounted. For encrypted volumes, the crypt
+/// setting in the `mount_options` is also used when creating the volume. `outgoing_directory` will
+/// be connected to the root directory of the volume.
+@discoverable
+closed protocol Volumes {
+    /// Creates and mounts a new volume identified by `name`. `mount_options` affects how the
+    /// resulting volume is mounted. For encrypted volumes, `mount_options.crypt` is also used when
+    /// creating the volume. `outgoing_directory` will be connected to the root directory of the
+    /// volume.
+    strict Create(resource struct {
+        name string:fuchsia.io.MAX_FILENAME;
+        outgoing_directory server_end:fuchsia.io.Directory;
+        create_options CreateOptions;
+        mount_options MountOptions;
+    }) -> () error zx.Status;
+
+    /// Permanently deletes a volume identified by `name`.  If the volume is mounted, this call will
+    /// fail.
+    strict Remove(struct {
+        name string:fuchsia.io.MAX_FILENAME;
+    }) -> () error zx.Status;
+};

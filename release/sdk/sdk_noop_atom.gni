@@ -1,0 +1,118 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/python/python_action.gni")
+
+# An empty SDK atom.
+#
+# Should be used in very specific situations where SDK elements are injected in
+# SDKs in a way that's not reflected in the build graph. This allows SDK-related
+# templates to handle such a target as any other SDK target.
+#
+# Parameters
+#   category (required)
+#     Describes the availability of the element.
+#     See //release/sdk/sdk_atom.gni for information regarding category.
+#     Type: string
+#
+#   id (optional)
+#     Identifier of this element within SDKs. Used for API verification.
+#     See //release/sdk/sdk_atom.gni for information regarding id.
+#     If this attribute is set, `type` must be set as well.
+#     Type: string
+#
+#   sdk_area (optional)
+#     The API area responsible for maintaining this SDK atom. See
+#     docs/contribute/governance/areas/_areas.yaml for the list of areas.
+#     "Unknown" is also a valid option. By default, the area will be `null` in
+#     the build manifest.
+#     Type: string
+#
+#   type (optional)
+#     Describes the type of the element.
+#     If this attribute is set, `id` must be set as well.
+#     Type: string
+#
+template("sdk_noop_atom") {
+  assert(defined(invoker.category), "Must define an SDK category")
+
+  meta_target_name = "${target_name}_meta"
+  meta_file = "${target_gen_dir}/${target_name}.meta.json"
+  generated_file(meta_target_name) {
+    contents = {
+    }
+    outputs = [ meta_file ]
+    output_conversion = "json"
+  }
+
+  manifest_file = "${target_gen_dir}/${target_name}.sdk"
+
+  # If `id` or `type` are set, both must be set and the SDK contents will be API
+  # verified by checking that all elements are still in the SDK.
+  if (defined(invoker.id) || defined(invoker.type)) {
+    assert(defined(invoker.id), "Must define id for API verification.")
+    assert(defined(invoker.type), "Must define type for API verification.")
+
+    python_action(target_name) {
+      depfile = "${manifest_file}.d"
+      binary_label = "//release/sdk:create_atom_manifest"
+
+      public_deps = [ ":${meta_target_name}" ]
+
+      _areas_file = "//docs/contribute/governance/areas/_areas.yaml"
+
+      inputs = []
+
+      outputs = [ manifest_file ]
+
+      args = [
+        "--id",
+        invoker.id,
+        "--out",
+        rebase_path(manifest_file, root_build_dir),
+        "--depfile",
+        rebase_path(depfile, root_build_dir),
+        "--gn-label",
+        get_label_info(":${target_name}", "label_with_toolchain"),
+        "--category",
+        invoker.category,
+        "--type",
+        invoker.type,
+        "--noop-atom",
+      ]
+
+      if (path_exists(_areas_file)) {
+        inputs += [ _areas_file ]
+        args += [
+          "--areas-file-path",
+          rebase_path(_areas_file, root_build_dir),
+        ]
+      }
+
+      if (defined(invoker.sdk_area)) {
+        args += [
+          "--area",
+          invoker.sdk_area,
+        ]
+      }
+    }
+  } else {
+    # NOTE: The compatibility of the `category` with targets that depend on it
+    # is not verified as it is for other `sdk_` elements.
+
+    assert(target_name == "zircon_sdk",
+           "Carefully consider whether adding another instance is appropriate.")
+
+    generated_file(target_name) {
+      contents = {
+        atoms = []
+        ids = []
+      }
+      outputs = [ manifest_file ]
+      output_conversion = "json"
+      public_deps = [ ":${meta_target_name}" ]
+    }
+  }
+  not_needed(invoker, "*")
+}

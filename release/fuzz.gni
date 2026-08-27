@@ -1,0 +1,14 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Entry point for all general purpose GN templates for building and testing
+# Fuchsia fuzzer components.
+# See: https://fuchsia.dev/fuchsia-src/development/testing/fuzzing
+import("//release/cpp/cpp_fuzzer.gni")
+import("//release/fuzzing/fidl_protocol_fuzzer.gni")
+import("//release/fuzzing/fuchsia_fuzzer_component.gni")
+import("//release/fuzzing/fuchsia_fuzzer_package.gni")
+import("//release/fuzzing/fuchsia_library_fuzzer.gni")
+import("//release/fuzzing/host_library_fuzzer.gni")
+import("//release/rust/rustc_fuzzer.gni")

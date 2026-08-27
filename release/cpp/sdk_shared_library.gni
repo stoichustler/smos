@@ -1,0 +1,580 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/config/fuchsia/target_api_level.gni")
+import("//release/cpp/verify_pragma_once.gni")
+import("//release/cpp/verify_public_headers.gni")
+import("//release/cpp/verify_public_symbols.gni")
+import("//release/cpp/verify_runtime_deps.gni")
+import("//release/sdk/plasa/config.gni")
+import("//release/sdk/plasa/plasa_fragment_cc.gni")
+import("//release/sdk/sdk_atom.gni")
+import("//release/sdk/sdk_atom_alias.gni")
+
+# A shared library that can be exported to an SDK in binary form.
+#
+# Parameters
+#
+#   category (required)
+#     Publication level of the library in SDKs.
+#     See //release/sdk/sdk_atom.gni.
+#
+#   sdk_area (optional)
+#     [string] The API area responsible for maintaining this library.
+#     See //release/sdk/sdk_atom.gni.
+#
+#   api (optional)
+#     Override path for the file representing the API of this library.
+#     This file is used to ensure modifications to the library's API are
+#     explicitly acknowledged.
+#     If not specified, the path will be "<sdk_name>.api".
+#     Not allowed when `no_headers` is true.
+#
+#   symbols_api (required)
+#     Path to the ifs file containing the public symbols of this library for
+#     the PLATFORM build.
+#     This file is used to ensure modifications to the library's ABI are
+#     explicitly acknowledged.
+#     This path is not used for API-level specific checks.
+#     TODO(https://fxbug.dev/310006516): Remove when the `arch/` directory is
+#     removed from the IDK if not sooner.
+#
+#   no_headers (optional)
+#     Specifies that the library's headers are NOT included in the SDK.
+#     When true, the API modification acknowledgement mechanism is disabled.
+#     (Only the `symbols_api` mechanism will be used.)
+#     Defaults to false.
+#
+#   libcxx_linkage (optional)
+#     Whether or how to link libc++. SDK shared libraries cannot link libc++.so
+#     dynamically because libc++.so does not have a stable ABI. Can be either
+#     "none" or "static".
+#     Defaults to "none".
+#
+#   sdk_name (required)
+#     Name of the library in the SDK.
+#
+#   include_base (optional)
+#     Path to the root directory for includes.
+#     Defaults to "include".
+#
+#   runtime_deps (optional)
+#     List of labels representing the library's runtime dependencies. This is
+#     Note that these labels should represent SDK targets. See note below.
+#
+#   sdk_headers_for_internal_use (optional)
+#     Out of the headers specified in `public` or `sources`, some headers are
+#     part of the SDK but not meant for direct inclusion by users, i.e. they are
+#     only transitively included by other public headers. They usually contain
+#     implementation details. Re-specify those headers here.
+#
+#     When enumerating the platform surface area (PlaSA), these headers will
+#     be excluded. See /release/sdk/plasa/plasa_fragment_cc.gni.
+#
+#     See https://fxbug.dev/42068255 for more details about this field.
+#
+# TECHNICAL NOTE ON 'runtime_deps':
+#
+# The `runtime_deps` parameter is used to list the sdk_shared_library()
+# targets that this one depends on at runtime. Unfortunately, this cannot be
+# computed directly by GN. To better understand why, consider the following
+# example:
+#
+#     sdk_shared_library("foo") {
+#       ...
+#       deps = [ ":bar" ]
+#     }
+#
+#     sdk_shared_library("bar") {
+#       ...
+#     }
+#
+# These definitions end up creating at least four GN targets:
+#
+#  - a 'foo' and 'bar' target, which are real shared_library() targets
+#    used to build libfoo.so and libbar.so respectively.
+#
+#    and due to the 'deps' value, 'foo' will depend on 'bar'.
+#
+#  - a 'foo_sdk' and a 'bar_sdk' targets that generate an sdk_atom() wrapping
+#    each library, i.e. the target responsible for creating a meta.json file
+#    for each library, and used to generate exported SDKs.
+#
+#    'foo_sdk' depends on 'foo', and 'bar_sdk' depends on 'bar', as in:
+#
+#
+#     foo <--- foo_sdk
+#      |
+#      v
+#     bar <--- bar_sdk
+#
+#
+# However, without "runtime_deps", 'foo_sdk' will _not_ depend on 'bar_sdk',
+# which means that if an sdk_collection() target depends on 'foo_sdk', the
+# atom for the 'bar_sdk' target will be ignored. The result is a "broken"
+# exported dir that will not include a prebuilt for libbar.so, even though
+# it is needed at runtime by libfoo.so.
+#
+# To fix this, set 'runtime_deps' to point to the SDK atom target for bar,
+# as in:
+#
+#    sdk_shared_library("foo") {
+#      ...
+#      deps = [ ":bar" ]
+#      runtime_deps = [ ":bar_sdk" ]
+#    }
+#
+#    sdk_shared_library("bar") {
+#      ...
+#    }
+#
+# Which results in the following (correct) dependency graph:
+#
+#     foo <--- foo_sdk
+#      |          |
+#      |          |--- this dependency added through runtime_deps!
+#      v          v
+#     bar <--- bar_sdk
+#
+
+# The defaults for a sdk_shared_library should match that of a shared_library.
+set_defaults("sdk_shared_library") {
+  configs = default_shared_library_configs
+}
+
+template("sdk_shared_library") {
+  assert(!defined(invoker.stable), "Libraries are always stable.")
+  assert(defined(invoker.category), "Must define an SDK category")
+
+  # Only categories that are included in an IDK makes sense.
+  valid_categories = [
+    # "compat_test" is only for ABI compatibility and thus not applicable.
+    # "partner_internal" is only for ABI compatibility and thus not applicable.
+    "partner",
+  ]
+  assert(
+      valid_categories + [ invoker.category ] - [ invoker.category ] !=
+          valid_categories,
+      "'${target_name}' has unsupported SDK category '${invoker.category}'. Must be one of ${valid_categories}.")
+
+  assert(
+      defined(invoker.symbols_api),
+      "Must define path to the golden ifs file for the PLATFORM build. See comment in //release/cpp/verify_public_symbols.gni")
+
+  output_name = target_name
+  if (defined(invoker.output_name)) {
+    assert(
+        invoker.output_name != output_name,
+        "The specified `output_name` (`${invoker.output_name}`) matches the default. `output_name` only needs to be specified when overriding the default.")
+    output_name = invoker.output_name
+  }
+
+  assert(
+      defined(invoker.sdk_name),
+      "Libraries in the IDK must specify a name that is meaningful in that context.")
+  atom_name = invoker.sdk_name
+
+  sdk_id = "sdk://pkg/${atom_name}"
+
+  no_headers = defined(invoker.no_headers) && invoker.no_headers
+
+  main_target_name = target_name
+  metadata_target_name = "${target_name}_sdk_metadata"
+  manifest_target_name = "${target_name}_sdk_manifest"
+  verify_pragma_target_name = "${target_name}_sdk_pragma"
+  sdk_target_name = "${target_name}_sdk"
+
+  shared_library(main_target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "api",
+                             "category",
+                             "sdk_area",
+                             "include_base",
+                             "no_headers",
+                             "sdk_headers_for_internal_use",
+                             "runtime_deps",
+                             "sdk_name",
+                             "symbols_api",
+                           ])
+
+    if (defined(visibility)) {
+      visibility += [ ":${manifest_target_name}" ]
+    }
+
+    if (!defined(libcxx_linkage)) {
+      libcxx_linkage = "none"
+    }
+    assert(libcxx_linkage == "none" || libcxx_linkage == "static")
+
+    # Prebuilt shared libraries are eligible for inclusion in the SDK. We do not
+    # want to dynamically link against libc++.so because we let clients bring
+    # their own toolchain, which might have a different C++ Standard Library or
+    # a different C++ ABI entirely.
+    if (!defined(configs)) {
+      configs = []
+    }
+    if (libcxx_linkage == "static") {
+      configs += [ "//release/config/fuchsia:static_cpp_standard_library" ]
+    } else {
+      # Adding this linker flag keeps us honest about not committing to a
+      # specific C++ ABI. If this flag is causing your library to not
+      # compile, consider whether your library really ought to be in the SDK.
+      # If so, consider including your library in the SDK as source rather than
+      # precompiled. If you do require precompilation, you probably need to
+      # find a way not to depend on dynamically linking C++ symbols because C++
+      # does not have a sufficiently stable ABI for the purposes of our SDK.
+      configs += [ "//release/config/fuchsia:no_cpp_standard_library" ]
+    }
+
+    metadata = {
+      if (defined(invoker.metadata)) {
+        forward_variables_from(invoker.metadata, "*")
+      }
+      if (is_fuchsia) {
+        # Used by sdk_verify_runtime_deps() template.
+        sdk_runtime_deps = [
+          {
+            sdk_id = sdk_id
+            label = get_label_info(":${target_name}", "label_with_toolchain")
+          },
+        ]
+      }
+    }
+
+    # Ensure that 'sdk_shared_library()' targets are included in the allowlist.
+    # The allowlist target's `visibility` list ensures that the target using
+    # this template is in the allowlist.
+    assert(
+        invoker.category == "partner",
+        "Create a separate allowlist when adding support for other categories.")
+    deps += [ "//release/sdk:partner_idk_shared_libraries_allowlist" ]
+  }
+
+  # Base path for source files of this library in SDKs.
+  file_base = "pkg/${atom_name}"
+
+  # Identify dependencies and their metadata files.
+  sdk_deps = []
+  sdk_metas = []
+  all_deps = []
+  if (defined(invoker.deps)) {
+    all_deps += invoker.deps
+  }
+  if (defined(invoker.public_deps)) {
+    all_deps += invoker.public_deps
+
+    # If a prebuilt library is only provided for packaging purposes (by not
+    # exposing headers) then its dependencies need not be included in an SDK.
+    if (!no_headers) {
+      foreach(dep, invoker.public_deps) {
+        full_label = get_label_info(dep, "label_no_toolchain")
+        sdk_dep = "${full_label}_sdk"
+        sdk_deps += [ sdk_dep ]
+        all_deps += [ sdk_dep ]
+      }
+    }
+  }
+
+  # Runtime deps are already SDK targets.
+  if (defined(invoker.runtime_deps)) {
+    sdk_deps += invoker.runtime_deps
+  }
+
+  foreach(sdk_dep, sdk_deps) {
+    gen_dir = get_label_info(sdk_dep, "target_gen_dir")
+    name = get_label_info(sdk_dep, "name")
+    sdk_metas += [ "${gen_dir}/${name}.meta.json" ]
+  }
+
+  # Process headers.
+  all_headers = []
+  if (!no_headers) {
+    if (defined(invoker.public)) {
+      all_headers += invoker.public
+    }
+
+    if (defined(invoker.sources)) {
+      # If public headers are not defined, pick them from `sources`.
+      #
+      # NOTE: If this is an internal SDK library, headers from `sources` are
+      # always made available so Bazel can find them.
+      if (invoker.category == "internal" || !defined(invoker.public)) {
+        foreach(source_file, invoker.sources) {
+          extension = get_path_info(source_file, "extension")
+          if (extension == "h") {
+            all_headers += [ source_file ]
+          }
+        }
+      }
+    }
+  }
+  assert(
+      all_headers != [] || no_headers,
+      "Library does not contain any headers or sources. If this is intentional, set `no_headers = true`")
+
+  sdk_metadata_headers = []
+  sdk_header_files = []
+  foreach(header, all_headers) {
+    include_base = "include"
+    if (defined(invoker.include_base)) {
+      include_base = invoker.include_base
+    }
+    destination = rebase_path(header, include_base)
+    header_dest = "${file_base}/include/${destination}"
+    sdk_metadata_headers += [ header_dest ]
+    sdk_header_files += [
+      {
+        source = header
+        dest = header_dest
+      },
+    ]
+  }
+
+  verify_public_headers_target = "${target_name}.verify_public_headers"
+  verify_public_headers(verify_public_headers_target) {
+    forward_variables_from(invoker, [ "testonly" ])
+    target_label = ":${target_name}"
+    headers = all_headers
+  }
+
+  # Add binaries.
+  #
+  # Select shared library binary from the proper toolchain.
+  # See shlib_toolchain_no_default_variant_redirect documentation comment
+  # in //release/config/BUILDCONFIG.gn to understand why this is needed.
+  shared_lib_target =
+      ":${main_target_name}(${shlib_toolchain_no_default_variant_redirect})"
+  shared_out_dir = get_label_info(shared_lib_target, "root_out_dir")
+  lib_name = "lib${output_name}.so"
+  ifs_file_name = "lib${output_name}.ifs"
+  generated_ifs_file = "${shared_out_dir}/${ifs_file_name}"
+  link_lib_dir = "${sdk_prebuilt_base_for_target_api_level}/lib"
+  packaged_ifs_file = "${link_lib_dir}/${ifs_file_name}"
+  _goldens_dir = "//sdk/history"
+  ifs_goldens_dir = "${_goldens_dir}/${current_build_target_api_level}"
+  ifs_golden_file = "${ifs_goldens_dir}/${ifs_file_name}"
+
+  # TODO(https://fxbug.dev/310006516): Remove this block when the `arch/`
+  # directory is removed from the IDK.
+  if (current_build_target_api_level == "PLATFORM") {
+    # For legacy reasons, the file name in the IDK is different.
+    ifs_file_name = "${output_name}.ifs"
+
+    # Unlike other target API levels, the golden file is not in `_goldens_dir`.
+    # It is in the same directory as the BUILD.gn file except when the `api`
+    # parameter is specified, in which case it is next to that file.
+    if (defined(invoker.api)) {
+      ifs_golden_file = get_path_info(invoker.api, "dir") + "/${ifs_file_name}"
+    } else {
+      ifs_golden_file = get_path_info(ifs_file_name, "abspath")
+    }
+
+    # Verify that the path generated above is equivalent to that specified by
+    # the `symbols_api` parameter.
+    # TODO(https://fxbug.dev/342032854): Remove the `symbols_api` parameter
+    # since the path can be generated and it is only used for this target API
+    # level, for which it will be unnecessary in the future.
+    assert(rebase_path(invoker.symbols_api, "//") ==
+           rebase_path(ifs_golden_file, "//"))
+
+    packaged_ifs_file = "${file_base}/${ifs_file_name}"
+  }
+
+  link_lib = "${link_lib_dir}/${lib_name}"
+  dist_lib = "${sdk_prebuilt_base_for_target_api_level}/dist/${lib_name}"
+  sdk_files = sdk_header_files + [
+                {
+                  source = "${shared_out_dir}/link_stub/${lib_name}"
+                  dest = link_lib
+                },
+                {
+                  source = "${shared_out_dir}/${lib_name}"
+                  dest = dist_lib
+                },
+                {
+                  # `generated_ifs_file` contains text, including undefined
+                  # symbols, that should not be exposed. In addition, the Target
+                  # and other such text can vary by architecture and would cause
+                  # errors when assemblying the IDK. `verify_public_symbols()`
+                  # removes such text, so we must use its output for the IDK.
+                  # `verify_public_symbols_target_name` verifies the golden file
+                  # against a stripped version of `generated_ifs_file`, so we
+                  # can use the golden file here. (Ideally, we would use the
+                  # stripped file - see https://fxbug.dev/383416850.)
+                  source = ifs_golden_file
+                  dest = packaged_ifs_file
+                },
+              ]
+
+  if (generate_plasa_artifacts) {
+    _plasa_artifacts_target_name = "${main_target_name}_plasa"
+    plasa_fragment_cc(_plasa_artifacts_target_name) {
+      forward_variables_from(invoker,
+                             [
+                               "source_dir",
+                               "testonly",
+                               "all_headers",
+                               "all_deps",
+                               "sdk_headers_for_internal_use",
+                             ])
+      file_base = file_base
+    }
+  } else {
+    not_needed([
+                 "all_deps",
+                 "sdk_headers_for_internal_use",
+               ])
+  }
+
+  metadata_file = "${target_gen_dir}/${metadata_target_name}.sdk_meta.json"
+  debug_mapping_file = "${target_gen_dir}/${metadata_target_name}.mappings.txt"
+  debug_lib_file = "${shared_out_dir}/lib.unstripped/${lib_name}"
+
+  action(metadata_target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    script = "//release/cpp/gen_sdk_prebuilt_meta_file.py"
+
+    inputs = sdk_metas + [
+               debug_lib_file,
+               "//release/cpp/binaries.py",
+               "//release/images/elfinfo.py",
+             ]
+
+    outputs = [
+      debug_mapping_file,
+      metadata_file,
+    ]
+
+    args = [
+      "--out",
+      rebase_path(metadata_file, root_build_dir),
+      "--name",
+      atom_name,
+      "--format",
+      "shared",
+      "--root",
+      file_base,
+      "--include-dir",
+      "${file_base}/include",
+      "--dist-path",
+      "lib/${lib_name}",
+      "--arch",
+      target_cpu,
+      "--lib-link",
+      link_lib,
+      "--lib-dist",
+      dist_lib,
+      "--lib-debug-file",
+      rebase_path(debug_lib_file, root_build_dir),
+      "--debug-mapping",
+      rebase_path(debug_mapping_file, root_build_dir),
+    ]
+    args += [ "--deps" ] + rebase_path(sdk_metas, root_build_dir)
+    args += [ "--headers" ] + sdk_metadata_headers
+    args += [ "--ifs" ] + [ ifs_file_name ]
+    if (current_build_target_api_level != "PLATFORM") {
+      args += [
+        "--api-level",
+        "${current_build_target_api_level}",
+      ]
+    }
+
+    deps = sdk_deps + [ shared_lib_target ]
+  }
+
+  verify_pragma_once(verify_pragma_target_name) {
+    headers = all_headers
+  }
+
+  main_target_dir = get_label_info(":${main_target_name}", "dir")
+  verify_public_symbols_target_name = "${target_name}_sdk_verify_public_symbols"
+  verify_public_symbols(verify_public_symbols_target_name) {
+    current = generated_ifs_file
+    reference = ifs_golden_file
+    library_name = main_target_dir
+
+    deps = [ shared_lib_target ]
+  }
+
+  sdk_atom(manifest_target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "sdk_area",
+                           ])
+
+    id = sdk_id
+
+    category = invoker.category
+
+    if (no_headers) {
+      assert(
+          !defined(invoker.api) && sdk_header_files == [],
+          "`no_headers` targets do not require/support modification acknowledgement.")
+    } else {
+      api = "${atom_name}.api"
+      if (defined(invoker.api)) {
+        assert(
+            rebase_path(invoker.api, "//") != rebase_path(api, "//"),
+            "The specified `api` file (`${invoker.api}`) matches the default. `api` only needs to be specified when overriding the default.")
+        api = invoker.api
+      }
+
+      api_contents = sdk_header_files
+    }
+
+    meta = {
+      source = metadata_file
+      dest = "${file_base}/meta.json"
+      schema = "cc_prebuilt_library"
+    }
+
+    files = sdk_files
+
+    file_list = debug_mapping_file
+
+    deps = sdk_deps
+
+    non_sdk_deps = [
+      ":${metadata_target_name}",
+      ":${verify_pragma_target_name}",
+      ":${verify_public_symbols_target_name}",
+      shared_lib_target,
+    ]
+    if (generate_plasa_artifacts) {
+      non_sdk_deps += [ ":${_plasa_artifacts_target_name}" ]
+    }
+
+    # Explicitly add non-public dependencies, in case some of the source files
+    # are generated.
+    if (defined(invoker.deps)) {
+      non_sdk_deps += invoker.deps
+    }
+  }
+
+  sdk_manifest_file = "${target_gen_dir}/${manifest_target_name}.sdk"
+
+  verify_runtime_deps_target = "${target_name}_verify"
+
+  sdk_verify_runtime_deps(verify_runtime_deps_target) {
+    atom_target = ":$main_target_name"
+    manifest_file = sdk_manifest_file
+    manifest_target = ":$manifest_target_name"
+  }
+
+  sdk_atom_alias(sdk_target_name) {
+    atom = ":${manifest_target_name}"
+
+    non_sdk_deps = [
+      ":${verify_public_headers_target}",
+      ":${verify_runtime_deps_target}",
+    ]
+
+    if (generate_plasa_artifacts) {
+      non_sdk_deps += [ ":${_plasa_artifacts_target_name}" ]
+    }
+  }
+}

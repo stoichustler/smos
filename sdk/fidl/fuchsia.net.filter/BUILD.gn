@@ -1,0 +1,23 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.net.filter") {
+  sources = [
+    "admin.fidl",
+    "constants.fidl",
+    "overview.fidl",
+    "resources.fidl",
+    "watcher.fidl",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.hardware.network",
+    "//sdk/fidl/fuchsia.net",
+    "//sdk/fidl/fuchsia.net.interfaces",
+  ]
+
+  enable_hlcpp = true
+}

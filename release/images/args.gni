@@ -1,0 +1,235 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/images/custom_signing.gni")
+import("//release/images/vbmeta.gni")
+import("//release/info/info.gni")
+
+declare_args() {
+  # Use vboot images
+  use_vboot = false
+
+  # Put the "system image" package in the BOOTFS.  Hence what would
+  # otherwise be /system/... at runtime is /boot/... instead.
+  bootfs_only = false
+
+  # This is really a build for a recovery image, and so the fuchsia image that
+  # is being built isn't properly configured, and so just disable the new image
+  # assembly work until that's been addressed.
+  recovery_only = false
+
+  # Build the gigaboot bootloader.
+  use_gigaboot = false
+
+  # Generate a UEFI disk image
+  build_uefi_disk = false
+
+  # Skip generating a UEFI disk for a product whose board defines
+  # `build_uefi_disk`
+  product_skip_uefi_disk = false
+
+  # Generate installer disk image (ISO) to be flashed to a USB drive.
+  # Will be located at obj/release/images/installer relative to the build directory.
+  # See https://fuchsia.dev/fuchsia-src/development/hardware/installer
+  build_usb_installer = false
+
+  # The epoch to use in the update (OTA) package.
+  # Before applying an update, Fuchsia confirms that the epoch in the update
+  # package is not smaller than the epoch installed on the system. This prevents
+  # Fuchsia from downloading an update that may not boot.
+  #
+  # The product epoch is added to the platform epoch before placed in the update
+  # package. Having a separate platform epoch ensures that every time the
+  # platform introduces a backwards-incompatible change, each product gets their
+  # epoch increased.
+  update_product_epoch = 0
+
+  # List of prebuilt firmware blobs to include in update packages.
+  #
+  # Each entry in the list is a scope containing:
+  #  * `path`: path to the image (see also `firmware_prebuilts_path_suffix`)
+  #  * `type`: firmware type, a device-specific unique identifier
+  #  * `partition` (optional): if specified, the `fastboot flash` partition
+  firmware_prebuilts = []
+
+  # Suffix to append to all `firmware_prebuilts` `path` variables.
+  #
+  # Typically this indicates the hardware revision, and is made available so
+  # that users can easily switch revisions using a single arg.
+  firmware_prebuilts_path_suffix = ""
+
+  # List of files needed to bootstrap the device.
+  #
+  # Flashing a device assumes a certain state; bootstrapping instead allows
+  # initially provisioning a device from unknown state, so may require
+  # additional resources that would not be included in an OTA.
+  #
+  # Each entry in the list is a scope containing:
+  #  * `path`: path to file.
+  #  * `partition` (optional): `fastboot flash` partition.
+  #  * `condition` (optional): a scope with `variable` and `value` keys; file is
+  #    only flashed if `fastboot getvar <variable>` == <value>.
+  bootstrap_files = []
+
+  # GUID Partition Table (GPT) image.
+  #
+  # Typically useful for initially flashing a device from zero-state.
+  gpt_image = ""
+
+  # The netboot zbi has been deprecated.  This GN arg is now used to generate a warning.
+  enable_netboot = false
+
+  # Check that all vtables in fuchsia binaries listed in binaries.json are in
+  # readonly data sections. This check will be run at the end of a full build.
+  #
+  # This is primarily meant to be used by the clang canary builders.
+  check_vtables_in_rodata = false
+
+  # Arguments to `fx flash` script (along with any `firmware_prebuilts` which
+  # specify a partition).
+  #
+  # If (exactly one of) `fvm_partition` or `fxfs_partition` is provided, the flash script will flash
+  # the full OS, recovery + Zircon + FVM (or Fxfs) + SSH keys. In this case, the bootloader must
+  # also support `fastboot oem add-staged-bootloader-file ssh.authorized_keys`.
+  #
+  # Otherwise, the script will flash the recovery image to all slots, which
+  # doesn't require the FVM or SSH keys.
+  zircon_a_partition = ""
+  zircon_b_partition = ""
+  zircon_r_partition = ""
+  vbmeta_a_partition = ""
+  vbmeta_b_partition = ""
+  vbmeta_r_partition = ""
+  fvm_partition = ""
+  fxfs_partition = ""
+  active_partition = ""
+  fastboot_product = ""
+  pre_erase_flash = false
+
+  # Whether to include images necessary to run Fuchsia in QEMU in build
+  # archives.
+  add_qemu_to_build_archives = false
+
+  # Additional bootserver args to add to pave.sh. New uses of this should be
+  # added with caution, and ideally discussion. The present use case is to
+  # enable throttling of netboot when specific network adapters are combined
+  # with specific boards, due to driver and hardware challenges.
+  additional_bootserver_arguments = ""
+
+  # Controls what type of delivery blob pkg-resolver fetches and blobfs accepts.
+  # Supported types can be found in //userspace/storage/blobfs/delivery_blob.h
+  # Valid values are integers, for example: 1
+  # This arg is for local developer only, products should not set this arg.
+  delivery_blob_type = 1
+
+  # Build boot images that prefer Zedboot over local boot (only for EFI).
+  always_zedboot = false
+
+  # Include an account partition in the FVM image if set to true.
+  include_account_in_fvm = false
+
+  # The size in bytes of the FVM partition on the target eMMC devices.
+  # Specifying this parameter will lead build to generate a fvm.fastboot.blk
+  # suitable for flashing through fastboot for eMMC devices.
+  assembly_generate_fvm_fastboot = false
+
+  # Specifying these variables will generate a NAND FVM image suitable for
+  # directly flashing via fastboot. The NAND characteristics are required
+  # in order to properly initialize the FTL metadata in the OOB area.
+  # `fvm_max_disk_size` should also be nonzero or else minfs will not have any
+  # room to initialize on boot.
+  assembly_generate_fvm_nand = false
+
+  # Allows a product to specify the recovery image used in the zircon_r slot.
+  # Default recovery image is zedboot. Overriding this value will keep zedboot
+  # in the build but will not include it as the default zirconr image.
+  # Recovery images can provide an update target by specifying the metadata item
+  # "update_target" in the format <target>=<path>. (Such as `update_target =
+  # [ "recovery=" + rebase_path(recovery_path, root_build_dir) ]`)
+  # Example value: "//release/images/recovery"
+  recovery_label = "//release/images/zedboot"
+
+  # Enable verbose output from `ffx assembly image`, this creates non-silent
+  # build output and therefore should never be 'true' in checked-in configs, and
+  # is meant solely for developer debugging.
+  verbose_image_assembly = false
+
+  # If true, the images.json build API modules will only include images
+  # identified by bazel_product_bundle_target and its dependencies.
+  #
+  # NOTE: This field is highly experimental, do not set it unless you know
+  # exactly what you are doing.
+  use_bazel_images_only = false
+
+  # bazel_product_bundle_[full|root|prefix|board] together identifies the
+  # bazel_product_bundle target in GN target to use in Bazel assembly. The
+  # actual target used is:
+  #
+  #   ${bazel_product_bundle_full}.${bazel_product_bundle_board}
+  #   if ${bazel_product_bundle_full} is defined, else
+  #   ${bazel_product_bundle_root}/${bazel_product_bundle_prefix}.${bazel_product_bundle_board}
+  #
+  # NOTE: bazel_product_bundle_prefix should contain the fully qualified path
+  # prefix to the target. Setting both arguments is a prerequisite to enable
+  # Bazel assembly.
+  #
+  # For example, given:
+  #
+  #   bazel_product_bundle_root = "//"
+  #   bazel_product_bundle_prefix = "release/bazel/assembly:minimal"
+  #   bazel_product_bundle_board = "x64"
+  #
+  # The actual bazel_product_bundle used for Bazel assembly is:
+  #
+  #   //release/bazel/assembly:minimal.x64
+  #
+  bazel_product_bundle_full = false
+  bazel_product_bundle_root = "//"
+  bazel_product_bundle_prefix = false
+  bazel_product_bundle_board = false
+
+  # Extra GN targets to include when Bazel assembly is enabled. This list is
+  # useful for including verification and other Bazel assembly specific targets.
+  extra_bazel_assembly_targets = []
+
+  # Label pointing to the main product bundle to work with if the default product in a multi-product
+  # build is not desired.
+  main_pb_label = ""
+}
+
+recovery_is_zedboot =
+    get_label_info(recovery_label, "label_with_toolchain") ==
+    get_label_info("//release/images/zedboot", "label_with_toolchain")
+
+assert(custom_signing_script == "" || !use_vboot,
+       "custom_signing_script and use_vboot cannot be used together!")
+
+# Whether to sign the system ZBI.
+sign_zbi = custom_signing_script != "" || use_vboot
+
+# The platform epoch that is added to every product.
+# Increment this number if the platform has introduced a backwards-incompatible
+# change. See: src/sys/pkg/bin/system-updater/epoch/playbook.md
+update_platform_epoch = 1
+
+if (main_pb_label != "") {
+  assert(use_bazel_images_only,
+         "main_pb_label can only be set when use_bazel_images_only=true")
+  bazel_product_bundle_target = main_pb_label
+} else if (bazel_product_bundle_full != false &&
+           bazel_product_bundle_board != "") {
+  bazel_product_bundle_target =
+      bazel_product_bundle_full + "." + bazel_product_bundle_board
+} else if (bazel_product_bundle_prefix != false &&
+           bazel_product_bundle_board != false) {
+  bazel_product_bundle_target =
+      bazel_product_bundle_root + "/" + bazel_product_bundle_prefix + "." +
+      bazel_product_bundle_board
+} else {
+  bazel_product_bundle_target = ""
+}
+
+assert(
+    !enable_netboot,
+    "The 'enable_netboot' GN arg has been deprecated, use developer overrides for assembly instead, see the 'netboot_mode' section of the documentation at go/fuchsia-assembly-overrides#bookmark=id.ddsy0djempid for details.")

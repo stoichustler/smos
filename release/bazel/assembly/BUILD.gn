@@ -1,0 +1,183 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/bazel/assembly/bazel_product_bundle.gni")
+import("//release/bazel/assembly/verify_assembly_configs.gni")
+import("//release/images/args.gni")
+import("//release/images/custom_signing.gni")
+import("//release/product.gni")
+import("//release/testing/verify_files_match.gni")
+
+# Only do drivers lists comparison when both GN and Bazel assembly are done in
+# the same build.
+_should_compare_driver_lists =
+    !use_bazel_images_only && bazel_product_bundle_target != "" && has_board
+
+_should_compare_tests_manifests =
+    !use_bazel_images_only && bazel_product_bundle_target != ""
+
+if (is_fuchsia) {
+  if (_should_compare_driver_lists) {
+    import("//release/drivers/check_included_drivers.gni")
+
+    check_included_drivers("bazel_drivers_check") {
+      testonly = true
+      deps = [ bazel_product_bundle_target ]
+    }
+
+    action("compare_drivers_lists") {
+      testonly = true
+
+      _gn_drivers_list = get_label_info("//:drivers-check", "target_gen_dir") +
+                         "/drivers-check_metadata_output"
+      _bazel_drivers_list =
+          get_label_info(":bazel_drivers_check", "target_gen_dir") +
+          "/bazel_drivers_check_metadata_output"
+      _output = "${target_out_dir}/diff"
+
+      inputs = [
+        _gn_drivers_list,
+        _bazel_drivers_list,
+      ]
+      outputs = [ _output ]
+
+      script = "//release/bazel/assembly/diff_drivers_lists.py"
+      args = [
+        "--drivers-list1",
+        rebase_path(_gn_drivers_list, root_build_dir),
+        "--drivers-list2",
+        rebase_path(_bazel_drivers_list, root_build_dir),
+        "--output",
+        rebase_path(_output, root_build_dir),
+      ]
+
+      deps = [
+        ":bazel_drivers_check_metadata_check",
+        "//:drivers-check_metadata_check",
+      ]
+    }
+  }
+
+  if (_should_compare_tests_manifests) {
+    import("//release/config/build_api_module.gni")
+
+    build_api_module("bazel_assembly_verification_tests_manifest_gn") {
+      testonly = true
+      data_keys = [ "tests" ]
+      walk_keys = [ "tests_barrier" ]
+      deps = [ "//release/images:main_assembly" ]
+    }
+
+    build_api_module("bazel_assembly_verification_tests_manifest_bazel") {
+      testonly = true
+      data_keys = [ "tests" ]
+      walk_keys = [ "tests_barrier" ]
+      deps = [ bazel_product_bundle_target ]
+    }
+
+    verify_files_match("compare_tests_manifests") {
+      testonly = true
+      first =
+          "${root_build_dir}/bazel_assembly_verification_tests_manifest_gn.json"
+      second = "${root_build_dir}/bazel_assembly_verification_tests_manifest_bazel.json"
+      display_text_diff_on_failure = true
+      deps = [
+        ":bazel_assembly_verification_tests_manifest_bazel",
+        ":bazel_assembly_verification_tests_manifest_gn",
+      ]
+    }
+  }
+}
+
+verify_assembly_configs("verify_assembly_configs") {
+  product_configs = [
+    {
+      name = "zedboot_product_config"
+      gn_target = "//platform/products/zedboot"
+      bazel_target = "//platform/products/zedboot"
+    },
+  ]
+
+  # Avoid building board configs in both GN and Bazel.
+  board_configs = []
+
+  partitions_configs = []
+  _partitions_config_label_no_toolchain =
+      get_label_info(partitions_config_label, "label_no_toolchain")
+  if (_partitions_config_label_no_toolchain == "//platform/boards/partitions:x64") {
+    partitions_configs += [
+      {
+        name = "x64_partitions_config"
+        gn_target = "//platform/boards/partitions:x64"
+        bazel_target = "//release/bazel/assembly/partitions_configurations:x64"
+        extra_copy_outputs = [ "bootloaders/fuchsia.esp.blk" ]
+        deps = [ "//release/images/flash:esp.bazel_input" ]
+      },
+    ]
+  }
+  if (_partitions_config_label_no_toolchain == "//platform/boards/partitions:arm64") {
+    partitions_configs += [
+      {
+        name = "arm64_partitions_config"
+        gn_target = "//platform/boards/partitions:arm64"
+        bazel_target = "//release/bazel/assembly/partitions_configurations:arm64"
+        extra_copy_outputs = [ "bootloaders/fuchsia.esp.blk" ]
+        deps = [ "//release/images/flash:esp.bazel_input" ]
+      },
+    ]
+  }
+  if (_partitions_config_label_no_toolchain ==
+      "//platform/boards/partitions/vim3:vim3") {
+    partitions_configs += [
+      {
+        name = "vim3_partitions_config"
+        gn_target = "//platform/boards/partitions/vim3"
+        bazel_target = "//platform/boards/partitions/vim3"
+      },
+    ]
+  }
+  if (_partitions_config_label_no_toolchain == "//platform/boards/partitions:riscv64") {
+    partitions_configs += [
+      {
+        name = "riscv64_partitions_config"
+        gn_target = "//platform/boards/partitions:riscv64"
+        bazel_target =
+            "//release/bazel/assembly/partitions_configurations:riscv64"
+      },
+    ]
+  }
+  if (_partitions_config_label_no_toolchain == "//platform/boards/partitions:default") {
+    partitions_configs += [
+      {
+        name = "default_partitions_config"
+        gn_target = "//platform/boards/partitions:default"
+        bazel_target =
+            "//release/bazel/assembly/partitions_configurations:default"
+      },
+    ]
+  }
+}
+
+if (is_host) {
+  group("host_tests") {
+    testonly = true
+
+    deps = [
+      # Verifications tests depends on bazel_actions, which requires default
+      # toolchain.
+      ":verify_assembly_configs($default_toolchain)",
+      "product_configurations:host_tests",
+    ]
+
+    if (_should_compare_driver_lists) {
+      # Driver lists comparison depends on GN assembly, which requires default
+      # toolchain.
+      deps += [ ":compare_drivers_lists($default_toolchain)" ]
+    }
+
+    if (_should_compare_tests_manifests) {
+      deps += [ ":compare_tests_manifests($default_toolchain)" ]
+    }
+  }
+}

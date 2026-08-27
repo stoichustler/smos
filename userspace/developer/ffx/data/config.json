@@ -1,0 +1,38 @@
+{
+    "ffx": {
+        "subtool-search-paths": "$BUILD_DIR/host-tools",
+        "daemon_timeout": 15000
+    },
+    "log": {
+        "dir": [
+            "$FFX_LOG_DIR",
+            "$FUCHSIA_TEST_OUTDIR/ffx_logs",
+            "$CACHE/logs"
+        ],
+        "enabled": [
+            "$FFX_LOG_ENABLED",
+            true
+        ],
+        "level": "info",
+        "rotations": 5,
+        "rotate_size": 104857600
+    },
+    "fastboot": {
+        "flash": {
+            "min_timeout_secs": 60,
+            "timeout_rate": 2
+        },
+        "devices_file": {
+            "path": "$HOME/.fastboot/devices"
+        }
+    },
+    "proxy": {
+        "timeout_secs": 10.1
+    },
+    "target": {
+        "default": [
+            "$FUCHSIA_DEVICE_ADDR",
+            "$FUCHSIA_NODENAME"
+        ]
+    }
+}

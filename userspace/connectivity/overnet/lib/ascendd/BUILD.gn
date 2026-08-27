@@ -1,0 +1,35 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+
+if (is_host) {
+  import("//release/rust/rustc_binary.gni")
+  import("//release/rust/rustc_library.gni")
+
+  rustc_library("ascendd") {
+    edition = "2021"
+
+    deps = [
+      "//userspace/connectivity/overnet/lib/circuit",
+      "//userspace/connectivity/overnet/lib/core",
+      "//userspace/developer/ffx/lib/netext:lib",
+      "//userspace/devices/bind/fuchsia.google.platform.usb:fuchsia.google.platform.usb_rust",
+      "//userspace/devices/bind/fuchsia.usb:fuchsia.usb_rust",
+      "//userspace/lib/fuchsia-async",
+      "//userspace/lib/usb_rs",
+      "//third_party/rust_crates:anyhow",
+      "//third_party/rust_crates:argh",
+      "//third_party/rust_crates:futures",
+      "//third_party/rust_crates:tempfile",
+      "//third_party/rust_crates:tokio",
+      "//third_party/rust_crates:tracing",
+    ]
+
+    sources = [
+      "src/lib.rs",
+      "src/usb.rs",
+    ]
+  }
+}

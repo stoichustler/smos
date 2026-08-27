@@ -1,0 +1,33 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# A collection of all stress tests available in-tree. The tests in this group will be built
+# and run on the core.x64-stress builder.
+group("stress-tests") {
+  testonly = true
+  public_deps = [
+    "//userspace/diagnostics/archivist/tests/stress-test",
+    "//userspace/storage/stress-tests",
+    "//userspace/sys/component_manager/stress_tests_alt",
+    "//userspace/ui/tests/scenic-stress-tests:tests",
+    "//userspace/zircon/tests/restricted-mode-shared/stress:tests",
+    "//userspace/zircon/tests/stress-tests:tests",
+  ]
+}
+
+# While we don't necessarily want to run all tests on devices with limited
+# flash, we should run a few amlogic-HW-dependent tests on astro and/or
+# sherlock.  This list is those tests.  This list intentionally doesn't include
+# all of :tests above.
+group("amlogic_hw_dependent_tests") {
+  testonly = true
+
+  public_deps = [
+    "//userspace/media/codec:hw_dependent_tests",
+    "//userspace/media/stream_processors:hw_dependent_tests",
+
+    # Verify communication with amlogic optee.
+    "//userspace/security/bin/tee_manager:optee_smoke_test",
+  ]
+}

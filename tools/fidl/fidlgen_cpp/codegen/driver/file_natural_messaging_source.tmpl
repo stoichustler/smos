@@ -1,0 +1,40 @@
+{{/*
+// Copyright 2022 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+*/}}
+
+{{- define "Filename:driver/NaturalMessagingSource" -}}
+  fidl/{{ .LibraryDots }}/cpp/driver/natural_messaging.cc
+{{- end }}
+
+{{- define "File:driver/NaturalMessagingSource" -}}
+{{- UseUnified -}}
+{{- SetTransport "Driver" -}}
+
+#include <lib/fidl_driver/cpp/unknown_interactions.h>
+
+#include <{{ .Library | Filename "driver/NaturalMessagingHeader" }}>
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wshadow"
+
+{{ range .Decls }}
+{{- if Eq .Kind Kinds.Protocol }}{{ $protocol := . }}
+{{- range $transport, $_ := .Transports }}
+{{- if eq $transport "Driver" -}}
+{{- template "Protocol:Details:NaturalMessagingSource" $protocol }}
+{{- template "Protocol:Client:driver/NaturalMessagingSource" $protocol }}
+{{- template "Protocol:EventHandler:NaturalMessagingSource" $protocol }}
+{{- template "Protocol:Interface:NaturalMessagingSource" $protocol }}
+{{- template "Protocol:Dispatcher:NaturalMessagingSource" $protocol }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+#pragma clang diagnostic pop
+
+{{ UnsetTransport -}}
+{{ EndOfFile }}
+{{ end }}

@@ -1,0 +1,118 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/assembled_system.gni")
+import("//release/assembly/board_configuration.gni")
+import("//release/assembly/product_assembly_configuration.gni")
+import("//userspace/storage/fshost/generated_fshost_config.gni")
+import("//userspace/sys/core/build/core.gni")
+
+# Wraps assembled_system to allow adding internal network-conformance test stubs.
+#
+# Parameters
+#
+#   additional_base_packages
+#     Additional package labels to include in the product assembly
+#     configuration.  These must not be groups, but labels of fuchsia_package()
+#     targets.
+#
+template("assemble_network_conformance_system") {
+  _image_name = target_name
+
+  labels = {
+    product_config = "${target_name}.product_assembly_config"
+    product_config_fxfs = "${target_name}.product_assembly_config_fxfs"
+    board_config = "${target_name}.board_config"
+  }
+
+  board_configuration(labels.board_config) {
+    name = "network-conformance"
+    filesystems = {
+      fvm = {
+        slice_size = 1048576
+        sparse_output = {
+        }
+      }
+    }
+    if (target_cpu == "x64") {
+      input_bundles = [
+        "//platform/boards/x64:x64_common",
+        "//platform/boards/emulation/virtio",
+      ]
+    }
+
+    provided_features = [ "fuchsia::real_time_clock" ]
+  }
+
+  product_assembly_base = {
+    testonly = true
+    platform = {
+      build_type = "eng"
+      intl = {
+        config_type = "none"
+      }
+      graphics = {
+        virtual_console = {
+          enable = false
+        }
+      }
+    }
+    base_packages = [
+      {
+        package_target = "//userspace/connectivity/network/net-cli"
+      },
+      {
+        package_target = "//userspace/connectivity/network/testing/network-test-realm/service:network-test-realm"
+      },
+    ]
+  }
+  if (defined(invoker.additional_base_packages)) {
+    foreach(_package, invoker.additional_base_packages) {
+      product_assembly_base.base_packages += [
+        {
+          package_target = _package
+        },
+      ]
+    }
+  }
+
+  product_assembly_configuration(labels.product_config) {
+    forward_variables_from(product_assembly_base, "*")
+    platform.storage = {
+      filesystems = {
+        image_name = _image_name
+        image_mode = "ramdisk"
+
+        if (!fxfs_blob) {
+          volume = {
+            fvm = {
+              data = {
+              }
+              blob = {
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assembled_system(target_name) {
+    testonly = true
+    include_legacy_bundle = true
+
+    if (!fxfs_blob) {
+      generate_fvm = true
+    } else {
+      generate_fxfs = true
+    }
+
+    ramdisk_in_zbi = true
+
+    product_assembly_config_label = ":${labels.product_config}"
+    board_config_label = ":${labels.board_config}"
+
+    cmdline = [ "kernel.halt-on-panic=true" ]
+  }
+}

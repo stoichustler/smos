@@ -1,0 +1,163 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+import("//release/python/python_binary.gni")
+import("//release/python/python_host_test.gni")
+
+assert(is_host, "Only include assembly build scripts via the host toolchain")
+
+python_binary("packages_from_product_assembler") {
+  main_source = "packages_from_product_assembler.py"
+}
+
+python_binary("generate_scrutiny_configs") {
+  main_source = "generate_scrutiny_configs.py"
+  deps = [
+    "//release/python/modules/assembly",
+    "//release/python/modules/serialization",
+  ]
+}
+
+python_binary("generate_platform_artifacts") {
+  main_source = "generate_platform_artifacts.py"
+  deps = [ "//release/python/modules/depfile" ]
+}
+
+python_binary("generated_assembly_inputs") {
+  main_source = "generated_assembly_inputs.py"
+  deps = [ "//release/python/modules/assembly" ]
+}
+
+python_binary("check_size_hermetic_inputs") {
+  main_source = "check_size_hermetic_inputs.py"
+  deps = [ "//release/python/modules/assembly" ]
+}
+
+python_binary("collect_partitions_config") {
+  # TODO(b/367413842): Enable MyPy type checking
+  enable_mypy = false
+  main_source = "collect_partitions_config.py"
+}
+
+python_host_test("compare_json_list_test") {
+  main_source = "compare_json_list_test.py"
+  sources = [ "compare_json_list.py" ]
+  libraries = [ "//third_party/parameterized" ]
+}
+
+python_host_test("convert_size_limits_test") {
+  main_source = "convert_size_limits_test.py"
+  sources = [ "//release/bazel_sdk/bazel_rules_fuchsia/fuchsia/tools/convert_size_limits.py" ]
+  libraries = [ "//third_party/parameterized" ]
+}
+
+python_host_test("check_size_hermetic_inputs_test") {
+  main_source = "check_size_hermetic_inputs_test.py"
+  sources = [ "check_size_hermetic_inputs.py" ]
+  libraries = [
+    "//release/python/modules/assembly",
+    "//third_party/parameterized",
+  ]
+}
+
+python_binary("hermetic_inputs_for_image_assembly") {
+  main_source = "hermetic_inputs_for_image_assembly.py"
+  deps = [
+    "//release/python/modules/assembly",
+    "//release/python/modules/depfile",
+  ]
+}
+
+python_binary("hermetic_inputs_from_assembly_outputs") {
+  main_source = "hermetic_inputs_from_assembly_outputs.py"
+  deps = [
+    "//release/python/modules/assembly",
+    "//release/python/modules/depfile",
+  ]
+}
+
+python_binary("make_legacy_config") {
+  main_source = "make_legacy_config.py"
+  deps = [
+    "//release/python/modules/assembly",
+    "//release/python/modules/depfile",
+    "//release/python/modules/serialization",
+  ]
+}
+
+python_binary("package_list") {
+  main_source = "package_list.py"
+}
+
+python_host_test("test_make_legacy_config") {
+  main_source = "test_make_legacy_config.py"
+  sources = [ "make_legacy_config.py" ]
+  libraries = [
+    "//release/python/modules/assembly",
+    "//release/python/modules/serialization",
+    "//release/python/tests/fast_copy_mock",
+  ]
+}
+
+python_binary("assembly_input_bundle_tool") {
+  main_source = "assembly_input_bundle_tool.py"
+  deps = [
+    "//release/python/modules/assembly",
+    "//release/python/modules/depfile",
+  ]
+}
+
+python_binary("kernel_aib_tool") {
+  main_source = "kernel_aib.py"
+  deps = [ "//release/python/modules/assembly" ]
+}
+
+# The standard `install_host_tools()` template doesn't work for this, because it
+# assumes that all binaries are at `${root_build_dir}/<tool>`, and the
+# `python_binary()` uses `$target_out_dir/<tool>`.  But the import is still
+# needed to have `${host_tools_dir}` defined.
+#
+copy("assembly_input_bundle_tool_install") {
+  deps = [ ":assembly_input_bundle_tool" ]
+  outputs = [ "${host_tools_dir}/assembly_input_bundle_tool" ]
+  sources = [ "${target_out_dir}/assembly_input_bundle_tool.pyz" ]
+}
+
+python_binary("product_def_gn_arg_validator") {
+  main_source = "validate_product_defs.py"
+  deps = [ "//release/python/modules/depfile" ]
+}
+
+python_binary("validate_config_data_is_empty") {
+  main_source = "validate_config_data_entries_is_empty.py"
+  deps = [ "//release/python/modules/serialization" ]
+}
+
+python_binary("developer_overrides") {
+  main_source = "developer_overrides.py"
+  deps = [
+    "//release/python/modules/assembly",
+    "//release/python/modules/depfile",
+    "//release/python/modules/serialization",
+  ]
+}
+
+python_binary("product_assembly_config_file") {
+  main_source = "product_assembly_config_file.py"
+  deps = [
+    "//release/python/modules/assembly",
+    "//release/python/modules/serialization",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":check_size_hermetic_inputs_test",
+    ":compare_json_list_test",
+    ":convert_size_limits_test",
+    ":test_make_legacy_config",
+  ]
+}

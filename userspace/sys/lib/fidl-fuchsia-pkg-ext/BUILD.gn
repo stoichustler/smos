@@ -1,0 +1,101 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+import("//tools/fidl/measure-tape/measure_tape.gni")
+
+measure_tape("measure_fuchsia_pkg") {
+  fidls = [ "//sdk/fidl/fuchsia.pkg" ]
+  target_types = [
+    "fuchsia.pkg/PackageIndexEntry",
+    "fuchsia.pkg/BlobId",
+    "fuchsia.pkg/BlobInfo",
+  ]
+  target_binding = "rust"
+}
+
+rustc_library("fidl-fuchsia-pkg-ext") {
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    ":measure_fuchsia_pkg",
+    "//sdk/fidl/fuchsia.pkg:fuchsia.pkg_rust",
+    "//sdk/rust/zx-types",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/lib/http-uri-ext",
+    "//userspace/sys/pkg/lib/fuchsia-hash",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:hex",
+    "//third_party/rust_crates:http",
+    "//third_party/rust_crates:proptest",
+    "//third_party/rust_crates:proptest-derive",
+    "//third_party/rust_crates:schemars",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:thiserror",
+    "//third_party/rust_crates:typed-builder",
+  ]
+
+  if (is_fuchsia) {
+    deps += [
+      "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+      "//sdk/rust/zx-status",
+      "//userspace/storage/fxfs/fidl/fuchsia.fxfs:fuchsia.fxfs_rust",
+      "//userspace/storage/lib/blob_writer:blob-writer",
+      "//userspace/sys/pkg/lib/fuchsia-pkg",
+      "//third_party/rust_crates:async-trait",
+    ]
+  }
+
+  test_deps = [
+    "//sdk/rust/zx-status",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:log",
+    "//third_party/rust_crates:serde_json",
+  ]
+
+  if (is_fuchsia) {
+    test_deps += [
+      "//userspace/storage/lib/delivery_blob",
+      "//userspace/sys/pkg/lib/fuchsia-merkle",
+      "//userspace/sys/pkg/testing/blobfs-ramdisk",
+    ]
+  }
+
+  sources = [
+    "src/base_package_index.rs",
+    "src/cache.rs",
+    "src/cache/storage.rs",
+    "src/errors.rs",
+    "src/fidl_iterator_to_stream.rs",
+    "src/lib.rs",
+    "src/measure.rs",
+    "src/repo.rs",
+    "src/serve_fidl_iterator.rs",
+    "src/types.rs",
+  ]
+}
+
+fuchsia_unittest_package("fidl-fuchsia-pkg-ext-tests") {
+  deps = [
+    ":fidl-fuchsia-pkg-ext_test",
+    "//userspace/storage/fxfs:fxfs_component",
+    "//userspace/storage/testing:storage_driver_test_realm",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  public_deps = [
+    ":fidl-fuchsia-pkg-ext-tests",
+    ":fidl-fuchsia-pkg-ext_test($host_toolchain)",
+  ]
+}

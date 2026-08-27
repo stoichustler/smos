@@ -1,0 +1,15 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.accessibility.gesture") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "HCI"
+
+  sources = [ "gesture_listener.fidl" ]
+
+  enable_hlcpp = true
+}

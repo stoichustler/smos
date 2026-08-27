@@ -1,0 +1,39 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("lib") {
+  testonly = true
+  deps = [
+    "fidl_fuchsia_net_dhcpv6_ext",
+    "fidl_fuchsia_net_name_ext",
+    "fidl_fuchsia_net_stack_ext",
+    "fuzz-util",
+    "internet-checksum",
+    "ip-test-macro",
+    "net-declare",
+    "net-types",
+    "network-device",
+    "packet-formats",
+    "packet-formats-dhcp",
+    "ping",
+  ]
+}
+
+group("tests") {
+  testonly = true
+
+  deps = [
+    "fidl_fuchsia_net_dhcpv6_ext:fidl-fuchsia-net-dhcpv6-ext-tests",
+    "fidl_fuchsia_net_name_ext:fidl-fuchsia-net-name-ext-tests",
+    "fidl_fuchsia_net_stack_ext:fidl-fuchsia-net-stack-ext-tests",
+    "packet-formats:tests",
+    "packet-formats-dhcp:tests",
+    "//userspace/connectivity/lib/internet-checksum:tests",
+    "//userspace/connectivity/lib/ip-test-macro:tests",
+    "//userspace/connectivity/lib/net-declare:tests",
+    "//userspace/connectivity/lib/net-types:tests",
+    "//userspace/connectivity/lib/network-device:tests",
+    "//userspace/connectivity/lib/ping:tests",
+  ]
+}

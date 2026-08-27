@@ -1,0 +1,20 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.hardware.platform.device") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "Unknown"
+  sources = [
+    "overview.fidl",
+    "platform-device.fidl",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.driver.framework",
+    "//sdk/fidl/fuchsia.hardware.power",
+    "//zircon/vdso/zx",
+  ]
+}

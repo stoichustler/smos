@@ -1,0 +1,27 @@
+# Copyright 2026 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This file is imported before toolchain discovery. Keep it independent of
+# variables initialized later by BUILDCONFIG.gn.
+declare_args() {
+  # Absolute root of the standalone SMOS SDK. Empty preserves the upstream
+  # in-tree prebuilt layout for non-SMOS consumers.
+  smos_sdk_root = ""
+
+  # Core SDK milestone. The standalone Makefile forwards MILESTONE_SDK here.
+  smos_sdk_milestone = "27"
+
+  # Restricts the root target and SDK metadata to the compact verification
+  # product's selected build graph.
+  smos_boot_build = false
+
+  # Enables the SMOS-specific pruning in shared assembly and SDK rules.
+  smos_minimal_assembly = false
+}
+
+if (smos_sdk_root == "") {
+  smos_prebuilt_root = "//prebuilt"
+} else {
+  smos_prebuilt_root = "${smos_sdk_root}/prebuilt"
+}

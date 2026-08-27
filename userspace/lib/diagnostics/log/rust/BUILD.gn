@@ -1,0 +1,96 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/rust/rustc_test.gni")
+
+group("tests") {
+  testonly = true
+
+  deps = [
+    ":diagnostics-log-tests",
+    ":diagnostics_log_lib_test($host_toolchain)",
+  ]
+}
+
+LIB_DEPS = [
+  "//sdk/fidl/fuchsia.diagnostics:fuchsia.diagnostics_rust",
+  "//userspace/lib/diagnostics/log/types",
+  "//third_party/rust_crates:thiserror",
+  "//third_party/rust_crates:log",
+]
+
+if (is_fuchsia) {
+  LIB_DEPS += [
+    "//sdk/fidl/fuchsia.logger:fuchsia.logger_rust",
+    "//sdk/lib/syslog:client_includes",
+    "//sdk/rust/zx",
+    "//userspace/lib/diagnostics/log/encoding/rust",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-component",
+    "//userspace/lib/fuchsia-runtime",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:paste",
+  ]
+} else {
+  LIB_DEPS += [ "//third_party/rust_crates:chrono" ]
+}
+
+LIB_SOURCES = [
+  "src/fuchsia/filter.rs",
+  "src/fuchsia/mod.rs",
+  "src/fuchsia/sink.rs",
+  "src/lib.rs",
+  "src/portable/mod.rs",
+]
+
+rustc_library("rust") {
+  name = "diagnostics_log"
+  edition = "2021"
+  deps = LIB_DEPS
+  sources = LIB_SOURCES
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+}
+
+rustc_test("diagnostics_log_lib_test") {
+  edition = "2021"
+
+  sources = LIB_SOURCES
+  deps = LIB_DEPS
+
+  if (is_host) {
+    deps += [ "//third_party/rust_crates:regex" ]
+
+    # We use a single thread for host tests to enable setting the global static
+    # test logger per test case without overwriting it when tests run
+    # concurrently. For Fuchsia we don't need to do this since we run each test
+    # case as a process.
+    args = [ "--test-threads=1" ]
+  } else {
+    deps += [
+      "//userspace/lib/diagnostics/log/rust/fidl:fuchsia.diagnostics.crasher_rust",
+      "//userspace/lib/diagnostics/reader/rust",
+      "//userspace/lib/fuchsia",
+      "//userspace/lib/fuchsia-async",
+      "//userspace/lib/fuchsia-component-test",
+      "//userspace/lib/test_util",
+      "//userspace/sys/lib/moniker",
+      "//third_party/rust_crates:futures",
+    ]
+  }
+}
+
+fuchsia_unittest_package("diagnostics-log-tests") {
+  test_specs = {
+    log_settings = {
+      max_severity = "ERROR"
+    }
+  }
+  deps = [
+    ":diagnostics_log_lib_test",
+    "rust-crasher:component",
+  ]
+  manifest = "meta/test.cml"
+}

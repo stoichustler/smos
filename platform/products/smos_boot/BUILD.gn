@@ -1,0 +1,50 @@
+# Copyright 2026 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/bootfs_files_for_assembly.gni")
+import("//release/assembly/product_assembly_configuration.gni")
+
+bootfs_files_for_assembly("verification_tools") {
+  deps = [
+    "//userspace/smos_boot/mkcheck",
+    "//userspace/smos_boot/virtcheck",
+  ]
+}
+
+product_assembly_configuration("smos_boot") {
+  testonly = true
+  platform = {
+    feature_set_level = "bootstrap"
+    build_type = "userdebug"
+    development_support = {
+      enabled = true
+      include_netsvc = false
+    }
+    graphics = {
+      virtual_console = {
+        enable = false
+      }
+    }
+    storage = {
+      include_paver = false
+      filesystems = {
+        image_name = "fuchsia"
+        image_mode = "ramdisk"
+        volume = {
+          fvm = {
+            data = {
+              data_filesystem_format = "minfs"
+            }
+            blob = {
+            }
+          }
+        }
+      }
+    }
+    virtualization = {
+      bootstrap_enabled = true
+    }
+  }
+  bootfs_files_labels = [ ":verification_tools" ]
+}

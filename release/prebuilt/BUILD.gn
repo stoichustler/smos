@@ -1,0 +1,12 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/prebuilt_binaries.gni")
+
+# The standalone SDK prebuilt directory contains binary artifacts consumed by
+# the build.
+
+prebuilt_binaries("prebuilt") {
+  build_id_dir = "${smos_prebuilt_root}/.build-id"
+}

@@ -1,0 +1,113 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+"""
+This is the top-level BUILD.bazel for the Fuchsia platform build.
+See //release/bazel/README.md for details about this file.
+"""
+
+load("@fuchsia_build_config//:defs.bzl", "build_config")
+load(
+    "@rules_fuchsia//fuchsia:defs.bzl",
+    "fuchsia_devicetree_toolchain_info",
+)
+load(
+    "//:release/bazel/toolchains/linux_sysroot.bzl",
+    "linux_sysroot_headers",
+    "linux_sysroot_libs",
+)
+
+# This exclude is needed as there are files in the folder that have space
+# in the filename. Bazel does not support spaces in filename.
+_python_prebuilt_files = glob(
+    ["prebuilt/third_party/python3/%s/**/*" % build_config.host_tag],
+    exclude = ["**/* *"],
+)
+
+exports_files(
+    # Export these files for the benefit of the //release/bazel/toolchains/clang package.
+    glob(["prebuilt/third_party/clang/**"]) +
+    glob(["prebuilt/third_party/sysroot/linux"]) +
+    glob(["release/bazel/toolchains/**"]) +
+
+    # Used by code generators in vendor/google:
+    glob(["prebuilt/third_party/gn/*/gn"]) +
+    glob(["prebuilt/third_party/buildifier/*/buildifier"]) +
+
+    # Used by //release/bazel/toolchains/python:
+    _python_prebuilt_files +
+
+    # vbmeta key and metadata.
+    [
+        "third_party/android/platform/external/avb/test/data/testkey_atx_psk.pem",
+        "third_party/android/platform/external/avb/test/data/atx_metadata.bin",
+    ] +
+    # Bootloader images used in partition configs for product bundles.
+    glob(["prebuilt/vendor/amlogic/*/firmware/**/*"]) +
+
+    # OSPO license verification tool
+    glob(["prebuilt/third_party/ospo/licenseclassifier/*/identify_license"]) +
+
+    # DTC tool for devicetree compile
+    glob(["prebuilt/third_party/dtc/**/*"]) +
+
+    # vim3 bootloader
+    ["prebuilt/third_party/firmware/vim3/u-boot.bin.unsigned"] +
+
+    # zoneinfo resources
+    glob(["prebuilt/third_party/zoneinfo/**"]) +
+
+    # prebuilt drivers
+    glob(["prebuilt/vendor/google/drivers/**/*.far"]) +
+
+    # mcu firmwares
+    glob(["prebuilt/mcu/firmware/**/*"]) +
+
+    # prebuilt firmware
+    glob(["prebuilt/vendor/google_devices/*/prebuilts/firmware/**/*"]) +
+
+    # audio config files
+    glob(["prebuilt/vendor/google_devices/*/prebuilts/audio/**/*"]) +
+
+    # release/info
+    [
+        "integration/.git/HEAD",
+        "fuchsia_build_generated/git",
+        "fuchsia_build_generated/jiri_snapshot.xml",
+    ] +
+
+    # end of list.
+    [],
+)
+
+linux_sysroot_headers(
+    name = "linux_sysroot_headers",
+)
+
+linux_sysroot_libs(
+    name = "linux_sysroot_libs_x64",
+    sysroot_arch = "x86_64",
+)
+
+linux_sysroot_libs(
+    name = "linux_sysroot_libs_arm64",
+    sysroot_arch = "aarch64",
+)
+
+filegroup(
+    name = "prebuilt_python_files",
+    srcs = _python_prebuilt_files,
+    visibility = ["//release/bazel/toolchains/python:__pkg__"],
+)
+
+fuchsia_devicetree_toolchain_info(
+    name = "fuchsia_devicetree_toolchain_info",
+    dtc = "//:prebuilt/third_party/dtc/%s/dtc" % build_config.host_tag,
+)
+
+toolchain(
+    name = "fuchsia_sdk_devicetree_toolchain",
+    toolchain = ":fuchsia_devicetree_toolchain_info",
+    toolchain_type = "@rules_fuchsia//fuchsia:devicetree_toolchain_type",
+)

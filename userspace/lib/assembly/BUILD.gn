@@ -1,0 +1,50 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/testing/standardized_test_groups.gni")
+
+standardized_test_groups("tests") {
+  host = [
+    "//userspace/lib/assembly/assembly_manifest:assembly_manifest_test",
+    "//userspace/lib/assembly/base_package:base_package_test",
+    "//userspace/lib/assembly/blob_size:blob_size_test",
+    "//userspace/lib/assembly/blobfs:blobfs_test",
+    "//userspace/lib/assembly/container:container_test",
+    "//userspace/lib/assembly/memory_buckets:memory_buckets_test",
+    "//userspace/lib/assembly/component_id_index:component_id_index_test",
+    "//userspace/lib/assembly/component_manager_config:component_manager_config_test",
+    "//userspace/lib/assembly/components:components_test",
+    "//userspace/lib/assembly/config_capabilities:config_capabilities_test",
+    "//userspace/lib/assembly/config_data:config_data_test",
+    "//userspace/lib/assembly/config_schema:config_schema_test",
+    "//userspace/lib/assembly/constants:constants_test",
+    "//userspace/lib/assembly/domain_config:domain_config_test",
+    "//userspace/lib/assembly/driver_manifest:driver_manifest_test",
+    "//userspace/lib/assembly/file_relative_path:file_relative_path_derive_test",
+    "//userspace/lib/assembly/file_relative_path:file_relative_path_test",
+    "//userspace/lib/assembly/fvm:fvm_test",
+    "//userspace/lib/assembly/fxfs:fxfs_test",
+    "//userspace/lib/assembly/images_config:images_config_test",
+    "//userspace/lib/assembly/named_file_map:named_file_map_test",
+    "//userspace/lib/assembly/package_copy:package_copy_test",
+    "//userspace/lib/assembly/package_list:package_list_test",
+    "//userspace/lib/assembly/package_utils:package_utils_test",
+    "//userspace/lib/assembly/partitions_config:partitions_config_test",
+    "//userspace/lib/assembly/platform_configuration:platform_configuration_test",
+    "//userspace/lib/assembly/shell_commands:shell_commands_test",
+    "//userspace/lib/assembly/structured_config/tests/malformed_fail",
+    "//userspace/lib/assembly/structured_config/tests/repackaging_pass",
+    "//userspace/lib/assembly/subpackage_blobs_package:subpackage_blobs_package_test",
+    "//userspace/lib/assembly/test_util:test_util_test",
+    "//userspace/lib/assembly/tool:tool_test",
+    "//userspace/lib/assembly/update_package:update_package_test",
+    "//userspace/lib/assembly/update_packages_manifest:update_packages_manifest_test",
+    "//userspace/lib/assembly/util:util_test",
+    "//userspace/lib/assembly/validate_package:validate_package_test",
+    "//userspace/lib/assembly/validate_util:validate_util_test",
+    "//userspace/lib/assembly/vbmeta:integration_test",
+    "//userspace/lib/assembly/vbmeta:vbmeta_test",
+    "//userspace/lib/assembly/zbi:zbi_test",
+  ]
+}

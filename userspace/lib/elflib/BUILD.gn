@@ -1,0 +1,121 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/cpp/sdk_static_library.gni")
+import("//release/fuzz.gni")
+import("//release/test.gni")
+
+# A collection of utilities useful to debuggers and similar programs.
+
+static_library("elflib") {
+  sources = [ "elflib.cc" ]
+
+  public = [ "elflib.h" ]
+
+  deps = [ "//zircon/system/public" ]
+
+  public_deps = [ "//zircon/system/ulib/fbl" ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+
+  public_configs = [ "//userspace/lib/llvm:LLVMHeader_config" ]
+}
+
+test("elflib_unittest") {
+  sources = [ "elflib_unittest.cc" ]
+
+  deps = [
+    ":elflib",
+    ":test_data",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//third_party/googletest:gtest",
+  ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+}
+
+_test_data_sources = [
+  "test_data/6d4d8ac190ecc7.debug",
+  "test_data/stripped_example.elf",
+]
+
+# An example stripped binary:
+# ```
+# #include <stdio.h>
+# #include <string.h>
+# int main(int argc, char** argv) {
+#   printf("%zu\n", strlen(argv[0]));
+#   return 0;
+# }
+# ```
+# Built with:
+# clang -Wl,-z,{rela,rel} --target={aarch64,x86_64}-fuchsia --sysroot=...
+# llvm-objcopy --strip-sections \
+#   unstripped_example.{arm64,x64}.{rela,rel}.elf \
+#   unstripped_example_stripped.{arm64,x64}.{rela,rel}.elf
+foreach(cpu,
+        [
+          "arm64",
+          "x64",
+        ]) {
+  foreach(rel,
+          [
+            "rela",
+            "rel",
+          ]) {
+    _test_data_sources += [
+      "test_data/unstripped_example.$cpu.$rel.elf",
+      "test_data/unstripped_example_stripped.$cpu.$rel.elf",
+    ]
+  }
+}
+
+if (is_host) {
+  host_test_data("test_data") {
+    sources = _test_data_sources
+  }
+} else {
+  resource("test_data") {
+    testonly = true
+    sources = _test_data_sources
+    outputs = [ "data/{{source_file_part}}" ]
+  }
+}
+
+fuchsia_unittest_package("elflib_tests") {
+  deps = [ ":elflib_unittest" ]
+}
+
+group("tests") {
+  testonly = true
+
+  deps = [
+    ":elflib-fuzzers",
+    ":elflib_tests",
+    ":elflib_unittest($host_toolchain)",
+  ]
+}
+
+fuchsia_library_fuzzer("elflib_fuzzer") {
+  sources = [ "elflib_fuzztest.cc" ]
+  deps = [ ":elflib" ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+}
+
+fuchsia_fuzzer_component("elflib-fuzzer-component") {
+  manifest = "meta/elflib_fuzzer.cml"
+  deps = [
+    ":elflib_fuzzer",
+    ":test_data",
+  ]
+}
+
+fuchsia_fuzzer_package("elflib-fuzzers") {
+  cpp_fuzzer_components = [ ":elflib-fuzzer-component" ]
+}

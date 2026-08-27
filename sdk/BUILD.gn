@@ -1,0 +1,1290 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Definitions to build each of the Fuchsia IDKs.
+
+import("//release/bazel/bazel_fuchsia_sdk.gni")
+import("//release/config/build_api_module.gni")
+import("//release/config/fuchsia/platform_version.gni")
+import("//release/config/fuchsia/target_api_level.gni")
+import("//release/fidl/toolchain.gni")
+import("//release/product.gni")
+import("//release/sdk/config.gni")
+import("//release/sdk/idk.gni")
+import("//release/sdk/idk_archive.gni")
+import("//release/sdk/idk_subbuilds.gni")
+import("//release/sdk/sdk_collection.gni")
+import("//release/sdk/sdk_documentation.gni")
+import("//release/sdk/sdk_final_manifest_golden.gni")
+import("//release/sdk/sdk_molecule.gni")
+import("//release/sdk/sdk_version_history.gni")
+import("//tools/check-licenses/build/license_data.gni")
+import("config.gni")
+
+if (!smos_minimal_assembly) {
+  import("//release/dart/toolchain.gni")
+}
+
+visibility = [ ":*" ]
+
+# There is currently no need to build the IDK with a toolchain other than
+# `default_toolchain`. The following assert prevents accidentally adding
+# dependencies that cause this file and the many SDK-specific rules to be
+# processed in other toolchains.
+# None of the targets are binaries that would have variants applied.
+# Additional host toolchains will process this file when cross-compiling tools.
+assert(current_toolchain == default_toolchain ||
+           current_toolchain == host_toolchain ||
+           (sdk_cross_compile_host_tools && is_host),
+       "Unexpected target toolchain `${current_toolchain}`.")
+
+# Log a message if a non-default set of API levels or CPU architecture will be
+# built as this reduces the compatibility coverage of the build and should not
+# happen in infra. Ensure the messages are only logged once per build.
+if (current_toolchain == default_toolchain) {
+  if (override_idk_buildable_api_levels != false) {
+    print(
+        "IDK build supported API levels is overridden: ${platform_version.idk_buildable_api_levels}. Compatibility with other levels cannot be checked.")
+  }
+
+  # Ignore default list or an override that exactly matches (including order).
+  if (idk_target_cpus != idk_target_cpus_default) {
+    print("IDK build only covers a subset of target CPUs: ${idk_target_cpus}.")
+  }
+}
+
+# Verify that `current_build_target_api_level` is actually supported.
+if (current_build_target_api_level != "PLATFORM") {
+  _override_is_supported = false
+  foreach(supported_level, platform_version.idk_buildable_api_levels) {
+    if (supported_level == current_build_target_api_level) {
+      _override_is_supported = true
+    }
+  }
+
+  # TODO(https://fxbug.dev/330709069): We should actually assert this, but doing
+  # so breaks some builders that are out of sync with the support levels. We
+  # should remove those builders and make this an assertion.
+  if (!_override_is_supported) {
+    print(
+        "`current_build_target_api_level` (${current_build_target_api_level}) is not one of the supported API levels: ${platform_version.idk_buildable_api_levels}")
+    print("Attempting to build anyways, but this may not go well...")
+  }
+}
+
+# Include in the deps of targets that need to ensure that all atoms in the IDK
+# that affect API or ABI compatibility are built. This includes FIDL libraries,
+# sysroot, and source and prebuilt libraries.
+# Note: This will not include code that is excluded from being built in the main
+# platform build. Most code built in sub-builds is also built in the main build
+# as part of the sub-builds dependency. However, some targets are explicitly
+# excluded or different. ":core_packages" is an example.
+# Note: The current value is broader than needed to satisfy the description. It
+# could be narrowed if we find a way to ensure it does not rot.
+_all_idk_atoms_affecting_compatibility = [ ":core" ]
+
+# This default target should depend on all IDKs.
+group("sdk") {
+  visibility += [ "//:*" ]
+
+  testonly = true
+
+  public_deps = [ ":core" ]
+  data_deps = [ ":sdk_source_set_list" ]
+
+  # Ensure that the following target is available to build and that a default
+  # build, which includes `//sdk` will also create
+  # $OUTPUT_DIR/sdk/exported/zircon_sysroot/. See the target for details.
+  deps = [ ":zircon_sysroot" ]
+}
+
+# This file contains the list of all source files used in sdk_source_set()
+# targets reachable from //sdk:sdk. The schema is simply a JSON list, where
+# each item is the path to a single source file, relative to the source
+# directory. Path are not sorted and appear in order of metadata walk, which
+# is unstable.
+build_api_module("sdk_source_set_list") {
+  visibility += [ "//:*" ]
+  testonly = true
+  data_keys = [ "sdk_source_set_sources" ]
+  deps = _all_idk_atoms_affecting_compatibility
+}
+
+if (current_toolchain == default_toolchain) {
+  # Generates compatibility testing goldens for FIDL libraries in the IDK.
+  # TODO(https://fxbug.dev/324656719): Ensure this covers APIs, libraries, etc.
+  # that are not present at all levels, especially "PLATFORM".
+  group("generate_compatibility_goldens") {
+    visibility += [ "//scripts/versioning:*" ]
+    testonly = true
+    deps = _all_idk_atoms_affecting_compatibility
+  }
+}
+
+# Contains the list of all plasa fragment files, which have a dump of the
+# public API surfaces.
+generated_file("plasa_manifest") {
+  visibility += [ "//sdk/ctf/plasa:*" ]
+  testonly = true
+  data_keys = [ "plasa" ]
+  outputs = [ "$root_build_dir/manifest.plasa.json" ]
+  output_conversion = "json"
+  deps = _all_idk_atoms_affecting_compatibility
+}
+
+# Generates, validates, and archive the "final" IDK, including prebuilt binaries
+# for several target_cpu architectures and API levels.
+group("final_fuchsia_idk") {
+  visibility = []
+  visibility = [
+    "//:ninja_subbuilds",
+    "//:sdk_archives",
+  ]
+  deps = [
+    ":final_fuchsia_idk.archive",
+    ":final_fuchsia_idk.exported",
+    ":final_fuchsia_idk.validation",
+  ]
+  testonly = true
+}
+
+# This targets generates a "final" IDK archive, including prebuilt binaries for
+# several target_cpu architectures.
+idk("final_fuchsia_idk.exported") {
+  visibility = []
+  visibility = [
+    ":final_fuchsia_idk",
+    ":final_fuchsia_idk.archive",
+    ":final_fuchsia_idk.archive.tarmaker",
+    ":final_fuchsia_idk_bazel_sdk_tests_arm64",
+    ":final_fuchsia_idk_bazel_sdk_tests_riscv64",
+    ":final_fuchsia_idk_bazel_sdk_tests_x64",
+    ":final_fuchsia_idk_manifest_golden",
+    ":final_fuchsia_sdk",
+  ]
+  output_name = "fuchsia_idk"
+  sdk_collection_label = "//sdk:core"
+  idk_subbuilds_label = "//sdk:core_idk_subbuilds"
+  idk_subbuilds_prefix = "idk_subbuild.core_for_subbuilds"
+  target_cpus = idk_target_cpus
+  api_levels = platform_version.idk_buildable_api_levels
+
+  # TODO(https://fxbug.dev/306723826): Deal with the fact that the mac builders
+  # are too slow to enable this setting, and therefore the mac IDK won't have
+  # per-api-level prebuilts.
+  if (host_os == "mac") {
+    api_levels = []
+  }
+}
+
+idk_archive("final_fuchsia_idk.archive") {
+  visibility += [ "*" ]
+  idk = ":final_fuchsia_idk.exported"
+  idk_output_name = "fuchsia_idk"
+}
+
+group("final_fuchsia_idk.validation") {
+  deps = []
+  if (host_os == "linux") {
+    deps += [
+      # Not everything builds on the mac builders, so not everything shows up in
+      # the golden files.
+      #
+      # TODO(https://fxbug.dev/306723826): Deal with the fact that the mac
+      # builders are inconsistent.
+      ":final_fuchsia_idk_manifest_golden",
+
+      # Run the Bazel SDK test suite against the final exported directory,
+      # TODO(https://fxbug.dev/42075205): Make the Bazel SDK test suite runnable on MacOS!
+      ":final_fuchsia_idk_bazel_sdk_tests",
+    ]
+  }
+  testonly = true
+}
+
+# This target runs the test suite against each target architecture
+# supported by the IDK. Currently, this runs multiple instances of
+# the test suite, one per target cpu. This is a dependency of
+# //sdk:final_fuchsia_idk.validation.
+run_fuchsia_bazel_sdk_tests("final_fuchsia_idk_bazel_sdk_tests") {
+  target_cpus = idk_target_cpus
+  idk_exported_path = "$root_build_dir/sdk/exported/fuchsia_idk"
+  idk_exported_target = "//sdk:final_fuchsia_idk.exported"
+}
+
+# This target generate a Fuchsia Bazel SDK directory directly
+# from the content of the Core IDK. This requires a working Bazel
+# workspace, but its output does not depend on the content of the
+# @fuchsia_sdk repository used by the platform build.
+#
+generate_fuchsia_bazel_sdk("final_fuchsia_sdk") {
+  idk_export_target = "//sdk:final_fuchsia_idk.exported"
+  idk_export_dir = "$root_build_dir/sdk/exported/fuchsia_idk"
+  use_rules_fuchsia = true
+}
+
+# Verify the content of the final_fuchsia_sdk target by running
+# the Bazel SDK test suite with it for all supported target cpus.
+run_fuchsia_bazel_sdk_tests("final_fuchsia_sdk_tests") {
+  target_cpus = idk_target_cpus
+  fuchsia_sdk_target = ":final_fuchsia_sdk"
+
+  # NOTE: For now, nothing should depend on the :final_fuchsia_sdk_test
+  # target, except //:root_targets. This ensures the target is always
+  # defined in the GN graph, but can only be built explicitly.
+  visibility = []
+  visibility = [ "//:root_targets" ]
+}
+
+sdk_final_manifest_golden("final_fuchsia_idk_manifest_golden") {
+  golden = "manifests/fuchsia_idk.manifest"
+  idk_name = "fuchsia_idk"
+  idk_exported_label = ":final_fuchsia_idk.exported"
+}
+
+if (!is_host) {
+  sdk_molecule("atoms_for_all_builds") {
+    category = "partner"
+
+    # Successfully building at each API level, including PLATFORM, is the test.
+    non_sdk_deps = [ "//zircon/system:availability_test" ]
+  }
+
+  # The collection that is built by sub-builds. The final IDK uses sub-builds
+  # for each CPU architecture at all supported API levels and at "PLATFORM"
+  # for CPU architectures other than the target CPU.
+  # This target will also be built in the main build at "PLATFORM" for the
+  # target CPU because the sub-build rule depends on it as a way to trigger
+  # sub-builds to rebuild when needed.
+  sdk_collection("core_for_subbuilds") {
+    visibility = []
+    visibility = [
+      ":*",  # Required for ":core_idk_subbuilds-*".
+      "//:build_only",
+    ]
+
+    category = "partner"
+    id = sdk_id
+
+    # Use the name of the main IDK in paths as required to merge the sub-builds.
+    name = "core"
+    if (!sdk_inside_sub_build) {
+      # The main build builds the "core" collection and, as described above,
+      # this collection. Since some output files are based on the name
+      # rather than the target name, some paths could collide. To avoid this,
+      # add a suffix. This is acceptable because the output from this build is
+      # not actually used for anything.
+      name += "_for_subbuild_deps"
+    }
+
+    deps = [
+      # Don't add other sdk_molecules here. Add them to the molecule below.
+      ":fuchsia_idk_atoms_produced_by_subbuilds",
+    ]
+  }
+
+  # All atoms to be produced by the sub-builds for inclusion in the IDK.
+  #
+  # Due to limitations of the build system at the GN/Bazel boundary, this
+  # cannot contain testonly atoms. See https://fxbug.dev/42070088.
+  # Libraries and packages for use in tests absolutely belong in the IDK, but
+  # the `testonly` attribute must be removed before they can be added.
+  sdk_molecule("fuchsia_idk_atoms_produced_by_subbuilds") {
+    category = "partner"
+    if (current_build_target_api_level == "PLATFORM") {
+      deps = [ ":fuchsia_idk_atoms_built_only_at_platform_for_each_cpu_arch" ]
+      if (!sdk_inside_sub_build) {
+        # The collection will be built by the main build before running the
+        # sub-builds as described in the collection's comment. To ensure that
+        # dependency check is accurate, ensure this molecule depends on all
+        # targets that may be in a sub-build.
+        # TODO(https://fxbug.dev/347094435): Address the core_packages deps
+        # issue and uncomment this line.
+        # deps += [ ":fuchsia_idk_atoms_for_each_api_level" ]
+      }
+    } else {
+      deps = [ ":fuchsia_idk_atoms_for_each_api_level" ]
+    }
+  }
+
+  # Prebuilt libraries and packages that are built exclusively for the API
+  # levels that SDK users can target (not "PLATFORM").
+  # Note: This target can be built at "PLATFORM" as required by the sub-build
+  # infrastructure.
+  sdk_molecule("fuchsia_idk_atoms_for_each_api_level") {
+    category = "partner"
+    deps = [
+      ":atoms_for_all_builds",
+      ":core_cc_prebuilt_libraries",
+      ":core_packages",
+      ":core_sysroot",
+    ]
+  }
+
+  if (current_build_target_api_level == "PLATFORM" ||
+      # Handle core.x64-sdk_source_sets_and_shlibs-apiXX-build_only builders.
+      # TODO(https://fxbug.dev/42082833): Remove this.
+      override_target_api_level != false) {
+    # These rules are processed at least once for the primary target CPU,
+    # which may not match the host_cpu. They may also be processed for
+    # additional CPU architectures when building the IDK.
+    sdk_molecule("fuchsia_idk_atoms_built_only_at_platform_for_each_cpu_arch") {
+      category = "partner"
+
+      deps = [
+        ":atoms_for_all_builds",
+
+        # Do not add to this list. Instead, add new items to
+        # :fuchsia_idk_atoms_independent_of_api_level_for_one_cpu_arch,
+        # which verifies there are no API level dependencies.
+
+        # Atoms in :fuchsia_idk_atoms_for_each_api_level that currently must
+        # also be built at "PLATFORM" for backwards compatibility with IDK users
+        # that do not yet know about per-API-level prebuilts.
+        #
+        # TODO(https://fxbug.dev/310006516): Remove these once all IDK users are
+        # using the per-API-level artifacts.
+        # For the sysroot, Bazel needs to support the per-level sysroot first -
+        # see https://fxbug.dev/385408047.
+        ":core_cc_prebuilt_libraries",
+        ":core_sysroot",
+      ]
+    }
+
+    # The rules below only need to be processed once, during the main build.
+    # Since sub-builds change the `target_cpu`, this cannot be used as
+    # a condition. While, `host_cpu` does not change in sub-builds, using that
+    # would require extra processing and building when it does not match the
+    # primary target CPU. Therefore, use `sdk_inside_sub_build`.
+    # TODO(https://fxbug.dev/310006516): Once this and
+    # https://fxbug.dev/327223536 are addressed sub-builds will never target
+    # "PLATFORM" and this logic and GN variable can be removed.
+    if (!sdk_inside_sub_build) {
+      # The collection for the partner IDK.
+      # Only built in the main build at "PLATFORM" for the target CPU.
+      # Sub-builds build ":core_for_subbuilds" for this same collection.
+      sdk_collection("core") {
+        visibility = []
+        visibility = [
+          ":bazel_in_tree_idk",
+          ":exported_idk_for_ffx_tests",
+          ":final_fuchsia_idk.exported",
+          ":generate_compatibility_goldens",
+          ":plasa_manifest",
+          ":sdk",
+          ":sdk_source_set_list",
+          "//:bazel_workspace",
+          "//release/bazel/licenses:all_bazel_inputs",
+        ]
+
+        category = "partner"
+        id = sdk_id
+
+        deps = [
+          # Don't add other sdk_molecules here. Add them to the molecule below.
+          ":fuchsia_idk_atoms_produced_by_main_platform_build",
+        ]
+      }
+
+      idk_subbuilds("core_idk_subbuilds") {
+        visibility = []
+        visibility = [
+          ":bazel_in_tree_idk",
+          ":final_fuchsia_idk.exported",
+        ]
+
+        sdk_collection_label = ":core_for_subbuilds"
+        subbuild_prefix = "idk_subbuild.core_for_subbuilds"
+
+        # Use the same name as the collection so paths match up.
+        sdk_collection_name = "core"
+      }
+
+      # All atoms to be produced by the main build for inclusion in the IDK.
+      #
+      # Due to limitations of the build system at the GN/Bazel boundary, this
+      # cannot contain testonly atoms. See https://fxbug.dev/42070088.
+      # Libraries and packages for use in tests absolutely belong in the IDK, but
+      # the `testonly` attribute must be removed before they can be added.
+      sdk_molecule("fuchsia_idk_atoms_produced_by_main_platform_build") {
+        category = "partner"
+        deps = [
+          ":fuchsia_idk_atoms_built_in_main_platform_build_only",
+          ":fuchsia_idk_atoms_built_only_at_platform_for_each_cpu_arch",
+        ]
+      }
+
+      sdk_molecule("fuchsia_idk_atoms_built_in_main_platform_build_only") {
+        # This molecule is a subset of the target above for organization only
+        # and should thus not be used elsewhere.
+        visibility = []
+        visibility = [
+          ":fuchsia_idk_atoms_produced_by_main_platform_build.manifest",
+
+          # Dependencies related to template sub-targets.
+          ":fuchsia_idk_atoms_built_in_main_platform_build_only",
+          ":fuchsia_idk_atoms_built_in_main_platform_build_only.validate",
+        ]
+        category = "partner"
+        deps = [
+          ":fuchsia_idk_atoms_built_only_at_platform_for_one_cpu_arch",
+          ":fuchsia_idk_atoms_independent_of_api_level_for_one_cpu_arch",
+
+          # IDK atoms that are host tools. They must currently support all
+          # Supported API levels and thus only need to be built once.
+          # TODO(https://fxbug.dev/349889250): Move host tools to
+          # :fuchsia_idk_atoms_at_platform_for_host_cpu_arch_only and/or
+          # :fuchsia_idk_atoms_for_each_api_level as appropriate.
+          ":host_tools_for_configured_host_cpus",
+
+          # These host tests are (currently) unversioned and only need to be
+          # built once.
+          # TODO(https://fxbug.dev/330373943): Move once tests are versioned.
+          ":fuchsia_idk_atoms_host_tests",
+        ]
+      }
+
+      # Do not add dependencies to this target without a really good reason.
+      # Most such dependencies should be verifiably independent of the API level
+      # and (not verifiable) CPU architecture (add to
+      # :fuchsia_idk_atoms_independent_of_api_level_for_one_cpu_arch).
+      #
+      # IDK atoms that must be built at "PLATFORM" but only once (for one CPU
+      # architecture).
+      # The resulting artifacts should be independent of the CPU architecture,
+      # though that cannot be enforced.
+      sdk_molecule(
+          "fuchsia_idk_atoms_built_only_at_platform_for_one_cpu_arch") {
+        category = "partner"
+
+        deps = [
+          # This target contains atoms that depend on FIDL libraries, but it
+          # does not build the underlying libraries.
+          ":core_cc_source_libraries",
+
+          # This target compiles the FIDL files, but the output used in the IDK
+          # is not specific to any API level or CPU architecture.
+          "//sdk/fidl",
+
+          # Some generated documentation depends on FIDL and thus cannot be in
+          # :fuchsia_idk_atoms_independent_of_api_level_and_target_cpu_arch.
+          "//tools/docsgen:ref_docs_sdk",
+        ]
+      }
+
+      # IDK atoms that are independent of a specific API level and only need to
+      # be built once (for one CPU architecture).
+      # The former is enforced (as much as practical) by an assert_no_deps.
+      # The resulting artifacts should be independent of the CPU architecture,
+      # though that cannot be enforced. The target CPU architecture is used.
+      sdk_molecule(
+          "fuchsia_idk_atoms_independent_of_api_level_for_one_cpu_arch") {
+        category = "partner"
+
+        # The following serve as a proxy for the building of FIDL files. A
+        # dependency on these suggests that there is a dependency on FIDL
+        # interface(s), which would likely mean that the code must be built at
+        # each API level and should be in a different molecule.
+        assert_no_deps = [
+          "//tools/fidl/fidl_api_diff:host",
+          "//tools/fidl/fidl_api_summarize:fidl_api_summarize($host_toolchain)",
+          "//tools/fidl/fidlc:fidl-lint.host",
+        ]
+
+        deps = [
+          ":core_bindlib",
+          ":core_data",
+          ":core_licenses",
+          ":version_history_sdk($default_toolchain)",
+          "//sdk/docs",
+        ]
+        if (!smos_minimal_assembly) {
+          deps += [ ":core_dart_library" ]
+        }
+      }
+    }  # end if (!sdk_inside_sub_build)
+  }  # end if (current_build_target_api_level == "PLATFORM")
+
+  # Builds the appropriate atoms depending on the build type - main build,
+  # CPU arch sub-build, and API level sub-build.
+  # It selects the deps of "core" or "core_for_subbuilds" as appropriate.
+  # This is only used by vendor repos, which do not have a separate collection
+  # for sub-builds and depend on this (indirectly) from their collection.
+  #
+  # Due to limitations of the build system at the GN/Bazel boundary, this cannot
+  # contain testonly atoms. See https://fxbug.dev/42070088.
+  # Libraries and packages for use in tests absolutely belong in the IDK, but
+  # the `testonly` attribute must be removed before they can be added.
+  sdk_molecule("fuchsia_idk_atoms") {
+    visibility = []
+    visibility += [
+      "//vendor/*",
+
+      # Dependencies related to template sub-targets.
+      ":fuchsia_idk_atoms",
+      ":fuchsia_idk_atoms.validate",
+    ]
+
+    category = "partner"
+
+    if (!sdk_inside_sub_build) {
+      assert(
+          current_build_target_api_level == "PLATFORM" ||
+          # Handle core.x64-sdk_source_sets_and_shlibs-apiXX-build_only builders.
+          # TODO(https://fxbug.dev/42082833): Remove this.
+          override_target_api_level != false)
+      deps = [ ":fuchsia_idk_atoms_produced_by_main_platform_build" ]
+    } else {
+      deps = [ ":fuchsia_idk_atoms_produced_by_subbuilds" ]
+    }
+  }
+}  # end if (!is_host)
+
+sdk_molecule("fuchsia_idk_atoms_host_tests") {
+  category = "partner"
+  deps = [ ":core_experimental_python_e2e_tests" ]
+}
+
+group("tests_no_e2e") {
+  visibility += [ "*" ]
+  testonly = true
+  assert_no_deps = e2e_test_libs
+
+  deps = [
+    "//sdk/categories:tests",
+    "//sdk/ctf/plasa:tests",
+    "//sdk/fidl:tests",
+    "//sdk/lib:tests",
+    "//sdk/rust:tests",
+    "//tools/fidl/abi-compat:check-compatibility",
+  ]
+}
+
+group("tests") {
+  visibility += [ "*" ]
+  testonly = true
+
+  deps = [
+    ":tests_no_e2e",
+
+    # `testing:tests` contains unit tests for sl4f, which depend on sl4f so it
+    # can't live inside `test_no_e2e`.
+    "//sdk/testing:tests",
+  ]
+}
+
+# Version history does not differ by toolchain.
+if (current_toolchain == default_toolchain) {
+  sdk_version_history("version_history") {
+    visibility += [ "*" ]
+    id = "sdk://version_history"
+    category = "partner"
+    source = "version_history.json"
+  }
+}
+
+# License/rights related information for the SDK.
+sdk_documentation("open_source") {
+  name = "open_source"
+
+  category = "partner"
+
+  files = []
+  foreach(file,
+          [
+            "AUTHORS",
+            "LICENSE",
+            "PATENTS",
+          ]) {
+    files += [
+      {
+        source = "//$file"
+        dest = file
+      },
+    ]
+  }
+}
+
+# Licensing information for the 'libc'-style musl library.
+sdk_documentation("musl_license") {
+  name = "musl_license"
+
+  category = "partner"
+
+  files = [
+    {
+      source = "//zircon/third_party/ulib/musl/COPYRIGHT"
+      dest = "COPYRIGHT.musl"
+    },
+  ]
+}
+
+# Build this target to generate a NOTICE file for the SDK.
+# Uncomment the next line, build it, then manually copy the output
+# to "//tools/check-licenses/assets/sdk/NOTICE.fuchsia"
+# TODO(https://fxbug.dev/42053181): Build the NOTICE file automatically during SDK generation.
+#
+#license_data("sdk_notice_gen") {
+#  target = "//sdk"
+#}
+
+# Notice file for all contents in the Fuchsia SDK.
+# TODO(https://fxbug.dev/42053181): Replace this with individual notices for each SDK element.
+sdk_documentation("sdk_notice") {
+  name = "sdk_notice"
+
+  category = "partner"
+
+  files = [
+    {
+      source = "//tools/check-licenses/assets/sdk/NOTICE.fuchsia"
+      dest = "NOTICE.fuchsia"
+    },
+  ]
+}
+
+# A tiny SDK collection used to export the content of the Zircon sysroot
+# This is only needed because several other parts of the Fuchsia build
+# depend on $OUTPUT_DIR/sdk/exported/zircon_sysroot/ to be available
+# and properly populated, see [1] for all details. Also, some third-party repos
+# build or reference building this rule [2].
+#
+# Note that //zircon/public/sysroot/sdk:sysroot_sdk is already
+# a transitive dependency of //sdk:core, so using the content of
+# $OUTPUT_DIR/sdk/exported/core/ would be equivalent, except that
+# this directory is much longer to build (since it contains host tools).
+#
+# [1] https://cs.opensource.google/search?q=zircon_sysroot&ss=fuchsia%2Ffuchsia
+# [2] https://cs.opensource.google/search?q=%22sdk:zircon_sysroot%22&ss=fuchsia%2Ffuchsia
+sdk_collection("zircon_sysroot") {
+  # This collection is not included in any SDK and could be a standard `group()`
+  # except that there are shell scripts that expect
+  # `$OUTPUT_DIR/sdk/exported/zircon_sysroot/` to be populated,
+  # TODO(https://fxbug.dev/331962496): Find a solution that doesn't depend on
+  # sdk_* templates.
+  category = "internal"
+
+  deps = [ "//zircon/public/sysroot/sdk:sysroot_sdk" ]
+}
+
+if (is_host) {
+  # Tools and data used on a host development machine (usually Linux or macOS).
+  sdk_molecule("host_tools_for_single_toolchain") {
+    visibility += [ "//tools/docsgen:invoke_clidoc" ]
+    category = "partner"
+    deps = [ ":build_host_tools" ]
+    if (!smos_minimal_assembly) {
+      deps += [
+        ":non_build_host_tools",
+        ":non_build_host_tools_required_by_bazel_sdk",
+      ]
+    }
+  }
+
+  # Tools and data used on a host development machine to interact with a
+  # target device running Fuchsia. These are not needed to build the IDK or SDK.
+  # Some tools may depend on tools in peer molecules.
+  sdk_molecule("non_build_host_tools") {
+    category = "partner"
+    if (smos_minimal_assembly) {
+      # SMOS has no target-interaction SDK tools.
+      deps = []
+    } else {
+      deps = [
+        "//userspace/developer/debug/zxdb:zxdb_sdk",
+        "//userspace/developer/ffx/plugins/agis:sdk",
+        "//userspace/developer/ffx/plugins/audio:sdk",
+        "//userspace/developer/ffx/plugins/component:sdk",
+        "//userspace/developer/ffx/plugins/coverage:sdk",
+        "//userspace/developer/ffx/plugins/debug:sdk",
+        "//userspace/developer/ffx/plugins/emulator:sdk",
+        "//userspace/developer/ffx/plugins/fuzz:sdk",
+        "//userspace/developer/ffx/plugins/inspect:sdk",
+        "//userspace/developer/ffx/plugins/log:sdk",
+        "//userspace/developer/ffx/plugins/process:sdk",
+        "//userspace/developer/ffx/plugins/profile:sdk",
+        "//userspace/developer/ffx/plugins/repository:sdk",
+        "//userspace/developer/ffx/plugins/session:sdk",
+        "//userspace/developer/ffx/plugins/setui:sdk",
+        "//userspace/developer/ffx/plugins/trace:sdk",
+        "//userspace/developer/ffx/plugins/wlan:sdk",
+        "//userspace/developer/ffx/tools/starnix:sdk",
+        "//userspace/performance/trace2json:bin_sdk",
+        "//userspace/sys/pkg/bin/far:bin_sdk",
+        "//userspace/sys/pkg/testing/fake-omaha-client:bin_sdk",
+        "//tools/fidlcat:fidlcat_sdk",
+        "//tools/fuchsia-sdk-run:fuchsia-sdk-run_sdk",
+        "//tools/net/device-finder:device-finder_sdk",
+
+        # TODO(https://fxbug.dev/42177692): Remove these once the emulators are available independently.
+        "//userspace/developer/ffx/plugins/emulator:crosvm_internal",
+        "//userspace/developer/ffx/plugins/emulator:qemu_internal",
+        "//userspace/developer/ffx/plugins/emulator:uefi_internal_arm64",
+        "//userspace/developer/ffx/plugins/emulator:uefi_internal_x64",
+      ]
+    }
+  }
+
+  # Tools on which the Bazel SDK's `fuchsia_toolchain_info` explicitly depends.
+  # At least some of these should not be needed by the in-tree SDK build and
+  # should be moved to "non_build_host_tools". See https://fxbug.dev/395968221.
+  sdk_molecule("non_build_host_tools_required_by_bazel_sdk") {
+    category = "partner"
+    deps = [
+      "//release/assembly/tools/generate_config:generate_config_sdk",
+      "//userspace/developer/ffx:bin_sdk",
+      "//userspace/developer/ffx/plugins/driver:sdk",
+      "//userspace/developer/ffx/plugins/emulator:aemu_internal",
+      "//userspace/developer/ffx/plugins/product:sdk",
+      "//userspace/developer/ffx/plugins/test:sdk",
+      "//tools/bootserver_old:bootserver_sdk",
+      "//tools/funnel:funnel_sdk",
+      "//tools/sdk-tools/fssh:fssh_sdk",
+      "//tools/symbolizer:sdk",
+      "//zircon/tools/merkleroot:merkleroot_sdk",
+    ]
+  }
+
+  # Tools and data used on a host development machine to build software to run
+  # on Fuchsia.
+  sdk_molecule("build_host_tools") {
+    category = "partner"
+    deps = [
+      "//userspace/developer/ffx/plugins/assembly:sdk",
+      "//userspace/developer/ffx/plugins/package:sdk",
+      "//userspace/developer/ffx/plugins/scrutiny:sdk",
+      "//userspace/starnix/tools/gen_android_starnix_container:gen_android_starnix_container_sdk",
+      "//userspace/storage/bin/fvm:fvm_sdk",
+      "//userspace/storage/blobfs/tools:blobfs_sdk",
+      "//userspace/storage/minfs/tools:minfs_sdk",
+      "//userspace/storage/tools/blobfs-compression:blobfs-compression_sdk",
+      "//tools/bindc:bindc_sdk",
+      "//tools/cmc:cmc_sdk",
+      "//tools/configc:configc_sdk",
+      "//tools/fidl/fidlc:fidl-format_sdk",
+      "//tools/fidl/fidlc:fidlc_sdk",
+      "//tools/fidl/fidlgen_cpp:fidlgen_cpp_sdk",
+      "//tools/fidl/fidlgen_hlcpp:fidlgen_hlcpp_sdk",
+      "//tools/fidl/fidlgen_rust:fidlgen_rust_sdk",
+      "//zircon/tools/zbi:zbi_sdk",
+    ]
+  }
+} else {
+  # Contains :host_tools_for_single_toolchain for all host toolchains that this
+  # build is configured to include. Always includes host tools for
+  # `host_toolchain`, and includes host tools for other host toolchains when
+  # `sdk_cross_compile_host_tools` is true.
+  sdk_molecule("host_tools_for_configured_host_cpus") {
+    category = "partner"
+
+    _toolchains = []
+    if (host_os == "linux" && sdk_cross_compile_host_tools) {
+      _required_target_cpus = [
+        "x64",
+        "arm64",
+      ]
+      _skipped_target_cpus = idk_target_cpus_default - idk_target_cpus
+      assert(
+          _skipped_target_cpus == _skipped_target_cpus + _required_target_cpus -
+                                      _required_target_cpus,
+          "`idk_target_cpus` must include all CPUs for which host tools are being cross-compiled: ${idk_target_cpus} vs. ${_required_target_cpus}")
+      _toolchains += [
+        host_x64_toolchain,
+        host_arm64_toolchain,
+      ]
+    } else {
+      _toolchains = [ host_toolchain ]
+    }
+
+    deps = []
+    foreach(toolchain, _toolchains) {
+      deps += [ ":host_tools_for_single_toolchain($toolchain)" ]
+    }
+  }
+}  # end if (is_host)
+
+sdk_molecule("core_bindlib") {
+  category = "partner"
+  deps = [
+    "//userspace/devices/bind/fuchsia:fuchsia_sdk",
+    "//userspace/devices/bind/fuchsia.acpi:fuchsia.acpi_sdk",
+    "//userspace/devices/bind/fuchsia.adc:fuchsia.adc_sdk",
+    "//userspace/devices/bind/fuchsia.amlogic.platform:fuchsia.amlogic.platform_sdk",
+    "//userspace/devices/bind/fuchsia.amlogic.platform.a311d:fuchsia.amlogic.platform.a311d_sdk",
+    "//userspace/devices/bind/fuchsia.amlogic.platform.meson:fuchsia.amlogic.platform.meson_sdk",
+    "//userspace/devices/bind/fuchsia.arm.platform:fuchsia.arm.platform_sdk",
+    "//userspace/devices/bind/fuchsia.block:fuchsia.block_sdk",
+    "//userspace/devices/bind/fuchsia.broadcom.platform:fuchsia.broadcom.platform_sdk",
+    "//userspace/devices/bind/fuchsia.broadcom.platform.sdio:fuchsia.broadcom.platform.sdio_sdk",
+    "//userspace/devices/bind/fuchsia.clock:fuchsia.clock_sdk",
+    "//userspace/devices/bind/fuchsia.designware.platform:fuchsia.designware.platform_sdk",
+    "//userspace/devices/bind/fuchsia.devicetree:fuchsia.devicetree_sdk",
+    "//userspace/devices/bind/fuchsia.ethernet:fuchsia.ethernet_sdk",
+    "//userspace/devices/bind/fuchsia.focaltech.platform:fuchsia.focaltech.platform_sdk",
+    "//userspace/devices/bind/fuchsia.google.platform:fuchsia.google.platform_sdk",
+    "//userspace/devices/bind/fuchsia.gpio:fuchsia.gpio_sdk",
+    "//userspace/devices/bind/fuchsia.i2c:fuchsia.i2c_sdk",
+    "//userspace/devices/bind/fuchsia.khadas.platform:fuchsia.khadas.platform_sdk",
+    "//userspace/devices/bind/fuchsia.mailbox:fuchsia.mailbox_sdk",
+    "//userspace/devices/bind/fuchsia.nxp.platform:fuchsia.nxp.platform_sdk",
+    "//userspace/devices/bind/fuchsia.pci:fuchsia.pci_sdk",
+    "//userspace/devices/bind/fuchsia.platform:fuchsia.platform_sdk",
+    "//userspace/devices/bind/fuchsia.power:fuchsia.power_sdk",
+    "//userspace/devices/bind/fuchsia.pwm:fuchsia.pwm_sdk",
+    "//userspace/devices/bind/fuchsia.realtek.platform:fuchsia.realtek.platform_sdk",
+    "//userspace/devices/bind/fuchsia.register:fuchsia.register_sdk",
+    "//userspace/devices/bind/fuchsia.regulator:fuchsia.regulator_sdk",
+    "//userspace/devices/bind/fuchsia.sdio:fuchsia.sdio_sdk",
+    "//userspace/devices/bind/fuchsia.sdmmc:fuchsia.sdmmc_sdk",
+    "//userspace/devices/bind/fuchsia.serial:fuchsia.serial_sdk",
+    "//userspace/devices/bind/fuchsia.spmi:fuchsia.spmi_sdk",
+    "//userspace/devices/bind/fuchsia.sysmem:fuchsia.sysmem_sdk",
+    "//userspace/devices/bind/fuchsia.test:fuchsia.test_sdk",
+    "//userspace/devices/bind/fuchsia.test.platform:fuchsia.test.platform_sdk",
+    "//userspace/devices/bind/fuchsia.ti.platform:fuchsia.ti.platform_sdk",
+    "//userspace/devices/bind/fuchsia.usb.phy:fuchsia.usb.phy_sdk",
+    "//userspace/devices/bind/fuchsia.verisilicon.platform:fuchsia.verisilicon.platform_sdk",
+  ]
+}
+
+sdk_molecule("core_packages") {
+  category = "partner"
+  deps = [
+    "//userspace/developer/build_info/testing:fake-build-info-sdk",
+    "//userspace/lib/fuchsia-component-test/realm_builder_server:realm_builder_server_sdk",
+    "//userspace/performance/memory/heapdump/collector:collector_sdk",
+    "//userspace/testing/fidl/intl_property_manager:intl_property_manager_sdk",
+  ]
+}
+
+sdk_molecule("core_data") {
+  category = "partner"
+  deps = [
+    # TODO(ddorwin): Rename these to make it clear that they are data (e.g., _shards).
+    "//sdk/lib/driver_component:driver_component",
+    "//sdk/lib/heapdump_instrumentation:heapdump_instrumentation_shard",
+    "//sdk/lib/inspect/shards:inspect_sdk",
+    "//sdk/lib/sys/component:realm_builder_shard_sdk",
+    "//sdk/lib/syslog/shards:syslog_sdk",
+    "//userspace/developer/ffx/lib/symbol-index:symbol-index-sdk",
+  ]
+}
+
+if (!smos_minimal_assembly) {
+  sdk_molecule("core_dart_library") {
+    category = "partner"
+    deps = [ "//sdk/testing/sl4f/client:client_sdk($dart_toolchain)" ]
+  }
+}
+
+sdk_molecule("core_experimental_python_e2e_tests") {
+  category = "partner"
+  if (!smos_boot_build && host_os == "linux") {
+    deps = [
+      "//userspace/tests/end_to_end/rtc:rtc_conformance_test_sdk($host_toolchain)",
+    ]
+  }
+}
+
+# C/C++ code that must be provided as prebuilt libraries for each supported API
+# level. Must export symbols with C linkage.
+sdk_molecule("core_cc_prebuilt_libraries") {
+  category = "partner"
+  deps = [
+    "//sdk/lib/async-default:async-default_sdk",
+    "//sdk/lib/async-loop:async-loop-default_sdk",
+    "//sdk/lib/fdio:fdio_sdk",
+    "//sdk/lib/svc:svc_sdk",
+    "//sdk/lib/vfs/internal:vfs_internal_sdk",
+    "//userspace/devices/bin/driver_runtime:driver_runtime_sdk",
+    "//userspace/performance/memory/heapdump/instrumentation:instrumentation_sdk",
+    "//zircon/system/ulib/sync:sync_sdk",
+    "//zircon/system/ulib/syslog:syslog_sdk",
+    "//zircon/system/ulib/trace-engine:trace-engine_sdk",
+    "//zircon/system/ulib/trace-provider:trace-provider-so_sdk",
+    "//zircon/system/ulib/trace-vthread:trace-vthread_sdk",
+  ]
+}
+
+# C/C++ code that is provided as source in the SDK.
+# Prefer providing source code if all dependencies are available in the SDK.
+# All source files must be buildable at each supported API level.
+# There is currently not mechanism to ensure this, even at "PLATFORM" because
+# it does not cause the source files to be compiled. It only generates the SDK
+# atoms
+# TODO(https://fxbug.dev/42083950): Ensure the libraries build and are
+# complete at all API levels.
+sdk_molecule("core_cc_source_libraries") {
+  category = "partner"
+  deps = [
+    "//sdk/lib/async:async-cpp_sdk",
+    "//sdk/lib/async:async_sdk",
+    "//sdk/lib/async-loop:async-loop-cpp_sdk",
+    "//sdk/lib/async-loop:async-loop_sdk",
+    "//sdk/lib/async-loop-testing/cpp:cpp_sdk",
+    "//sdk/lib/async-testing:async-testing_sdk",
+    "//sdk/lib/async_patterns/cpp:cpp_sdk",
+    "//sdk/lib/async_patterns/testing/cpp:cpp_sdk",
+    "//sdk/lib/component/incoming/cpp:cpp_sdk",
+    "//sdk/lib/component/outgoing/cpp:cpp_sdk",
+    "//sdk/lib/driver/component/cpp:cpp_sdk",
+    "//sdk/lib/driver/devfs/cpp:cpp_sdk",
+    "//sdk/lib/driver/fake-bti/cpp:cpp_sdk",
+    "//sdk/lib/driver/fake-mmio-reg/cpp:cpp_sdk",
+    "//sdk/lib/driver/fake-object/cpp:cpp_sdk",
+    "//sdk/lib/driver/fake-platform-device/cpp:cpp_sdk",
+    "//sdk/lib/driver/metadata/cpp:cpp_sdk",
+    "//sdk/lib/driver/platform-device/cpp:cpp_sdk",
+    "//sdk/lib/driver/power/cpp:cpp_sdk",
+    "//sdk/lib/driver/testing/cpp:cpp_sdk",
+    "//sdk/lib/driver/testing/cpp:scoped_global_logger_sdk",
+    "//sdk/lib/fidl/cpp:cpp_sdk",
+    "//sdk/lib/fidl/cpp:hlcpp_conversion_sdk",
+    "//sdk/lib/fidl/cpp:natural_ostream_sdk",
+    "//sdk/lib/fidl/cpp/wire:wire_sdk",
+    "//sdk/lib/fidl/hlcpp:hlcpp_sdk",
+    "//sdk/lib/fidl_driver:fidl_driver_natural_sdk",
+    "//sdk/lib/fidl_driver:fidl_driver_sdk",
+    "//sdk/lib/fit-promise:fit-promise_sdk",
+    "//sdk/lib/input_report_reader:input_report_reader_sdk",
+    "//sdk/lib/inspect/component/cpp:cpp_sdk",
+    "//sdk/lib/stdcompat:stdcompat_sdk",
+    "//sdk/lib/sys/component/cpp/testing:cpp_library_sdk",
+    "//sdk/lib/sys/cpp:cpp_sdk",
+    "//sdk/lib/sys/cpp/testing:cpp_sdk",
+    "//sdk/lib/sys/testing:testing_sdk",
+    "//sdk/lib/syslog/cpp:cpp_sdk",
+    "//sdk/lib/syslog/structured_backend:structured_backend_sdk",
+    "//sdk/lib/trace",
+    "//sdk/lib/vfs/cpp:cpp_sdk",
+    "//sdk/lib/zbi-format:zbi-format_sdk",
+    "//userspace/devices/lib/mmio:mmio_sdk",
+    "//userspace/lib/memory_barriers:memory_barriers_sdk",
+    "//zircon/system/ulib/hwreg:hwreg_public_sdk",
+    "//zircon/system/ulib/inspect:inspect_sdk",
+    "//zircon/system/ulib/trace:trace_sdk",
+  ]
+}
+
+sdk_molecule("core_sysroot") {
+  category = "partner"
+  deps = [ "//zircon/public/sysroot/sdk:sysroot_sdk" ]
+}
+
+# License/copyright files for the SDK.
+sdk_molecule("core_licenses") {
+  category = "partner"
+  deps = [
+    ":musl_license",
+    ":open_source",
+    ":sdk_notice",
+  ]
+}
+
+#
+# BEGIN @fuchsia_sdk
+#
+# The following is relevant to the Ninja-generated IDK used to
+# populate the @fuchsia_sdk repository for the in-tree Bazel
+# workspace.
+#
+# This only contains the targets necessary to generate this IDK,
+# as validation is performed in both Ninja and Bazel targets
+# defined in //release/bazel/bazel_sdk/BUILD.gn
+
+if (current_toolchain == default_toolchain) {
+  # The list of target cpu architectures supported by //sdk:bazel_in_tree_idk
+  if (bazel_fuchsia_sdk_all_cpus) {
+    _bazel_in_tree_idk_cpus = idk_target_cpus
+  } else {
+    _bazel_in_tree_idk_cpus = [ target_cpu ]
+  }
+
+  # An IDK used to expose the SDK atoms in the partner category
+  # to the in-tree Bazel workspace's `@fuchsia_sdk` repository.
+  #
+  # This exposes the same set of atoms as the `core` collection,
+  # but by default it only provides binaries for the current target_cpu
+  # architecture and the "PLATFORM" API level.
+  #
+  idk("bazel_in_tree_idk") {
+    visibility = []
+    visibility = [
+      ":bazel_in_tree_idk_tests_arm64",
+      ":bazel_in_tree_idk_tests_riscv64",
+      ":bazel_in_tree_idk_tests_x64",
+      "//:ninja_subbuilds",
+      "//release/bazel:fuchsia_in_tree_idk.hash",
+      "//release/bazel:generate_main_workspace",
+      "//release/bazel/bazel_sdk:bazel_in_tree_idk.bazel_input",
+    ]
+    output_name = "bazel_in_tree_idk"
+    sdk_collection_label = "//sdk:core"
+
+    # Ensure sub-builds are shared with the "core' IDK (https://fxbug.dev/342695881)
+    # since they use the same set of atoms, but for different sets of
+    # (target_cpu, api_level) combos.
+    idk_subbuilds_label = "//sdk:core_idk_subbuilds"
+    idk_subbuilds_prefix = "idk_subbuild.core_for_subbuilds"
+
+    target_cpus = _bazel_in_tree_idk_cpus
+
+    api_levels = []
+    if (bazel_fuchsia_sdk_all_api_levels) {
+      api_levels = platform_version.idk_buildable_api_levels
+    }
+
+    # TODO(https://fxbug.dev/306723826): Deal with the fact that the mac builders
+    # are too slow to enable this setting, and therefore the mac IDK won't have
+    # per-api-level prebuilts.
+    if (host_os == "mac") {
+      api_levels = []
+    }
+  }
+
+  # Run the Bazel SDK test suite against the content of
+  # //sdk:bazel_in_tree_idk. This is only useful for development,
+  # as the content of the @fuchsia_sdk repository, populated
+  # from the same IDK, is already checked by a different suite
+  # of tests defined under //release/bazel/bazel_sdk.
+  run_fuchsia_bazel_sdk_tests("bazel_in_tree_idk_tests") {
+    target_cpus = _bazel_in_tree_idk_cpus
+
+    idk_exported_target = "//sdk:bazel_in_tree_idk"
+    idk_exported_path = "$root_build_dir/sdk/exported/bazel_in_tree_idk"
+
+    # For now, nothing should depend on this except
+    # //:root_targets to ensure it can be launched manually
+    # with  `fx build //sdk:bazel_in_tree_idk_tests`
+    visibility = []
+    visibility = [ "//:root_targets" ]
+  }
+
+  #
+  # END @fuchsia_sdk
+
+  #
+  # BEGIN @internal_sdk
+  # DO NOT ADD anything here! This will soon be removed.
+  # See https://fxbug.dev/333907192.
+  #
+
+  # This SDK molecule is a collection of libraries only available to the in-tree
+  # Bazel build. See //sdk:bazel_internal_only
+  sdk_molecule("bazel_internal_only_libs") {
+    category = "internal"
+    deps = [
+      # When removing targets from this list, remove them from the exceptions or
+      # allowlist for the `sdk_*()` template they used.
+
+      # TODO(https://fxbug.dev/333907192): Depend on the target already in the
+      # core IDK.
+      ":version_history_sdk($default_toolchain)",
+
+      # TODO(https://fxbug.dev/343059325): Promote devicetree to "partner".
+      "//sdk/lib/driver/devicetree/manager:manager_sdk",
+      "//sdk/lib/driver/devicetree/manager:manager-test-helper_sdk",
+      "//sdk/lib/driver/devicetree/testing:board-test-helper_sdk",
+      "//sdk/lib/driver/devicetree/testing:visitor-test-helper_sdk",
+      "//sdk/lib/driver/devicetree/visitors:driver-visitor_sdk",
+      "//sdk/lib/driver/devicetree/visitors:load-visitors_sdk",
+      "//sdk/lib/driver/devicetree/visitors:registration_sdk",
+      "//sdk/lib/driver/devicetree/visitors/default:default_sdk",
+
+      # TODO(https://fxbug.dev/333907192): Promote mmio source sets to "partner".
+      "//userspace/devices/lib/mmio:test_helper_sdk",
+      "//userspace/devices/testing/fake-mmio-reg:fake-mmio-reg_sdk",
+
+      # TODO(https://fxbug.dev/366517646): Remove once all uses of `fake-bti`
+      # are migrated to the //sdk target.
+      "//userspace/devices/testing/fake-bti:fake-bti_sdk",
+
+      # TODO(https://fxbug.dev/333907192): Eliminate vendor dependencies on fzl
+      # or promote it to "partner".
+      "//zircon/system/ulib/fzl:fzl_sdk",
+    ]
+  }
+
+  # A collection of SDK atoms used to populate the @internal_sdk Bazel
+  # repository. Only used internally to expose atoms that are not ready
+  # to be moved to the partner category, but still must be visible
+  # from the Bazel graph. See https://fxbug.dev/333907192.
+  #
+  # Content are bound to change a lot.
+  # TODO(https://fxbug.dev/333907192): Remove this.
+  sdk_collection("bazel_internal_only") {
+    visibility = []
+    visibility = [ ":bazel_internal_only_idk" ]
+
+    category = "internal"
+    id = sdk_id
+
+    deps = [ ":bazel_internal_only_libs" ]
+  }
+
+  # An IDK used to expose the bazel_internal_only collection for the
+  # @internal_sdk repository of the platform build's Bazel workspace.
+  # TODO(https://fxbug.dev/333907192): Remove this.
+  idk("bazel_internal_only_idk") {
+    visibility = []
+    visibility = [
+      "//release/bazel:fuchsia_internal_only_idk.hash",
+      "//release/bazel:generate_main_workspace",
+    ]
+    output_name = "bazel_internal_only_idk"
+    sdk_collection_label = "//sdk:bazel_internal_only"
+
+    # There is no such target. This is okay because the values below ensure
+    # there are no sub-builds that would use it.
+    # Specifying a label serves to ensure no sub-builds are added because they
+    # would require that this target exist.
+    idk_subbuilds_label = "//sdk:non_existent_internal_only_idk_subbuilds"
+
+    # Only build this for the current target_cpu and the "PLATFORM" API level.
+    # This ensures no sub-builds will be launched.
+    # Any prebuilts built will only be available in the in the legacy "binaries"
+    # metadata and the arch/ directory.
+    target_cpus = [ target_cpu ]
+    api_levels = []
+  }
+
+  #
+  # END @internal_sdk
+  #
+
+  if (!sdk_inside_sub_build) {
+    # Various ffx tests depend on the "$OUT_DIR/sdk/exported/core" manifest for
+    # the location of ffx tools. They should depend on this target to abstract
+    # the dependency from details of the IDK build.
+    # TODO(https://fxbug.dev/392136182): Remove those dependencies.
+    group("exported_idk_for_ffx_tests") {
+      testonly = true
+      visibility = []
+      visibility = [
+        # Do not add to this list. See  the comment in
+        # `//userspace/developer/ffx:ffx_bin`.
+
+        "//userspace/developer/ffx/lib/e2e_emu:isolated_emulator_data",
+        "//userspace/developer/ffx/lib/fuchsia-controller/tests:core_sdk_host_test_data",
+        "//userspace/developer/ffx/lib/symbolize/tests:ffx_symbolize_lib_e2e_test_emulator_data",
+        "//userspace/developer/ffx/plugins/component/create/tests/structured_config:verify_ffx_component_create_parent_overrides_emulator_data",
+        "//userspace/developer/ffx/plugins/component/run/tests/structured_config:verify_ffx_component_run_parent_overrides_emulator_data",
+        "//userspace/developer/ffx/plugins/profile/heapdump:verify_ffx_profile_heapdump_emulator_data",
+        "//userspace/developer/ffx/plugins/target/ssh:ffx_target_ssh_e2e_tests_emulator_data",
+        "//userspace/developer/ffx/tools/power/system-activity/application-activity:ffx_power_system_activity_application_activity_e2e_tests_emulator_data",
+        "//userspace/developer/ffx/tools/target-package/tests:verify_ffx_target_package_explore_emulator_data",
+        "//tools/fuchsia-sdk-run:sdk_exported",
+        "//vendor/*",
+      ]
+
+      deps = [ ":core" ]
+    }
+  }
+}  # current_toolchain == default_toolchain
+
+if (is_host) {
+  # A collection that only contains host tools that are used by the Fuchsia
+  # build when running ffx tools via the `ffx_action()` template. This allows
+  # "ffx-assembly" to find the tools it needs via an IDK manifest just as it
+  # would when used with a real IDK.
+  sdk_collection("host_tools_used_by_ffx_action_during_build") {
+    # This (sorta) restricts the use of this group to instances of the
+    # `ffx_action()` template, which uses the group below.
+    visibility = []
+    visibility = [ "//userspace/developer/ffx/build:host_tools_used_by_ffx_action" ]
+
+    # TODO(https://fxbug.dev/317385989): Find a solution that doesn't depend on
+    # sdk_* templates.
+    category = "internal"
+
+    id = sdk_id
+
+    # This is a collection of host tools that are used _by_ ffx itself to
+    # perform actions within the build.  As such, it CANNOT have a dependency
+    # the main ffx binary, or any of the subtools, or it will cause all
+    # ffx_action()'s using subtools to be dependent on the compilation of the
+    # main ffx binary (and/or all subtools), adding minutes to any incremental
+    # build of an ffx subtool.
+    assert_no_deps = [
+      "//userspace/developer/ffx:bin_sdk",
+      "//userspace/developer/ffx:ffx_tool",
+      "//userspace/developer/ffx/frontends/ffx:ffx_bin($host_toolchain)",
+    ]
+
+    deps = [
+      # Do not add to this list.
+      # Prefer solutions that do not require locating tool dependencies via an
+      # IDK manifest.
+      "//userspace/storage/bin/fvm:fvm_sdk",
+      "//userspace/storage/blobfs/tools:blobfs_sdk",
+      "//tools/cmc:cmc_sdk",
+      "//zircon/tools/zbi:zbi_sdk",
+    ]
+  }
+}  # end if (is_host)
+
+# Host tools necessary to build the IDK. Keep this minimal, so IDK subbuilds can
+# start running as quickly as possible.
+#
+# This rule copies each of the tools listed below into
+# `$root_build_dir/sdk/idk_build_tools`. For example, a tool like `cmc` will
+# appear in `$root_build_dir/sdk/idk_build_tools/host_x64/cmc` on an x64 host.
+# SDK subbuilds will look for host tools in that directory, so they will only
+# have access to binaries that they explicitly depend on via this rule.
+copy("idk_build_tools") {
+  visibility += [
+    "//release/*",
+    "//sdk/firmware:*",
+    "//vendor/*",
+  ]
+
+  sources = [
+    "$host_out_dir/bindc",
+    "$host_out_dir/cmc",
+    "$host_out_dir/configc",
+    "$host_out_dir/far",
+    "$host_out_dir/ffx-package_unversioned",
+    "$host_out_dir/fidl-format",
+    "$host_out_dir/fidl-lint",
+    "$host_out_dir/fidl_api_diff",
+    "$host_out_dir/fidl_api_summarize",
+    "$host_out_dir/fidlc",
+    "$host_out_dir/fidlgen_cpp",
+    "$host_out_dir/fidlgen_hlcpp",
+    "$host_out_dir/fidlgen_rust",
+    "$host_out_dir/json_merge",
+    "$host_out_dir/measure-tape",
+    "$host_out_dir/package-tool",
+    "$host_out_dir/zither",
+  ]
+
+  # Looks like `host_x64`.
+  _rebased_host_dir = rebase_path(host_out_dir, root_build_dir)
+  outputs = [ "$root_build_dir/sdk/idk_build_tools/${_rebased_host_dir}/{{source_file_part}}" ]
+
+  deps = [
+    "//release/tools/json_merge($host_toolchain)",
+    "//userspace/developer/ffx/plugins/package:ffx_package_tool($host_toolchain)",
+    "//userspace/sys/pkg/bin/far:bin($host_toolchain)",
+    "//userspace/sys/pkg/bin/package-tool($host_toolchain)",
+    "//tools/bindc:bin($host_toolchain)",
+    "//tools/cmc:cmc($host_toolchain)",
+    "//tools/configc:configc($host_toolchain)",
+    "//tools/fidl/fidl_api_diff($host_toolchain)",
+    "//tools/fidl/fidl_api_summarize($host_toolchain)",
+    "//tools/fidl/fidlc:fidl-format($host_toolchain)",
+    "//tools/fidl/fidlc:fidl-lint($host_toolchain)",
+    "//tools/fidl/fidlc($host_toolchain)",
+    "//tools/fidl/fidlgen_cpp($host_toolchain)",
+    "//tools/fidl/fidlgen_hlcpp($host_toolchain)",
+    "//tools/fidl/fidlgen_rust($host_toolchain)",
+    "//tools/fidl/measure-tape/src:measure-tape($host_toolchain)",
+    "//zircon/tools/zither($host_toolchain)",
+  ]
+}
+
+# Controls the maximum number of simultaneous subbuilds.
+pool("subbuild_pool") {
+  depth = sdk_max_simultaneous_sub_builds
+}

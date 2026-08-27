@@ -1,0 +1,77 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+rustc_library("package-directory") {
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+  visibility = [
+    ":*",
+    "//userspace/storage/benchmarks/*",
+    "//userspace/sys/base-resolver:*",
+    "//userspace/sys/component_manager:*",
+    "//userspace/sys/pkg/*",
+  ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+    "//sdk/rust/zx",
+    "//userspace/lib/diagnostics/inspect/rust",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-fs",
+    "//userspace/storage/lib/vfs/rust:vfs",
+    "//userspace/sys/pkg/lib/blobfs",
+    "//userspace/sys/pkg/lib/far/rust:fuchsia-archive",
+    "//userspace/sys/pkg/lib/fuchsia-hash",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:log",
+    "//third_party/rust_crates:static_assertions",
+    "//third_party/rust_crates:thiserror",
+  ]
+
+  test_deps = [
+    "//userspace/lib/diagnostics/testing/diagnostics-assertions/rust:diagnostics-assertions",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/sys/pkg/lib/far/rust:fuchsia-archive",
+    "//userspace/sys/pkg/lib/fuchsia-merkle",
+    "//userspace/sys/pkg/lib/fuchsia-pkg-testing",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:pretty_assertions",
+  ]
+
+  sources = [
+    "src/lib.rs",
+    "src/meta_as_dir.rs",
+    "src/meta_subdir.rs",
+    "src/non_meta_subdir.rs",
+    "src/root_dir.rs",
+    "src/root_dir_cache.rs",
+  ]
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+}
+
+fuchsia_component("test-component") {
+  component_name = "package-directory-lib-test"
+  visibility = [ ":*" ]
+  testonly = true
+  deps = [ ":package-directory_test" ]
+  manifest = "meta/package-directory-lib-test.cml"
+}
+
+fuchsia_test_package("package-directory-tests") {
+  test_components = [ ":test-component" ]
+}
+
+group("tests") {
+  testonly = true
+  public_deps = [ ":package-directory-tests" ]
+}

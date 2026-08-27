@@ -1,0 +1,195 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/images/args.gni")
+import("//release/images/supports_fastboot_fvm.gni")
+import("//release/product.gni")
+import("//userspace/storage/fshost/generated_fshost_config.gni")
+import("//zircon/kernel/phys/qemu.gni")
+
+# This centralizes the definition of a bunch of labels and files used in the
+# various //release/images/**/BUILD.gn files.
+
+flash_manifest_version = 3
+
+# These are the common assembly-related labels.
+labels = {
+  if (use_bazel_images_only && bazel_product_bundle_target != "") {
+    # For now only Fuchsia images built by Bazel are useful.
+    assembly_name = "fuchsia"
+
+    assert(
+        bazel_product_bundle_target != "",
+        "bazel_product_bundle_prefix and bazel_product_bundle_board must be set to use Bazel assembly")
+
+    # When Bazel assembly is enabled, Bazel builds both product and recovery
+    # images, and include them in the product bundle.
+    images = bazel_product_bundle_target
+    recovery_images = bazel_product_bundle_target
+
+    # Path to the `package_tool_package_manifest_list_create` target defined in
+    # `bazel_product_bundle`.
+    bazel_package_manifests_list = "${images}_package_manifests_list"
+  } else if (use_bringup_assembly) {
+    images = "//release/images/bringup(${default_toolchain})"
+    recovery_images = recovery_label
+    assembly_name = "bringup"
+  } else {
+    _images_without_toolchain = "//release/images/fuchsia"
+    images = "${_images_without_toolchain}(${default_toolchain})"
+    recovery_images = recovery_label
+    assembly_name = "fuchsia"
+    netboot = "//release/images/fuchsia:netboot"
+  }
+
+  _qemu_deps = qemu_boot_shim.deps
+  assert(_qemu_deps == [ _qemu_deps[0] ])
+  qemu_kernel = _qemu_deps[0]
+  main_pb = main_pb_label
+}
+
+supports_flashing_fxfs =
+    fxfs_blob && fxfs_partition != "" && !use_bringup_assembly
+
+# These are the common assembly-related files.
+files = {
+  if (use_bazel_images_only) {
+    _bazel_target_name = get_label_info(labels.images, "name")
+    _images_outdir = get_label_info(labels.images, "target_out_dir") +
+                     "/${_bazel_target_name}/product_bundle"
+    _assembly_outdir = _images_outdir + "/system_a"
+    product_bundle_dir = _images_outdir
+  } else {
+    _images_outdir = get_label_info(labels.images, "target_out_dir")
+    _assembly_outdir = _images_outdir + "/${labels.assembly_name}"
+    product_bundle_dir = _images_outdir + "/product_bundle"
+  }
+
+  if (!use_bringup_assembly) {
+    if (fxfs_blob) {
+      fxfs = "${_assembly_outdir}/fxfs.blk"
+      if (supports_flashing_fxfs) {
+        fxfs_sparse = "${_assembly_outdir}/fxfs.sparse.blk"
+      }
+    } else {
+      fvm = "${_assembly_outdir}/fvm.blk"
+      fvm_sparse = "${_assembly_outdir}/fvm.sparse.blk"
+    }
+
+    if (supports_fastboot_fvm) {
+      fvm_fastboot = "${_assembly_outdir}/fvm.fastboot.blk"
+    }
+
+    # This file is used by fx test, which means that fx test cannot detect which
+    # tests are in base (and need to be updated via ota instead of publishing),
+    # when the assembly target is in Bazel instead of GN.
+    base_package_names = "$root_build_dir/base_packages.list"
+
+    # It's not clear that either of these files are used by any tool:
+    cache_package_names = "$root_build_dir/cache_packages.list"
+    universe_package_names = "$root_build_dir/universe_packages.list"
+
+    # This is an intermediate output file used to construct the universe
+    # packages list, and probably shouldn't be listed in this (shared) gni file.
+    manifests_from_metadata =
+        "$root_build_dir/package_manifests_from_metadata.list"
+
+    # Where to get the package manifest lists from (for publishing) depends on
+    # whether bazel or GN is performing the assembly.
+    #
+    # These are all intermediates that are processed into a canonical list of
+    # packages.
+    if (use_bazel_images_only) {
+      # Bazel has a single package_manifests.list that it produces
+      bazel_package_manifests_list =
+          get_label_info(labels.images, "target_out_dir") +
+          "/${_bazel_target_name}/manifests/package_manifests.list"
+    } else {
+      # GN has a series of files that are based on product assembly, or a GN
+      # metadata walk in the case of the "universe" package set.
+
+      # TODO(https://fxbug.dev/42180818) move these to image-relative paths along with tools' usages
+      base_package_manifests = "$root_build_dir/base_package_manifests.list"
+      cache_package_manifests = "$root_build_dir/cache_package_manifests.list"
+    }
+
+    assembly_cache_package_manifests =
+        "$root_build_dir/assembly_cache_packages.list"
+    assembly_ondemand_package_manifests =
+        "$root_build_dir/assembly_ondemand_packages.list"
+
+    # The output file containing (only) packages in universe.
+    universe_package_manifests =
+        "$root_build_dir/universe_package_manifests.list"
+
+    # TODO(https://fxbug.dev/42074075): Audit and add the following paths when
+    # only Bazel assembly is enabled.
+    if (!use_bazel_images_only) {
+      flash_manifest = "${_images_outdir}/flash_manifest/flash.json"
+      blobfs = "${_assembly_outdir}/blob.blk"
+    }
+  }
+
+  if (use_gigaboot) {
+    esp = "${root_out_dir}/fuchsia.esp.blk"
+  }
+
+  _image_suffix = "zbi"
+  if (sign_zbi) {
+    _image_suffix = "zbi.signed"
+  }
+
+  # The zbi and vbmeta created by assembly
+  zbi = "${_assembly_outdir}/${labels.assembly_name}.${_image_suffix}"
+  vbmeta = "${_assembly_outdir}/${labels.assembly_name}.vbmeta"
+
+  if (use_bazel_images_only) {
+    # Final image and vbmeta are not copied to root in Bazel assembly.
+    final_zbi = zbi
+    final_vbmeta = vbmeta
+  } else {
+    # Final output image and vbmeta (the files at the above paths are copied here)
+    final_zbi = "${root_out_dir}/" + rebase_path(zbi, _assembly_outdir)
+    final_vbmeta = "${root_out_dir}/" + rebase_path(vbmeta, _assembly_outdir)
+  }
+
+  # Recovery output image and vbmeta
+  if (use_bazel_images_only) {
+    # GN and Bazel assembly should share the same recovery image config, so use
+    # GN's recovery_label to determine Bazel's recovery image name.
+    _recovery_name = get_label_info(recovery_label, "name")
+    _recovery_outdir = _images_outdir + "/system_r"
+    recovery_zbi = "${_recovery_outdir}/${_recovery_name}.${_image_suffix}"
+    recovery_vbmeta = "${_recovery_outdir}/${_recovery_name}.vbmeta"
+  } else {
+    if (recovery_is_zedboot) {
+      _recovery_outdir = get_label_info("//release/images/zedboot",
+                                        "target_out_dir") + "/zedboot"
+      recovery_zbi = "${_recovery_outdir}/zedboot.${_image_suffix}"
+      recovery_vbmeta = "${_recovery_outdir}/zedboot.vbmeta"
+    } else {
+      # The standard recovery image and vbmeta locations.
+      _recovery_outdir = root_out_dir
+      recovery_zbi = "${root_out_dir}/recovery.${_image_suffix}"
+      recovery_vbmeta = "${root_out_dir}/recovery.vbmeta"
+    }
+  }
+
+  if (use_bazel_images_only) {
+    # Final recovery image and vbmeta are not copied to root in Bazel assembly.
+    final_recovery_zbi = recovery_zbi
+    final_recovery_vbmeta = recovery_vbmeta
+  } else {
+    # Final recovery image and vbmeta (the files at the above paths are copied here).
+    final_recovery_zbi =
+        "${root_out_dir}/" + rebase_path(recovery_zbi, _recovery_outdir)
+    final_recovery_vbmeta =
+        "${root_out_dir}/" + rebase_path(recovery_vbmeta, _recovery_outdir)
+  }
+
+  installer_zbi = "${root_out_dir}/obj/release/images/recovery/recovery-installer/fuchsia.${_image_suffix}"
+  installer_vbmeta = "${root_out_dir}/obj/release/images/recovery/recovery-installer/fuchsia.vbmeta"
+
+  qemu_kernel = qemu_boot_shim.path
+}

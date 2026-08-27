@@ -1,0 +1,100 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/components/fuchsia_unittest_package.gni")
+import("//release/testing/cc_test_executable.gni")
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":device_unittests_package",
+    "tests",
+    "virtio_block:tests",
+    "virtio_console:tests",
+    "virtio_vsock:tests",
+  ]
+}
+
+group("components") {
+  deps = [
+    "virtio_block:virtio_block_component",
+    "virtio_console:virtio_console_component",
+    "virtio_rng:virtio_rng_component",
+    "virtio_vsock:virtio_vsock_cmp",
+  ]
+}
+
+source_set("lib") {
+  sources = [
+    "block.h",
+    "config.h",
+    "input.h",
+    "phys_mem.cc",
+    "phys_mem.h",
+    "virtio_queue.cc",
+    "virtio_queue.h",
+  ]
+  configs += [ "//release/config:all_source" ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.virtualization.hardware:fuchsia.virtualization.hardware_hlcpp",
+    "//sdk/lib/async:async-cpp",
+    "//sdk/lib/fit",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/lib/fxl",
+    "//zircon/system/ulib/virtio",
+  ]
+}
+
+source_set("virtio") {
+  visibility = [ "./*" ]
+
+  sources = [
+    "device_base.h",
+    "stream_base.h",
+  ]
+  public_deps = [
+    ":lib",
+    "//sdk/fidl/fuchsia.virtualization.hardware:fuchsia.virtualization.hardware_hlcpp",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/sys/cpp",
+    "//userspace/lib/fsl",
+    "//zircon/system/ulib/trace",
+    "//zircon/system/ulib/trace-provider",
+  ]
+}
+
+source_set("qcow_test_data") {
+  visibility = [ "//userspace/virtualization/*" ]
+  sources = [ "qcow_test_data.h" ]
+}
+
+cc_test_executable("device_unittests") {
+  visibility = [ ":*" ]
+  testonly = true
+
+  sources = [
+    "phys_mem_unittest.cc",
+    "virtio_queue_unittest.cc",
+  ]
+
+  deps = [
+    ":lib",
+    "tests:virtio_queue_fake",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//third_party/googletest:gmock",
+  ]
+}
+
+fuchsia_unittest_package("device_unittests_package") {
+  manifest = "meta/device_unittests.cml"
+  package_name = "device_unittests"
+  deps = [ ":device_unittests" ]
+  test_specs = {
+    log_settings = {
+      max_severity = "FATAL"
+    }
+  }
+}

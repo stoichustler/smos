@@ -1,0 +1,71 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+assert(is_host, "ffx_daemon is for use with the host toolchain only")
+
+rustc_library("lib") {
+  name = "ffx_daemon"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  visibility = [
+    "//userspace/developer/ffx/daemon/*",
+    "//userspace/developer/ffx/lib/doctor_utils:*",
+    "//userspace/developer/ffx/lib/isolate/*",
+    "//userspace/developer/ffx/plugins/daemon/*",
+    "//userspace/developer/ffx/plugins/doctor:*",
+    "//userspace/developer/ffx/tests/connection:*",
+  ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.overnet.protocol:fuchsia.overnet.protocol_rust",
+    "//userspace/connectivity/overnet/lib/ascendd",
+    "//userspace/connectivity/overnet/lib/circuit",
+    "//userspace/connectivity/overnet/lib/core",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_rust",
+    "//userspace/developer/ffx/lib/daemonize:lib",
+    "//userspace/developer/ffx/lib/errors:lib",
+    "//userspace/developer/ffx/lib/netext:lib",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:nix",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:tokio",
+    "//third_party/rust_crates:tracing",
+  ]
+
+  sources = [
+    "src/config.rs",
+    "src/constants.rs",
+    "src/lib.rs",
+    "src/socket.rs",
+  ]
+  inputs = [ "data/config.json" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":lib_test",
+    "core:tests",
+    "events:tests",
+    "protocols:tests",
+    "proxy:tests",
+    "server:tests",
+  ]
+
+  # TODO(https://fxbug.dev/42064995): Flaky test disabled on coverage.
+  # Please fix the flake and remove the condition below.
+  if (!is_coverage) {
+    deps += [ "target:tests" ]
+  }
+}

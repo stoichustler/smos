@@ -1,0 +1,80 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//tools/cmc/build/expect_includes.gni")
+
+expect_includes("storage_test_includes") {
+  includes = [ "meta/storage_test.shard.cml" ]
+}
+
+group("storage_drivers") {
+  testonly = true
+  deps = [
+    "//userspace/devices/block/drivers/core",
+    "//userspace/devices/block/drivers/ftl",
+    "//userspace/devices/block/drivers/gpt",
+    "//userspace/devices/block/drivers/ramdisk:ramdisk",
+    "//userspace/devices/block/drivers/zxcrypt",
+    "//userspace/devices/nand/drivers/ram-nand",
+    "//userspace/storage/fvm:fvm-component",
+    "//userspace/storage/fvm/driver",
+    "//userspace/storage/gpt/component",
+  ]
+}
+
+group("storage_driver_test_realm") {
+  testonly = true
+  deps = [ "driver_test_realm" ]
+}
+
+source_set("storage_driver_test_support") {
+  testonly = true
+  sources = [
+    "fvm.cc",
+    "fvm.h",
+    "ram_disk.cc",
+    "ram_disk.h",
+    "zxcrypt.cc",
+    "zxcrypt.h",
+  ]
+  deps = [
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.sys2:fuchsia.sys2_cpp",
+    "//sdk/lib/component/incoming/cpp",
+    "//sdk/lib/device-watcher/cpp",
+    "//sdk/lib/sys/cpp",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/security/lib/zxcrypt:zxcrypt-client",
+    "//userspace/storage/lib/utils:topological_path",
+    "//zircon/system/ulib/fdio-caller",
+    "//zircon/system/ulib/sync",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.hardware.block:fuchsia.hardware.block_cpp",
+    "//userspace/storage/lib/fs_management/cpp:fs-management",
+    "//userspace/storage/lib/ramdevice_client/cpp",
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+source_set("fake-paver") {
+  public = [ "fake-paver.h" ]
+  sources = [ "fake-paver.cc" ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.boot:fuchsia.boot_cpp",
+    "//sdk/fidl/fuchsia.device:fuchsia.device_cpp",
+    "//sdk/fidl/fuchsia.paver:fuchsia.paver_cpp",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//userspace/storage/lib/vfs/cpp",
+    "//zircon/system/ulib/fzl",
+    "//zircon/system/ulib/zircon-internal",
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ "rust:tests" ]
+}

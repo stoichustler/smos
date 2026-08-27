@@ -1,0 +1,26 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/rust/rustc_library.gni")
+
+assert(is_host, "Assembly libraries are host-only")
+
+rustc_library("structured_config") {
+  edition = "2021"
+  name = "assembly_structured_config"
+  sources = [ "src/lib.rs" ]
+  deps = [
+    "//userspace/lib/assembly/validate_util",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/sys/lib/cm_fidl_validator",
+    "//userspace/sys/lib/cm_rust",
+    "//userspace/sys/lib/config_encoder",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:thiserror",
+    "//tools/lib/config_value_file",
+  ]
+}

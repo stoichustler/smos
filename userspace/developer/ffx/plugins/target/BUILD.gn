@@ -1,0 +1,60 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//userspace/developer/ffx/build/ffx_plugin.gni")
+import("//userspace/developer/ffx/build/ffx_tool.gni")
+
+ffx_plugin("ffx_target") {
+  sdk_category = "not-yet-specified"
+  version = "0.1.0"
+  edition = "2021"
+  plugin_deps = [
+    "add:ffx_target_add",
+    "bootloader:ffx_bootloader",
+    "clear-preferred-ssh-address:ffx_target_clear_preferred_ssh_address",
+    "default:ffx_target_default",
+    "echo:ffx_target_echo",
+    "flash:ffx_flash",
+    "get-ssh-address:ffx_get_ssh_address",
+    "get-time:ffx_target_get_time",
+    "list:ffx_list",
+    "off:ffx_off",
+    "reboot:ffx_reboot",
+    "remove:ffx_target_remove",
+    "repository:ffx_target_repository",
+    "set-preferred-ssh-address:ffx_target_set_preferred_ssh_address",
+    "show:ffx_target_show",
+    "snapshot:ffx_snapshot",
+    "ssh:ffx_target_ssh",
+    "update:ffx_update",
+    "wait:ffx_wait",
+  ]
+
+  if (!smos_minimal_assembly) {
+    plugin_deps += [ "screenshot:ffx_target_screenshot" ]
+  }
+
+  args_sources = [ "src/args.rs" ]
+  args_deps = [
+    "//userspace/developer/ffx/core:lib",
+    "//third_party/rust_crates:argh",
+  ]
+}
+
+ffx_tool("ffx_target_tool") {
+  edition = "2021"
+  output_name = "ffx-target"
+  deps = [
+    ":ffx_target_suite",
+    "//userspace/lib/fuchsia-async",
+  ]
+  sources = [ "src/main.rs" ]
+}
+
+if (is_host) {
+  group("host_tests") {
+    testonly = true
+    deps = [ "ssh:host_tests" ]
+  }
+}

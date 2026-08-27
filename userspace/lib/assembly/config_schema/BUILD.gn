@@ -1,0 +1,103 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/host.gni")
+import("//release/icu/config.gni")
+import("//release/rust/rustc_library.gni")
+
+assert(is_host, "Assembly libraries are host-only")
+
+generated_file("git_info_json") {
+  # Prepare the ICU git flavor information for inclusion in the library source.
+  # Write it out in json format, then we'll use `include_str!` to bake it into
+  # the compiled library.
+  outputs = [ "${target_gen_dir}/icu_git_info.json" ]
+  contents = icu_git_info
+  output_conversion = "json"
+}
+
+rustc_library("config_schema") {
+  edition = "2021"
+  name = "assembly_config_schema"
+  with_unit_tests = true
+  _git_info = "${target_gen_dir}/icu_git_info.json"
+  _git_info_path = rebase_path(_git_info, root_build_dir)
+  rustenv = [
+    # Needed because `include_str_from_working_dir_env!` is relative to
+    # the root_build_dir. We provide the path into `_git_info_path`.
+    # See `src/platform_config/icu_config.rs` for the inclusion details.
+    "ICU_GIT_INFO_JSON_FILE=${_git_info_path}",
+  ]
+
+  inputs = [ _git_info ]
+
+  deps = [
+    "//userspace/lib/assembly/constants",
+    "//userspace/lib/assembly/container",
+    "//userspace/lib/assembly/file_relative_path",
+    "//userspace/lib/assembly/images_config",
+    "//userspace/lib/assembly/package_utils",
+    "//userspace/lib/diagnostics/log/types",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/lib/include_str_from_working_dir",
+    "//userspace/sys/lib/moniker",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:camino",
+    "//third_party/rust_crates:schemars",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:uuid",
+  ]
+
+  test_deps = [
+    "//userspace/lib/assembly/util",
+    "//third_party/rust_crates:tempfile",
+  ]
+
+  non_rust_deps = [ ":git_info_json" ]
+
+  sources = [
+    "src/assembly_config.rs",
+    "src/board_config.rs",
+    "src/common.rs",
+    "src/developer_overrides.rs",
+    "src/image_assembly_config.rs",
+    "src/lib.rs",
+    "src/merge.rs",
+    "src/platform_config.rs",
+    "src/platform_config/battery_config.rs",
+    "src/platform_config/bluetooth_config.rs",
+    "src/platform_config/connectivity_config.rs",
+    "src/platform_config/development_support_config.rs",
+    "src/platform_config/diagnostics_config.rs",
+    "src/platform_config/driver_framework_config.rs",
+    "src/platform_config/example_config.rs",
+    "src/platform_config/factory_store_providers_config.rs",
+    "src/platform_config/fonts_config.rs",
+    "src/platform_config/forensics_config.rs",
+    "src/platform_config/graphics_config.rs",
+    "src/platform_config/health_check_config.rs",
+    "src/platform_config/icu_config.rs",
+    "src/platform_config/intl_config.rs",
+    "src/platform_config/kernel_config.rs",
+    "src/platform_config/media_config.rs",
+    "src/platform_config/memory_monitor_config.rs",
+    "src/platform_config/paravirtualization_config.rs",
+    "src/platform_config/power_config.rs",
+    "src/platform_config/recovery_config.rs",
+    "src/platform_config/session_config.rs",
+    "src/platform_config/setui_config.rs",
+    "src/platform_config/starnix_config.rs",
+    "src/platform_config/storage_config.rs",
+    "src/platform_config/swd_config.rs",
+    "src/platform_config/system_sounds_config.rs",
+    "src/platform_config/timekeeper_config.rs",
+    "src/platform_config/ui_config.rs",
+    "src/platform_config/usb_config.rs",
+    "src/platform_config/virtualization_config.rs",
+    "src/product_config.rs",
+  ]
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+}

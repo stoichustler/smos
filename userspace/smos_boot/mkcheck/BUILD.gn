@@ -1,0 +1,25 @@
+# Copyright 2026 The Fuchsia Authors.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/test.gni")
+
+test("mkcheck_test") {
+  sources = [
+    "checks.cc",
+  ]
+  deps = [
+    "//zircon/system/ulib/zx",
+    "//zircon/system/ulib/zxtest",
+  ]
+}
+
+executable("mkcheck") {
+  output_name = "mkcheck"
+  sources = [
+    "checks.cc",
+    "main.cc",
+  ]
+  deps = [ "//zircon/system/ulib/zx" ]
+  visibility = [ "//platform/products/smos_boot:*" ]
+}

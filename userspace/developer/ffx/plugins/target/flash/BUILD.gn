@@ -1,0 +1,64 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//userspace/developer/ffx/build/ffx_plugin.gni")
+
+ffx_plugin("ffx_flash") {
+  sdk_category = "not-yet-specified"
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+  args_with_unit_tests = true
+  args_deps = [
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/core:lib",
+    "//userspace/developer/ffx/lib/fastboot:lib",
+    "//third_party/rust_crates:argh",
+  ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.hardware.power.statecontrol:fuchsia.hardware.power.statecontrol_rust",
+    "//sdk/fidl/fuchsia.hwinfo:fuchsia.hwinfo_rust",
+    "//userspace/developer/ffx/config:lib",
+    "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_rust",
+    "//userspace/developer/ffx/lib/addr:lib",
+    "//userspace/developer/ffx/lib/discovery:lib",
+    "//userspace/developer/ffx/lib/errors:lib",
+    "//userspace/developer/ffx/lib/fastboot:lib",
+    "//userspace/developer/ffx/lib/fastboot/interface:lib",
+    "//userspace/developer/ffx/lib/fastboot_file_discovery:lib",
+    "//userspace/developer/ffx/lib/fho:lib",
+    "//userspace/developer/ffx/lib/ssh:lib",
+    "//userspace/developer/ffx/lib/target/holders:lib",
+    "//userspace/developer/ffx/lib/writer:lib",
+    "//userspace/lib/async-utils",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:chrono",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:futures-lite",
+    "//third_party/rust_crates:schemars",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:termion",
+    "//third_party/rust_crates:tokio",
+    "//third_party/rust_crates:tracing",
+  ]
+
+  test_deps = [
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:pretty_assertions",
+    "//third_party/rust_crates:tempfile",
+  ]
+  args_test_deps = [
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:tempfile",
+  ]
+
+  args_sources = [ "src/args.rs" ]
+
+  sources = [ "src/lib.rs" ]
+}

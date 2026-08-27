@@ -1,0 +1,22 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.wlan.ieee80211") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "WLAN"
+
+  sources = [
+    "constants.fidl",
+    "fields.fidl",
+    "overview.fidl",
+    "reason_code.fidl",
+    "rsn.fidl",
+    "status_code.fidl",
+  ]
+  enable_banjo = true
+
+  enable_hlcpp = true
+}

@@ -1,0 +1,61 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/sdk/sdk_host_tool.gni")
+
+static_library("common") {
+  public = [ "blobfs-compression.h" ]
+  sources = [ "common.cc" ]
+  deps = [ "//userspace/storage/blobfs" ]
+  public_deps = [
+    "//userspace/lib/chunked-compression",
+    "//userspace/storage/blobfs/compression/configs",
+    "//zircon/third_party/ulib/safemath",
+  ]
+}
+
+executable("blobfs-compression") {
+  sources = [ "main.cc" ]
+  deps = [
+    ":common",
+    "//userspace/lib/digest",
+    "//userspace/lib/fxl:fxl_cli",
+    "//userspace/storage/blobfs/compression/configs",
+  ]
+
+  if (!is_fuchsia) {
+    deps += [ "//zircon/system/ulib/zx-panic-libc" ]
+
+    # https://fxbug.dev/42056285: Optimizing for speed saves a considerable amount of
+    # time when constructing blobfs images with a large number of blobs.
+    configs -= [ "//release/config:default_optimize" ]
+    configs += [ "//release/config:optimize_speed" ]
+
+    exclude_toolchain_tags = [
+      # TODO(https://fxbug.dev/42130760): blobfs performs poorly when built with asan
+      "asan",
+
+      # TODO(https://fxbug.dev/42137263): blobfs performs poorly when built with profile
+      "profile",
+
+      # TODO(https://fxbug.dev/42137263): blobfs performs poorly when built with coverage
+      "coverage",
+    ]
+  }
+}
+
+if (is_host) {
+  sdk_host_tool("blobfs-compression_sdk") {
+    category = "partner"
+    output_name = "blobfs-compression"
+    deps = [ ":blobfs-compression" ]
+  }
+}
+
+# This group of tests is run in CQ/CI.
+# [It is referenced by ../BUILD.gn's "tests".]
+group("tests") {
+  testonly = true
+  deps = [ "test:tests" ]
+}

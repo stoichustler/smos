@@ -1,0 +1,222 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/test.gni")
+
+fuchsia_component_manifest("manifest") {
+  component_name = "driver_manager"
+  manifest = "meta/driver_manager.cml"
+  restricted_features = [ "allow_long_names" ]
+}
+
+fuchsia_structured_config_cpp_elf_lib("driver_manager_config") {
+  cm_label = ":manifest"
+}
+
+fuchsia_structured_config_values("driver_manager_config_default") {
+  cm_label = ":manifest"
+  values = {
+    set_root_driver_host_critical = true
+    delay_fallback_until_base_drivers_indexed = true
+    suspend_timeout_fallback = true
+    verbose = false
+    root_driver = "fuchsia-boot:///platform-bus#meta/platform-bus.cm"
+    enable_test_shutdown_delays = false
+    power_inject_offer = true
+    power_suspend_enabled = false
+  }
+}
+
+source_set("inspect") {
+  visibility = [ "*" ]
+  sources = [
+    "inspect.cc",
+    "inspect.h",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.driver.framework:fuchsia.driver.framework_cpp",
+    "//sdk/fidl/fuchsia.inspect:fuchsia.inspect_cpp",
+    "//sdk/lib/inspect/component/cpp",
+    "//userspace/lib/ddk",
+    "//userspace/storage/lib/vfs/cpp",
+    "//zircon/system/ulib/fbl",
+  ]
+  deps = [ "//sdk/lib/inspect/component/cpp" ]
+}
+
+source_set("driver_host_loader_service") {
+  visibility = [
+    ":*",
+    "tests/:*",
+  ]
+  sources = [
+    "driver_host_loader_service.cc",
+    "driver_host_loader_service.h",
+  ]
+  public_deps = [ "//userspace/lib/loader_service" ]
+  deps = [
+    "//userspace/devices/lib/log",
+    "//userspace/lib/files",
+  ]
+}
+
+source_set("driver_runner") {
+  sources = [
+    "bind/bind_manager.cc",
+    "bind/bind_manager.h",
+    "bind/bind_node_set.cc",
+    "bind/bind_node_set.h",
+    "bind/bind_result_tracker.cc",
+    "bind/bind_result_tracker.h",
+    "bootup_tracker.cc",
+    "bootup_tracker.h",
+    "composite_node_spec_impl.cc",
+    "composite_node_spec_impl.h",
+    "controller_allowlist_passthrough.cc",
+    "controller_allowlist_passthrough.h",
+    "driver_host.cc",
+    "driver_host.h",
+    "driver_host_runner.cc",
+    "driver_host_runner.h",
+    "driver_runner.cc",
+    "driver_runner.h",
+    "node.cc",
+    "node.h",
+    "offer_injection.cc",
+    "offer_injection.h",
+    "parent_set_collector.cc",
+    "parent_set_collector.h",
+    "pkg_utils.h",
+    "runner.cc",
+    "runner.h",
+    "shutdown/node_removal_tracker.cc",
+    "shutdown/node_removal_tracker.h",
+    "shutdown/shutdown_helper.cc",
+    "shutdown/shutdown_helper.h",
+    "shutdown/shutdown_manager.cc",
+    "shutdown/shutdown_manager.h",
+  ]
+
+  deps = [
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/component/incoming/cpp",
+    "//sdk/lib/component/outgoing/cpp",
+    "//sdk/lib/driver/component/cpp:cpp",
+    "//sdk/lib/zbi-format",
+    "//userspace/bringup/lib/mexec",
+    "//userspace/devices/bin/driver_manager/composite_node_spec:lib",
+    "//userspace/devices/bind/fuchsia.platform:fuchsia.platform_cpp",
+    "//userspace/devices/lib/log",
+    "//userspace/lib/fsl",
+    "//userspace/lib/fxl",
+    "//userspace/lib/zbitl",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.boot:fuchsia.boot_cpp",
+    "//sdk/fidl/fuchsia.component:fuchsia.component_cpp",
+    "//sdk/fidl/fuchsia.component.decl:fuchsia.component.decl_cpp",
+    "//sdk/fidl/fuchsia.component.runner:fuchsia.component.runner_cpp",
+    "//sdk/fidl/fuchsia.component.sandbox:fuchsia.component.sandbox_cpp",
+    "//sdk/fidl/fuchsia.driver.development:fuchsia.driver.development_cpp",
+    "//sdk/fidl/fuchsia.driver.host:fuchsia.driver.host_cpp",
+    "//sdk/fidl/fuchsia.driver.index:fuchsia.driver.index_cpp",
+    "//sdk/fidl/fuchsia.driver.token:fuchsia.driver.token_cpp",
+    "//sdk/fidl/fuchsia.kernel:fuchsia.kernel_cpp",
+    "//sdk/fidl/fuchsia.process.lifecycle:fuchsia.process.lifecycle_cpp",
+    "//sdk/fidl/fuchsia.system.state:fuchsia.system.state_cpp",
+    "//sdk/lib/async_patterns/cpp",
+    "//sdk/lib/inspect/component/cpp",
+    "//sdk/lib/vfs/cpp",
+    "//userspace/devices/bin/driver_loader",
+    "//userspace/devices/bin/driver_manager:inspect",
+    "//userspace/devices/bin/driver_manager/devfs",
+    "//userspace/devices/bind/fuchsia:fuchsia_cpp",
+    "//userspace/lib/ddk",
+    "//userspace/storage/lib/vfs/cpp",
+    "//zircon/system/ulib/zircon-internal",
+  ]
+}
+
+source_set("driver_development_service") {
+  sources = [
+    "driver_development/driver_development_service.cc",
+    "driver_development/driver_development_service.h",
+  ]
+  public_deps = [
+    ":driver_runner",
+    "//sdk/fidl/fuchsia.driver.development:fuchsia.driver.development_cpp",
+    "//sdk/lib/component/outgoing/cpp",
+  ]
+  deps = [
+    "//sdk/fidl/fuchsia.driver.framework:fuchsia.driver.framework_cpp",
+    "//sdk/lib/component/incoming/cpp",
+    "//userspace/devices/bin/driver_manager/driver_development:lib",
+    "//userspace/devices/lib/log",
+  ]
+}
+
+executable("driver_manager") {
+  sources = [ "main.cc" ]
+
+  deps = [
+    ":driver_development_service",
+    ":driver_host_loader_service",
+    ":driver_manager_config",
+    ":driver_runner",
+    "//userspace/devices/lib/log",
+    "//userspace/sys/lib/stdout-to-debuglog/cpp",
+  ]
+
+  configs += [ "//release/config:all_source" ]
+
+  if (toolchain_variant.libprefix != "") {
+    # The libprefix always ends with a / but that's not part of the
+    # "config" string in the loader-service protocol.
+    ldsvc_config =
+        get_path_info("${toolchain_variant.libprefix}libfoo.so", "dir")
+    assert(ldsvc_config != "" && ldsvc_config != ".")
+    defines = [ "DRIVERHOST_LDSVC_CONFIG=\"$ldsvc_config\"" ]
+  }
+}
+
+fuchsia_component("component") {
+  cm_label = ":manifest"
+  deps = [ ":driver_manager" ]
+}
+
+# List of shared libraries used by drivers.
+group("driver_shared_libraries") {
+  deps = [
+    "//release/toolchain/runtime:shared-rust-libstd-deps",
+    "//sdk/lib/async-default",
+    "//sdk/lib/fdio",
+    "//sdk/lib/svc",
+    "//sdk/lib/syslog/cpp:backend_fuchsia_globals",
+    "//userspace/devices/bin/driver_runtime",
+    "//userspace/devices/lib/driver",
+    "//userspace/security/lib/tee/tee-client-api",
+    "//userspace/storage/lib/vfs/rust:vfs",
+    "//third_party/boringssl:crypto-shared",
+    "//third_party/boringssl:ssl-shared",
+    "//zircon/system/ulib/syslog",
+    "//zircon/system/ulib/trace-engine",
+  ]
+
+  metadata = {
+    # Prevent Rust auxiliary targets from collecting dependencies from runtime
+    # deps.
+    rust_barrier = []
+  }
+}
+
+fuchsia_package("package") {
+  package_name = "driver_manager"
+  deps = [
+    ":component",
+    ":driver_manager_config_default",
+    ":driver_shared_libraries",
+  ]
+}

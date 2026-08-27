@@ -1,0 +1,52 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+rustc_library("fidl-fuchsia-update-installer-ext") {
+  version = "0.0.1"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//sdk/fidl/fuchsia.pkg:fuchsia.pkg_rust",
+    "//userspace/lib/diagnostics/inspect/rust",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/sys/pkg/fidl/fuchsia.update.installer:fuchsia.update.installer_rust",
+    "//userspace/sys/pkg/lib/event-queue",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:log",
+    "//third_party/rust_crates:pin-project",
+    "//third_party/rust_crates:proptest",
+    "//third_party/rust_crates:proptest-derive",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:thiserror",
+    "//third_party/rust_crates:typed-builder",
+  ]
+
+  test_deps = [
+    "//userspace/lib/diagnostics/testing/diagnostics-assertions/rust:diagnostics-assertions",
+    "//userspace/lib/fuchsia-async",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:serde_json",
+  ]
+
+  sources = [
+    "src/lib.rs",
+    "src/options.rs",
+    "src/state.rs",
+  ]
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+}
+
+fuchsia_unittest_package("fidl-fuchsia-update-installer-ext-tests") {
+  deps = [ ":fidl-fuchsia-update-installer-ext_test" ]
+}
+
+group("tests") {
+  testonly = true
+  public_deps = [ ":fidl-fuchsia-update-installer-ext-tests" ]
+}

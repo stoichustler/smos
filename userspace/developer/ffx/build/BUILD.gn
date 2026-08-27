@@ -1,0 +1,65 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/python/python_binary.gni")
+
+# These groups exist to provide a visibility  bridge from `ffx_action()`
+# instances throughout the tree to the visibility-restricted IDK collection used
+# to locate host tools for those actions.
+group("host_tools_used_by_ffx_action") {
+  # Limit visibility to avoid improper use.
+  # `ffx_action()` is used by .gni files that are used in other directories.
+  visibility = [
+    ":host_tools_used_by_ffx_action_testonly",
+    "//platform/boards/*",
+    "//release/images/*",
+    "//userspace/firmware/gigaboot/*",
+    "//vendor/*",
+  ]
+
+  public_deps = [ "//sdk:host_tools_used_by_ffx_action_during_build" ]
+}
+group("host_tools_used_by_ffx_action_testonly") {
+  testonly = true
+
+  # Limit visibility to avoid improper use. This test-only target has more
+  # relaxed visibility than the production target above, allowing `ffx_action()`
+  # and the .gni files that use it to be used in tests without listing them all
+  # here while still preventing use in production code outside the narrower set
+  # of locations above.
+  visibility = [
+    "//release/images/*",
+    "//userspace/*",
+    "//third_party/network-conformance/images:*",
+    "//vendor/*",
+    "//zircon/kernel/*",
+    "//zircon/system/*",
+  ]
+
+  public_deps = [ ":host_tools_used_by_ffx_action" ]
+}
+
+python_binary("gn_generate_plugins") {
+  main_source = "gn_generate_plugins.py"
+  deps = [
+    "//third_party/jinja2",
+    "//third_party/markupsafe",
+  ]
+}
+
+python_binary("gn_generate_cmd") {
+  main_source = "gn_generate_cmd.py"
+  deps = [
+    "//third_party/jinja2",
+    "//third_party/markupsafe",
+  ]
+}
+
+python_binary("gn_generate_protocols_macro") {
+  main_source = "gn_generate_protocols_macro.py"
+  deps = [
+    "//third_party/jinja2",
+    "//third_party/markupsafe",
+  ]
+}

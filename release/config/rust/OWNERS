@@ -1,0 +1,3 @@
+set noparent
+
+include /release/rust/OWNERS

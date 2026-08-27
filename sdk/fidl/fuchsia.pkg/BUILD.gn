@@ -1,0 +1,30 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.pkg") {
+  # TODO(https://fxbug.dev/42111344): Remove lint exclusions by fixing known FIDL lint violations in this target
+  excluded_checks = [
+    "string-bounds-not-specified",
+    "vector-bounds-not-specified",
+  ]
+
+  sources = [
+    "cache.fidl",
+    "common.fidl",
+    "cup.fidl",
+    "font_resolver.fidl",
+    "repo.fidl",
+    "resolver.fidl",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.io",
+    "//sdk/fidl/fuchsia.url",
+    "//userspace/storage/fxfs/fidl/fuchsia.fxfs",
+  ]
+
+  enable_hlcpp = true
+}

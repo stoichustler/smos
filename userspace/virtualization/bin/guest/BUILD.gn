@@ -1,0 +1,64 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_binary.gni")
+
+group("guest") {
+  deps = [ ":guest_package" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [ ":guest_tests" ]
+}
+
+rustc_binary("bin") {
+  edition = "2021"
+  output_name = "guest"
+  deps = [
+    "//sdk/fidl/fuchsia.device:fuchsia.device_rust",
+    "//sdk/fidl/fuchsia.hardware.pty:fuchsia.hardware.pty_rust",
+    "//sdk/fidl/fuchsia.virtualization:fuchsia.virtualization_rust",
+    "//sdk/rust/zx",
+    "//userspace/lib/fdio",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/virtualization/lib/cli:guest_cli",
+    "//userspace/virtualization/lib/cli/args:guest_cli_args",
+    "//userspace/virtualization/third_party/vm_tools:vsh_rust_proto",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:argh",
+    "//third_party/rust_crates:blocking",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:libc",
+    "//third_party/rust_crates:log",
+    "//third_party/rust_crates:prost",
+  ]
+
+  test_deps = [
+    "//third_party/alacritty/alacritty_terminal:term_model",
+    "//third_party/rust_crates:rand",
+  ]
+
+  with_unit_tests = true
+
+  sources = [
+    "src/main.rs",
+    "src/vsh.rs",
+    "src/vsh/pty.rs",
+    "src/vsh/termina.rs",
+    "src/vsh/util.rs",
+  ]
+}
+
+fuchsia_unittest_package("guest_tests") {
+  deps = [ ":bin_test" ]
+}
+
+fuchsia_package("guest_package") {
+  package_name = "guest"
+  deps = [ ":bin" ]
+}

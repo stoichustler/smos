@@ -1,0 +1,180 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/toolchain.gni")
+import("//release/python/python_host_test.gni")
+import("//release/testing/host_test_data.gni")
+
+host_test_data("fuchsia_controller_host_test_data") {
+  # Needed for SDK inclusion
+  testonly = false
+
+  sources = [
+    get_label_info(":anything($default_toolchain)", "root_out_dir") +
+        "/all_fidl_json.txt",
+    "${root_out_dir}/libfidl_codec.so",
+    "${root_out_dir}/libfuchsia_controller_internal.so",
+  ]
+  deps = [
+    "//userspace/developer/ffx/lib/fuchsia-controller:fuchsia_controller_py",
+    "//userspace/developer/ffx/lib/fuchsia-controller:lib",
+    "//userspace/developer/ffx/lib/fuchsia-controller/cpp:libfidl_codec",
+  ]
+}
+
+host_test_data("core_sdk_host_test_data") {
+  _sdk_label = "//sdk:exported_idk_for_ffx_tests($default_toolchain)"
+  sources = [ get_label_info(":anything($default_toolchain)", "root_out_dir") +
+              "/sdk/exported/core" ]
+  deps = [ _sdk_label ]
+}
+
+group("fuchsia_controller_test_data") {
+  # Needed for SDK inclusion
+  testonly = false
+
+  deps = [
+    ":fuchsia_controller_host_test_data",
+    "//userspace/developer/ffx:test_data",
+    "//userspace/developer/ffx/fidl:fuchsia.developer.ffx_host_test_data",
+  ]
+}
+
+group("fuchsia_controller_fidl_test_data") {
+  testonly = true
+  deps = [
+    "//userspace/developer/ffx/lib/fuchsia-controller/fidl:fuchsia.controller.othertest_host_test_data",
+    "//userspace/developer/ffx/lib/fuchsia-controller/fidl:fuchsia.controller.test_host_test_data",
+    "//userspace/lib/fidl_codec:fidl-composed_host_test_data",
+    "//userspace/lib/fidl_codec:fidl-sys_host_test_data",
+    "//userspace/lib/fidl_codec:fidl_host_test_data",
+  ]
+}
+
+python_host_test("fuchsia_controller_ir_test") {
+  # TODO(https://fxbug.dev/346628306): Resolve mypy errors and enable type checking
+  enable_mypy = false
+  main_source = "ir.py"
+  libraries = [ "//userspace/developer/ffx/lib/fuchsia-controller/cpp:fidl_codec" ]
+  test_data_deps = [ ":fuchsia_controller_test_data" ]
+}
+
+python_host_test("fuchsia_controller_encode_test") {
+  # TODO(https://fxbug.dev/346628306): Resolve mypy errors and enable type checking
+  enable_mypy = false
+  main_source = "encode.py"
+  sources = [ "common.py" ]
+  libraries = [ "//userspace/developer/ffx/lib/fuchsia-controller/cpp:fidl_codec" ]
+  test_data_deps = [
+    ":fuchsia_controller_fidl_test_data",
+    ":fuchsia_controller_test_data",
+  ]
+}
+
+python_host_test("fuchsia_controller_importing_test") {
+  main_source = "importing.py"
+  libraries = [
+    "//userspace/developer/ffx/lib/fuchsia-controller/cpp:libfidl_codec",
+    "//userspace/developer/ffx/lib/fuchsia-controller:fidl_bindings",
+  ]
+  test_data_deps = [
+    ":fuchsia_controller_fidl_test_data",
+    ":fuchsia_controller_test_data",
+  ]
+}
+
+python_host_test("fuchsia_controller_errors_test") {
+  # TODO(https://fxbug.dev/346628306): Resolve mypy errors and enable type checking
+  enable_mypy = false
+  main_source = "errors.py"
+  libraries =
+      [ "//userspace/developer/ffx/lib/fuchsia-controller:fuchsia_controller_py" ]
+  test_data_deps = [ ":fuchsia_controller_test_data" ]
+}
+
+python_host_test("fuchsia_controller_isolate_directory_test") {
+  # TODO(https://fxbug.dev/346628306): Resolve mypy errors and enable type checking
+  enable_mypy = false
+  main_source = "isolate_directory.py"
+  libraries =
+      [ "//userspace/developer/ffx/lib/fuchsia-controller:fuchsia_controller_py" ]
+  test_data_deps = [ ":fuchsia_controller_test_data" ]
+}
+
+python_host_test("fuchsia_controller_e2e_test") {
+  # TODO(https://fxbug.dev/346628306): Resolve mypy errors and enable type checking
+  enable_mypy = false
+  main_source = "e2e.py"
+  libraries = [
+    "//userspace/developer/ffx/lib/fuchsia-controller:fidl_bindings",
+    "//userspace/developer/ffx/lib/fuchsia-controller:fuchsia_controller_py",
+  ]
+  test_data_deps = [
+    ":core_sdk_host_test_data",
+    ":fuchsia_controller_test_data",
+  ]
+}
+
+python_host_test("fuchsia_controller_fidl_client_test") {
+  # TODO(https://fxbug.dev/346628306): Resolve mypy errors and enable type checking
+  enable_mypy = false
+  main_source = "fidl_client.py"
+  libraries = [
+    "//userspace/developer/ffx/lib/fuchsia-controller:fidl_bindings",
+    "//userspace/developer/ffx/lib/fuchsia-controller:fuchsia_controller_py",
+  ]
+  test_data_deps = [ ":fuchsia_controller_test_data" ]
+}
+
+python_host_test("fuchsia_controller_fidl_channel_test") {
+  # TODO(https://fxbug.dev/346628306): Resolve mypy errors and enable type checking
+  enable_mypy = false
+  main_source = "fidl_channel.py"
+  libraries =
+      [ "//userspace/developer/ffx/lib/fuchsia-controller:fuchsia_controller_py" ]
+  test_data_deps = [ ":fuchsia_controller_test_data" ]
+}
+
+python_host_test("fuchsia_controller_socket_test") {
+  # TODO(https://fxbug.dev/346628306): Resolve mypy errors and enable type checking
+  enable_mypy = false
+  main_source = "socket_tests.py"
+  libraries = [
+    "//userspace/developer/ffx/lib/fuchsia-controller:fidl_bindings",
+    "//userspace/developer/ffx/lib/fuchsia-controller:fuchsia_controller_py",
+  ]
+  test_data_deps = [ ":fuchsia_controller_test_data" ]
+}
+
+python_host_test("fuchsia_controller_fidl_server_test") {
+  # TODO(https://fxbug.dev/346628306): Resolve mypy errors and enable type checking
+  enable_mypy = false
+  main_source = "server.py"
+  libraries = [
+    "//userspace/developer/ffx/lib/fuchsia-controller:fidl_bindings",
+    "//userspace/developer/ffx/lib/fuchsia-controller:fuchsia_controller_py",
+  ]
+  test_data_deps = [
+    ":fuchsia_controller_fidl_test_data",
+    ":fuchsia_controller_test_data",
+  ]
+}
+
+python_host_test("fuchsia_controller_fidl_common_test") {
+  main_source = "fidl_common.py"
+  libraries = [
+    "//userspace/developer/ffx/lib/fuchsia-controller:fidl_bindings",
+    "//userspace/developer/ffx/lib/fuchsia-controller:fuchsia_controller_py",
+  ]
+  test_data_deps = [ ":fuchsia_controller_test_data" ]
+}
+
+python_host_test("fuchsia_controller_fidl_construct_test") {
+  main_source = "construct.py"
+  libraries = [
+    "//userspace/developer/ffx/lib/fuchsia-controller:fidl_bindings",
+    "//userspace/developer/ffx/lib/fuchsia-controller:fuchsia_controller_py",
+  ]
+  test_data_deps = [ ":fuchsia_controller_test_data" ]
+}

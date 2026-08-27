@@ -1,0 +1,25 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.accessibility.semantics") {
+  sdk_category = "partner"
+  stable = true
+  sdk_area = "HCI"
+
+  sources = [
+    "node.fidl",
+    "overview.fidl",
+    "semantics_manager.fidl",
+  ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.math",
+    "//sdk/fidl/fuchsia.ui.gfx",
+    "//sdk/fidl/fuchsia.ui.views",
+  ]
+
+  enable_hlcpp = true
+}

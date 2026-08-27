@@ -1,0 +1,68 @@
+# Copyright 2017 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/cpp/sdk_source_set.gni")
+import("//release/testing/cc_test_executable.gni")
+
+sdk_source_set("cpp") {
+  category = "partner"
+
+  sdk_name = "media_cpp"
+  stable = true
+
+  sources = [
+    "type_converters.cc",
+    "type_converters.h",
+  ]
+
+  include_base = "//sdk"
+
+  public_deps = [
+    ":no_converters",
+    "//sdk/fidl/fuchsia.media:fuchsia.media_hlcpp",
+  ]
+
+  public_configs = [ "//sdk/config" ]
+}
+
+sdk_source_set("no_converters") {
+  category = "partner"
+
+  sdk_name = "media_cpp_no_converters"
+  stable = true
+
+  sources = [
+    "timeline_function.cc",
+    "timeline_function.h",
+    "timeline_rate.cc",
+    "timeline_rate.h",
+  ]
+
+  include_base = "//sdk"
+
+  public_configs = [ "//sdk/config" ]
+}
+
+cc_test_executable("test_bin") {
+  testonly = true
+  output_name = "media_lib_timeline_tests"
+
+  sources = [
+    "test/timeline_function_test.cc",
+    "test/timeline_rate_test.cc",
+  ]
+
+  deps = [
+    ":cpp",
+    "//userspace/lib/fxl/test:gtest_main",
+  ]
+
+  # TODO(https://fxbug.dev/42136089): delete the below and fix compiler warnings
+  configs += [ "//release/config:Wno-conversion" ]
+}
+
+fuchsia_unittest_package("media_lib_timeline_tests") {
+  deps = [ ":test_bin" ]
+}

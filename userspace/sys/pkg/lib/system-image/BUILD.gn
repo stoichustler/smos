@@ -1,0 +1,72 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+rustc_library("system-image") {
+  version = "0.1.0"
+  edition = "2021"
+  with_unit_tests = true
+
+  deps = [
+    "//sdk/fidl/fuchsia.boot:fuchsia.boot_rust",
+    "//userspace/lib/diagnostics/inspect/rust",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia-url",
+    "//userspace/sys/pkg/lib/blobfs",
+    "//userspace/sys/pkg/lib/fuchsia-hash",
+    "//userspace/sys/pkg/lib/fuchsia-pkg",
+    "//userspace/sys/pkg/lib/package-directory",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:serde",
+    "//third_party/rust_crates:serde_json",
+    "//third_party/rust_crates:thiserror",
+  ]
+
+  test_deps = [
+    "//userspace/lib/diagnostics/testing/diagnostics-assertions/rust:diagnostics-assertions",
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/sys/pkg/lib/fuchsia-pkg-testing",
+    "//userspace/sys/pkg/testing/blobfs-ramdisk",
+    "//userspace/sys/pkg/testing/mock-boot-arguments:lib",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:proptest",
+  ]
+
+  sources = [
+    "src/cache_packages.rs",
+    "src/errors.rs",
+    "src/lib.rs",
+    "src/path_hash_mapping.rs",
+    "src/system_image.rs",
+  ]
+  configs += [ "//release/config/rust/lints:clippy_warn_all" ]
+}
+
+group("tests") {
+  testonly = true
+  public_deps = [ ":system-image-tests" ]
+}
+
+fuchsia_component("system-image-test-component") {
+  testonly = true
+  component_name = "system-image-tests"
+  manifest = "meta/system-image-lib-test.cml"
+  deps = [
+    ":system-image_test",
+    "//userspace/storage/testing:storage_driver_test_realm",
+  ]
+}
+
+fuchsia_test_package("system-image-tests") {
+  test_specs = {
+    log_settings = {
+      max_severity = "ERROR"
+    }
+  }
+  test_components = [ ":system-image-test-component" ]
+}

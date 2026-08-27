@@ -1,0 +1,23 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/go/go_binary.gni")
+import("//release/go/go_library.gni")
+import("//release/go/go_test.gni")
+
+go_library("lib") {
+  sources = [
+    "main.go",
+    "pargzip.go",
+    "pargzip_test.go",
+  ]
+}
+
+go_binary("tarmaker") {
+  library = ":lib"
+}
+
+go_test("tarmaker_tests") {
+  library = ":lib"
+}

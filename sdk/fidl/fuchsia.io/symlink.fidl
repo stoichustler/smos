@@ -1,0 +1,32 @@
+// Copyright 2023 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+library fuchsia.io;
+
+alias SymlinkTarget = vector<uint8>:MAX_PATH_LENGTH;
+
+// TODO(https://fxbug.dev/42056856): Use a generated constant.
+@available(added=18)
+const SYMLINK_PROTOCOL_NAME string = "fuchsia.io/Symlink";
+
+@available(added=18)
+type SymlinkInfo = table {
+    /// The symbolic link has no meaning on the server; the client is free to interpret the
+    /// target however it chooses.
+    1: target SymlinkTarget;
+
+    /// Requested attributes for the symbolic link. This is only populated if requested.
+    2: attributes NodeAttributes2;
+};
+
+/// A ['Node'] which contains a symbolic link.
+@discoverable
+@available(added=18)
+open protocol Symlink {
+    compose Linkable;
+    compose Node;
+
+    @selector("fuchsia.io/Symlink.Describe")
+    flexible Describe() -> (SymlinkInfo);
+};

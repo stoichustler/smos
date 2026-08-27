@@ -1,0 +1,50 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/cpp/sdk_source_set.gni")
+import("//release/test.gni")
+
+sdk_source_set("input_report_reader") {
+  category = "partner"
+  sdk_name = "input_report_reader"
+
+  include_base = "//sdk"
+  stable = true
+
+  sources = [
+    "reader.cc",
+    "reader.h",
+  ]
+
+  public_configs = [ "//sdk/config" ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.input.report:fuchsia.input.report_cpp",
+    "//zircon/system/ulib/trace",
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+group("test") {
+  testonly = true
+  deps = [ ":test_package" ]
+}
+
+test("input_report_test") {
+  sources = [ "reader_unittest.cc" ]
+  deps = [
+    ":input_report_reader",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//zircon/system/public",
+    "//zircon/system/ulib/zx",
+    "//zircon/system/ulib/zxtest",
+  ]
+}
+
+fuchsia_unittest_package("test_package") {
+  package_name = "lib-input-report-reader-test"
+  deps = [ ":input_report_test" ]
+}

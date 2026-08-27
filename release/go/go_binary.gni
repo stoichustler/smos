@@ -1,0 +1,66 @@
+# Copyright 2017 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/go/go_build.gni")
+import("//release/go/go_library.gni")
+
+# A template for an action that creates a Fuchsia Go binary.
+#
+# Parameters: same as go_build, along with
+#
+#   gopackage (optional)
+#     The go package containing the main function.
+#
+#   library (optional)
+#     The GN label for the go_library containing the main function. Alternative
+#     to gopackage.
+#
+#   source_dir, sources
+#     Same meaning as defined in go_library.gni.
+#
+#
+#   The following fields are only used by Bazel-converted targets.
+#   See //release/tools/bazel2gn/README.md for details.
+#
+#     embed (optional)
+#       Alternative to library, should contain exactly one element.
+#       Type: list of labels
+#
+#
+template("go_binary") {
+  if (defined(invoker.sources)) {
+    assert(
+        !defined(invoker.library) && !defined(invoker.gopackage) &&
+            !defined(invoker.embed),
+        "library and gopackage can't be used when sources for this go_binary are explicitly listed")
+    lib_target = "_${target_name}_go_lib"
+    go_library(lib_target) {
+      forward_variables_from(invoker,
+                             [
+                               "source_dir",
+                               "sources",
+                               "deps",
+                             ])
+    }
+    library = ":${lib_target}"
+  }
+
+  go_build(target_name) {
+    # TODO(https://fxbug.dev/42136747): Deprecate `gopackage` in favor of `library`.
+    if (defined(invoker.gopackage)) {
+      gopackages = [ invoker.gopackage ]
+    } else {
+      assert(
+          !(defined(invoker.library) && defined(invoker.embed)),
+          "embed and library cannot be defined at the same time, use library if you are uncertain, embed is for Bazel-converted go_binaries")
+      if (defined(invoker.embed)) {
+        embed = invoker.embed
+        assert(embed == [ embed[0] ], "embed must be have exactly one element")
+        library = embed[0]
+      }
+    }
+
+    forward_variables_from(invoker, "*")
+  }
+}

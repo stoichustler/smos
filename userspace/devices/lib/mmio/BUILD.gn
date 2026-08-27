@@ -1,0 +1,59 @@
+# Copyright 2019 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/cpp/sdk_source_set.gni")
+import("//release/test.gni")
+import("//release/zircon/zx_library.gni")
+
+group("tests") {
+  testonly = true
+  deps = [ ":mmio-unittest-package" ]
+}
+
+zx_library("mmio") {
+  sdk = "source"
+  sdk_publishable = "partner"
+  stable = true
+  sdk_headers = [
+    "lib/mmio/mmio.h",
+    "lib/mmio/mmio-buffer.h",
+    "lib/mmio/mmio-internal.h",
+    "lib/mmio/mmio-ops.h",
+    "lib/mmio/mmio-pinned-buffer.h",
+    "lib/mmio/mmio-view.h",
+  ]
+  sources = [ "mmio-buffer.cc" ]
+  public_deps = [
+    # <lib/mmio/mmio.h> has #include <lib/mmio-ptr/mmio-ptr.h>.
+    "//zircon/system/ulib/mmio-ptr",
+
+    # <lib/mmio/mmio.h> has #include <lib/zx/bti.h>.
+    "//zircon/system/ulib/zx",
+
+    # <lib/mmio/mmio-buffer.h> has #include <lib/zx/result.h>.
+    "//zircon/system/ulib/zx",
+  ]
+}
+
+sdk_source_set("test_helper") {
+  category = "internal"
+  sdk_name = "mmio-test-helper"
+  sources = [ "test-helper.h" ]
+  deps = [ ":mmio" ]
+}
+
+test("mmio-unittest") {
+  sources = [ "mmio-buffer-test.cc" ]
+  deps = [
+    ":mmio",
+    ":test_helper",
+    "//zircon/system/ulib/zxtest",
+  ]
+}
+
+fuchsia_unittest_package("mmio-unittest-package") {
+  package_name = "mmio-unittest"
+  deps = [ ":mmio-unittest" ]
+}

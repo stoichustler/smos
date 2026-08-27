@@ -1,0 +1,41 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/rust/rustc_library.gni")
+
+group("tests") {
+  testonly = true
+
+  deps = [ ":component_manager_util_test" ]
+}
+
+rustc_library("util") {
+  edition = "2021"
+  name = "cm_util"
+  with_unit_tests = true
+
+  deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+    "//sdk/rust/zx",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-fs",
+    "//userspace/lib/fuchsia-sync",
+    "//userspace/storage/lib/vfs/rust:vfs",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:pin-project",
+  ]
+
+  sources = [
+    "src/abortable_scope.rs",
+    "src/channel.rs",
+    "src/io.rs",
+    "src/lib.rs",
+    "src/task_group.rs",
+  ]
+}
+
+fuchsia_unittest_package("component_manager_util_test") {
+  deps = [ ":util_test" ]
+}

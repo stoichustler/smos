@@ -1,0 +1,200 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/cpp/sdk_shared_library.gni")
+import("//release/cpp/sdk_source_set.gni")
+import("//release/cpp/sdk_static_library.gni")
+import("//release/test.gni")
+
+if (is_fuchsia) {
+  target_type = "sdk_source_set"
+} else {
+  # Don't ship the host logging library in the SDK.
+  target_type = "source_set"
+
+  # TODO(https://fxbug.dev/42138060): Remove when Mac links OK against this.
+  if ((current_toolchain == "//release/toolchain:host_x64" && host_os == "mac") ||
+      (current_toolchain == "//release/toolchain:host_arm64" &&
+       host_os == "mac")) {
+    target_type = "static_library"
+  }
+}
+
+target(target_type, "cpp") {
+  public_deps = [
+    "//sdk/lib/fit-promise",
+    "//sdk/lib/stdcompat",
+  ]
+
+  sources = [
+    "log_level.h",
+    "log_message_impl.cc",
+    "log_message_impl.h",
+    "log_settings.h",
+    "macros.h",
+  ]
+
+  if (is_fuchsia) {
+    category = "partner"
+    stable = true
+    sdk_name = "syslog_cpp"
+
+    include_base = "//sdk"
+
+    sources += [
+      "logging_backend_fuchsia.cc",
+      "logging_backend_fuchsia_globals.h",
+    ]
+
+    deps = [
+      ":backend_fuchsia_globals",
+      "//sdk/fidl/fuchsia.logger:fuchsia.logger_cpp",
+      "//sdk/lib/async:async-cpp",
+      "//sdk/lib/async-default:async-default",
+      "//sdk/lib/async-loop:async-loop-default",
+      "//sdk/lib/component/incoming/cpp",
+      "//sdk/lib/fdio",
+      "//sdk/lib/stdcompat",
+      "//zircon/system/ulib/sync",
+    ]
+
+    public_deps += [
+      "//sdk/lib/async-loop:async-loop-cpp",
+      "//sdk/lib/syslog/structured_backend",
+      "//zircon/system/ulib/zx",
+    ]
+  } else {
+    sources += [
+      "host/encoder.h",
+      "host/logging_backend.cc",
+    ]
+  }
+  public_configs = [ "//sdk/config" ]
+}
+
+# TODO(b/300157652): Transitional no-op target
+# Remove once all drivers have been migrated off
+# syslog.
+group("backend") {
+  visibility = [
+    "//userspace/camera/drivers/hw_accel/ge2d:*",
+    "//userspace/media/drivers/amlogic_decoder:*",
+    "//userspace/storage/fvm/driver:*",
+    "//vendor/*",
+  ]
+}
+
+sdk_shared_library("backend_fuchsia_globals") {
+  category = "partner"
+  sdk_name = "backend_fuchsia_globals"
+
+  libcxx_linkage = "static"
+
+  include_base = "//sdk"
+
+  symbols_api = "backend_fuchsia_globals.ifs"
+
+  sources = [
+    "logging_backend_fuchsia_globals.cc",
+    "logging_backend_fuchsia_globals.h",
+  ]
+
+  deps = [ "//userspace/zircon/lib/zircon" ]
+}
+
+test("logging_cpp_unittests") {
+  sources = [
+    "host/encoder.h",
+    "log_settings_unittest.cc",
+    "logging_unittest.cc",
+  ]
+  deps = [
+    ":cpp",
+    "//userspace/lib/fxl",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/lib/uuid",
+    "//third_party/googletest:gmock",
+    "//third_party/googletest:gtest",
+  ]
+  if (is_fuchsia) {
+    deps += [
+      "//sdk/fidl/fuchsia.diagnostics:fuchsia.diagnostics_cpp",
+      "//sdk/fidl/fuchsia.logger:fuchsia.logger_cpp",
+      "//sdk/lib/async",
+      "//sdk/lib/async:async-cpp",
+      "//sdk/lib/async-loop:async-loop-cpp",
+      "//userspace/diagnostics/lib/cpp-log-tester:cpp-log-tester",
+      "//userspace/lib/diagnostics/accessor2logger",
+      "//userspace/lib/fsl",
+      "//third_party/rapidjson",
+    ]
+  }
+}
+
+test("logging_cpp_unittests_structured") {
+  sources = [ "log_structure_unittest.cc" ]
+
+  deps = [
+    ":cpp",
+    "//userspace/lib/files",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//third_party/googletest:gtest",
+  ]
+}
+
+fuchsia_unittest_component("logging-cpp-unittests") {
+  manifest = "meta/logging_cpp_unittests.cml"
+  deps = [ ":logging_cpp_unittests" ]
+}
+
+fuchsia_unittest_component("logging-cpp-unittests-structured") {
+  deps = [ ":logging_cpp_unittests_structured" ]
+}
+
+test("logging-cpp-from-void") {
+  sources = [ "log_from_void.cc" ]
+
+  deps = [
+    ":cpp",
+    "//userspace/lib/files",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//third_party/googletest:gtest",
+  ]
+}
+
+fuchsia_component("from_void_test_root") {
+  testonly = true
+  deps = [ ":logging-cpp-from-void" ]
+  manifest = "meta/from_void_test_root.cml"
+}
+
+fuchsia_unittest_component("logging-cpp-from-void-test") {
+  manifest = "meta/logging_cpp_from_void_test.cml"
+  deps = [
+    ":from_void_test_root",
+    ":logging-cpp-from-void",
+  ]
+}
+
+fuchsia_test_package("logging-cpp-tests") {
+  test_components = [
+    ":logging-cpp-unittests",
+    ":logging-cpp-unittests-structured",
+    ":logging-cpp-from-void-test",
+  ]
+  test_specs = {
+    log_settings = {
+      max_severity = "FATAL"
+    }
+  }
+}
+
+group("tests") {
+  testonly = true
+  public_deps = [
+    ":logging-cpp-tests",
+    ":logging_cpp_unittests($host_toolchain)",
+  ]
+}

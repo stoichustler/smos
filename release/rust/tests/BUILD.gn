@@ -1,0 +1,311 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/python/python_host_test.gni")
+import("//release/rust/rustc_binary.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/testing/host_test_data.gni")
+
+# Note that all of the Rust targets in this module pass quiet_clippy=true. This prevents the lints
+# produced by these targets from failing the build when deny_warnings=true or from being printed
+# when deny_warnings=false.
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":clippy_test($host_toolchain)",
+    # TODO(https://fxbug.dev/373420863): Re-enable when dryrun is green
+    # ":rustdoc-link-assertions($host_toolchain)",
+    # "//release/rust/tests/rustdoc($host_toolchain)",
+  ]
+}
+
+# The dep chain A->B->C will exercise the functionality of both direct and
+# transitive deps for A
+rustc_binary("a") {
+  edition = "2021"
+  name = "a"
+  with_unit_tests = true
+  deps = [ ":b" ]
+  source_root = "a/main.rs"
+  sources = [
+    "a/main.rs",
+    "a/other.rs",
+  ]
+  quiet_clippy = true
+}
+
+rustc_library("b") {
+  edition = "2021"
+  name = "b"
+  deps = [ ":c" ]
+
+  # TODO(https://fxbug.dev/373420863): Re-enable when dryrun is green
+  #define_rustdoc_test_override = true
+  source_root = "b/lib.rs"
+  sources = [ "b/lib.rs" ]
+  quiet_clippy = true
+}
+
+rustc_library("c") {
+  edition = "2021"
+  name = "c"
+
+  # TODO(https://fxbug.dev/373420863): Re-enable when dryrun is green
+  #define_rustdoc_test_override = true
+  source_root = "c/lib.rs"
+  sources = [ "c/lib.rs" ]
+  quiet_clippy = true
+}
+
+if (is_host) {
+  rustc_library("d") {
+    edition = "2021"
+    name = "d"
+
+    # TODO(https://fxbug.dev/373420863): Re-enable when dryrun is green
+    #define_rustdoc_test_override = true
+    source_root = "d/lib.rs"
+    sources = [ "d/lib.rs" ]
+    quiet_clippy = true
+  }
+
+  gen_dir = "gen/release/rust/tests"
+  host = "host_${host_cpu}"
+
+  python_host_test("clippy_test") {
+    main_source = "clippy_test.py"
+    extra_args = [ host ]
+    deps = [
+      ":copy_clippy",
+      ":copy_default_toolchain",
+      ":copy_other_toolchain",
+      ":copy_rust_target_mapping",
+      ":copy_script",
+    ]
+    metadata = {
+      # Exclude the test universe crates from the global
+      # rust_target_mapping.json since they have intentional errors.
+      rust_test_barrier = []
+    }
+  }
+
+  host_test_data("copy_clippy") {
+    sources = [
+      "$root_build_dir/$gen_dir/a.aux.deps.deps",
+      "$root_build_dir/$gen_dir/a.aux.deps.transdeps",
+      "$root_build_dir/$gen_dir/a.clippy",
+      "$root_build_dir/$gen_dir/a_test.clippy",
+      "$root_build_dir/$gen_dir/b.aux.deps.deps",
+      "$root_build_dir/$gen_dir/b.clippy",
+      "$root_build_dir/$gen_dir/c.clippy",
+    ]
+    deps = [
+      # explicit dependency on "a" is required so that the metadata walk finds
+      # it and its deps even though we never need to build them
+      ":a($default_toolchain)",
+      ":a.aux.deps($default_toolchain)",
+      ":a.clippy($default_toolchain)",
+      ":a_test($default_toolchain)",
+      ":a_test.clippy($default_toolchain)",
+      ":b.aux.deps($default_toolchain)",
+      ":b.clippy($default_toolchain)",
+      ":c.clippy($default_toolchain)",
+    ]
+    outputs = [ "$target_gen_dir/out/default/$gen_dir/{{source_file_part}}" ]
+  }
+
+  host_test_data("copy_other_toolchain") {
+    sources = [ "$root_build_dir/$host/$gen_dir/d.clippy" ]
+    deps = [
+      # "d" dep necessary for metadata collection
+      ":d($host_toolchain)",
+      ":d.clippy($host_toolchain)",
+    ]
+    outputs =
+        [ "$target_gen_dir/out/default/$host/$gen_dir/{{source_file_part}}" ]
+  }
+
+  host_test_data("copy_script") {
+    sources = [
+      "//tools/devshell/contrib/lib/rust/clippy.py",
+      "//tools/devshell/contrib/lib/rust/rust.py",
+    ]
+    outputs = [
+      "$target_gen_dir/tools/devshell/contrib/lib/rust/{{source_file_part}}",
+    ]
+  }
+
+  host_test_data("copy_default_toolchain") {
+    sources = [ "$root_build_dir/default_toolchain_name.txt" ]
+    deps = [ "//:default_toolchain_name.txt($default_toolchain)" ]
+    outputs = [ "$target_gen_dir/out/default/{{source_file_part}}" ]
+  }
+
+  _rust_target_mapping = "$target_gen_dir/rust_target_mapping.json"
+  host_test_data("copy_rust_target_mapping") {
+    sources = [ _rust_target_mapping ]
+    deps = [ ":gen_rust_target_mapping" ]
+    outputs = [ "$target_gen_dir/out/default/{{source_file_part}}" ]
+  }
+
+  # Create a version of //${build_dir}/rust_target_mapping.json which has
+  # this test's "universe", which consists of only the crates defined here.
+  generated_file("gen_rust_target_mapping") {
+    outputs = [ _rust_target_mapping ]
+    output_conversion = "json"
+    testonly = true
+    data_keys = [ "rust_target_mapping" ]
+    walk_keys = [ "rust_test_barrier" ]
+    deps = [
+      ":copy_clippy",
+      ":copy_other_toolchain",
+    ]
+  }
+
+  # These rustdoc-link tests have the goal of making sure that fx rustdoc-link
+  # runs, generates separate directories for the host and fuchisa toolchains,
+  # and contains basic things from the docs (index.html, item docs, source
+  # files). The files checked should be stable across rustdoc versions.
+
+  _rustdoc_link_output = "$target_gen_dir/rustdoc-link.doc"
+  action("rustdoc-link") {
+    hermetic_deps = false
+
+    testonly = true
+    public_deps = [
+      ":b.actual($default_toolchain)",
+      ":b.actual.rustdoc($default_toolchain)",
+      ":c.actual($default_toolchain)",
+      ":c.actual.rustdoc($default_toolchain)",
+      ":d.actual($host_toolchain)",
+      ":d.actual.rustdoc($host_toolchain)",
+      ":gen_rust_target_mapping",
+    ]
+    script = "//tools/devshell/contrib/lib/rust/rustdoc-link.py"
+    outputs = [ _rustdoc_link_output ]
+    _rebased_fuchsia_dir = rebase_path("//", root_build_dir)
+    _rebased_build_dir = rebase_path(root_build_dir, root_build_dir)
+    args = [
+      "--fuchsia-dir=$_rebased_fuchsia_dir",
+      "--build-dir=$_rebased_build_dir",
+      "--quiet",
+      "--no-build",
+      "--destination",
+      rebase_path("$_rustdoc_link_output", root_build_dir),
+      "--touch",
+      rebase_path("$target_gen_dir/touch", root_build_dir),
+      "--rust-target-mapping",
+      rebase_path("$_rust_target_mapping", root_build_dir),
+      "--rustdoc-executable",
+      "$rebased_rustc_prefix/bin/rustdoc",
+    ]
+  }
+
+  action("rustdoc-link-has-b-src") {
+    # asserts that the rustdoc-link.py script contains the source files.
+    # goal: making sure basic properties of the docs are present
+
+    testonly = true
+    public_deps = [ ":rustdoc-link($host_toolchain)" ]
+    script = "//release/rust/tests/assert_directory_contains.py"
+    _output = "$target_gen_dir/$target_name.pass"
+    outputs = [ _output ]
+    args = [
+      "--directory",
+      rebase_path("$_rustdoc_link_output/src/b", root_build_dir),
+      "--contains=lib.rs.html",
+      "--touch",
+      rebase_path(_output, root_build_dir),
+    ]
+  }
+
+  action("rustdoc-link-has-d-src") {
+    # asserts that the rustdoc-link.py script contains the source files.
+    # goal: making sure basic properties of the docs are present
+
+    testonly = true
+    public_deps = [ ":rustdoc-link($host_toolchain)" ]
+    script = "//release/rust/tests/assert_directory_contains.py"
+    _output = "$target_gen_dir/$target_name.pass"
+    outputs = [ _output ]
+    args = [
+      "--directory",
+      rebase_path("$_rustdoc_link_output", root_build_dir),
+      "--glob-pattern=src/d",
+      "--contains=lib.rs.html",
+      "--touch",
+      rebase_path(_output, root_build_dir),
+    ]
+  }
+
+  action("rustdoc-link-host-separate-from-fuchsia") {
+    # asserts that the rustdoc-link.py script creates a separate directory
+    # for the fuchsia toolchain
+
+    testonly = true
+    public_deps = [ ":rustdoc-link($host_toolchain)" ]
+    script = "//release/rust/tests/assert_directory_contains.py"
+    _output = "$target_gen_dir/$target_name.pass"
+    outputs = [ _output ]
+    args = [
+      "--directory",
+      rebase_path("$_rustdoc_link_output", root_build_dir),
+      "--absent=d",
+      "--contains=b",
+      "--contains=c",
+      "--touch",
+      rebase_path(_output, root_build_dir),
+    ]
+  }
+
+  action("rustdoc-link-has-fuchsia-item") {
+    # make sure the generated docs have the item from b (fuchsia)
+
+    testonly = true
+    public_deps = [ ":rustdoc-link($host_toolchain)" ]
+    script = "//release/rust/tests/assert_directory_contains.py"
+    _output = "$target_gen_dir/$target_name.pass"
+    outputs = [ _output ]
+    args = [
+      "--directory",
+      rebase_path("$_rustdoc_link_output/b", root_build_dir),
+      "--contains=index.html",
+      "--contains=struct.RequiredB.html",
+      "--absent=fn.blah.html",
+      "--touch",
+      rebase_path(_output, root_build_dir),
+    ]
+  }
+
+  action("rustdoc-link-has-host-item") {
+    # make sure the generated docs have the item from d (host)
+
+    testonly = true
+    public_deps = [ ":rustdoc-link($host_toolchain)" ]
+    script = "//release/rust/tests/assert_directory_contains.py"
+    _output = "$target_gen_dir/$target_name.pass"
+    outputs = [ _output ]
+    args = [
+      "--directory",
+      rebase_path("$_rustdoc_link_output/host/d", root_build_dir),
+      "--contains=index.html",
+      "--absent=struct.RequiredB.html",
+      "--contains=fn.blah.html",
+      "--touch",
+      rebase_path(_output, root_build_dir),
+    ]
+  }
+
+  group("rustdoc-link-assertions") {
+    testonly = true
+    public_deps = [
+      ":rustdoc-link-has-b-src",
+      #":rustdoc-link-has-d-src",
+      #":rustdoc-link-has-fuchsia-item",
+      #":rustdoc-link-has-host-item",
+      #":rustdoc-link-host-separate-from-fuchsia",
+    ]
+  }
+}

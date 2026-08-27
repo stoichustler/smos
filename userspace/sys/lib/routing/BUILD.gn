@@ -1,0 +1,141 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/host.gni")
+import("//release/rust/rustc_library.gni")
+import("//release/rust/rustc_test.gni")
+
+rustc_library("routing") {
+  with_unit_tests = true
+  edition = "2021"
+
+  visibility = [
+    "//userspace/lib/assembly/component_id_index/*",
+    "//userspace/security/lib/scrutiny/collection/*",
+    "//userspace/security/lib/scrutiny/collector/*",
+    "//userspace/security/lib/scrutiny/frontend/*",
+    "//userspace/security/lib/scrutiny/x/*",
+    "//userspace/sys/component_manager/*",
+    "//userspace/sys/full-resolver:*",
+    "//userspace/sys/lib/cm_rust/testing:*",
+    "//userspace/sys/lib/component_debug/*",
+    "//userspace/sys/lib/elf_runner/*",
+    "//userspace/sys/lib/routing/*",
+    "//userspace/sys/test_manager/*",
+    "//tools/lib/cm_fidl_analyzer/*",
+  ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.component:fuchsia.component_rust",
+    "//sdk/fidl/fuchsia.component.decl:fuchsia.component.decl_rust",
+    "//sdk/fidl/fuchsia.component.internal:fuchsia.component.internal_rust",
+    "//sdk/fidl/fuchsia.component.resolution:fuchsia.component.resolution_rust",
+    "//sdk/fidl/fuchsia.component.sandbox:fuchsia.component.sandbox_rust",
+    "//sdk/fidl/fuchsia.io:fuchsia.io_rust",
+    "//sdk/fidl/fuchsia.sys2:fuchsia.sys2_rust",
+    "//sdk/rust/zx-status",
+    "//userspace/lib/error/clonable_error",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/from-enum",
+    "//userspace/lib/versioning/version-history/rust",
+    "//userspace/sys/component_manager/lib/router_error",
+    "//userspace/sys/component_manager/lib/sandbox",
+    "//userspace/sys/lib/cm_config",
+    "//userspace/sys/lib/cm_rust",
+    "//userspace/sys/lib/cm_rust:cm_rust_derive",
+    "//userspace/sys/lib/cm_types",
+    "//userspace/sys/lib/component_id_index",
+    "//userspace/sys/lib/moniker",
+    "//userspace/sys/lib/routing/availability",
+    "//third_party/rust_crates:anyhow",
+    "//third_party/rust_crates:async-trait",
+    "//third_party/rust_crates:derivative",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:itertools",
+    "//third_party/rust_crates:lazy_static",
+    "//third_party/rust_crates:log",
+    "//third_party/rust_crates:maplit",
+    "//third_party/rust_crates:thiserror",
+    "//third_party/rust_crates:url",
+  ]
+
+  sources = [
+    "src/availability.rs",
+    "src/bedrock/dict_ext.rs",
+    "src/bedrock/lazy_get.rs",
+    "src/bedrock/mod.rs",
+    "src/bedrock/program_output_dict.rs",
+    "src/bedrock/request_metadata.rs",
+    "src/bedrock/sandbox_construction.rs",
+    "src/bedrock/structured_dict.rs",
+    "src/bedrock/weak_instance_token_ext.rs",
+    "src/bedrock/with_availability.rs",
+    "src/bedrock/with_default.rs",
+    "src/bedrock/with_error_reporter.rs",
+    "src/bedrock/with_policy_check.rs",
+    "src/bedrock/with_porcelain_type.rs",
+    "src/bedrock/with_rights.rs",
+    "src/capability_source.rs",
+    "src/collection.rs",
+    "src/component_instance.rs",
+    "src/config.rs",
+    "src/environment.rs",
+    "src/error.rs",
+    "src/event.rs",
+    "src/legacy_router.rs",
+    "src/lib.rs",
+    "src/mapper.rs",
+    "src/path.rs",
+    "src/policy.rs",
+    "src/resolving.rs",
+    "src/rights.rs",
+    "src/walk_state.rs",
+  ]
+
+  test_deps = [
+    "//userspace/lib/fuchsia",
+    "//userspace/sys/lib/cm_rust/testing",
+    "//third_party/rust_crates:assert_matches",
+    "//third_party/rust_crates:test-case",
+  ]
+
+  # Some host tools use serde to serialize/deserialize types defined in
+  # this crate. This dependency is guarded in code via #[cfg(feature = "serde")]
+  # and #[cfg_attr(feature = "serde", ...)] to prevent serde dependencies in
+  # non-host builds.
+  features = []
+  if (is_host) {
+    features += [ "serde" ]
+    deps += [ "//third_party/rust_crates:serde" ]
+  }
+
+  if (is_fuchsia) {
+    deps += [
+      "//sdk/fidl/fuchsia.mem:fuchsia.mem_rust",
+      "//userspace/sys/lib/cm_fidl_validator",
+      "//userspace/sys/lib/mem_util",
+    ]
+  }
+}
+
+fuchsia_unittest_package("fuchsia-routing-tests") {
+  deps = [
+    ":routing_test",
+    "//userspace/sys/test_runners:tmp_storage",
+  ]
+}
+
+group("host-routing-tests") {
+  testonly = true
+  public_deps = [ ":routing_test($host_toolchain)" ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":fuchsia-routing-tests",
+    "availability:tests",
+  ]
+}

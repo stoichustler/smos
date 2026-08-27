@@ -1,0 +1,340 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/assembly/package_list.gni")
+import("//release/board.gni")
+import("//release/compiled_action.gni")
+import("//release/component/component_id_index.gni")
+import("//release/config.gni")
+import("//release/config/clang/clang.gni")
+import("//release/dist/fini_manifest.gni")
+import("//release/drivers/driver_manifest.gni")
+import("//release/images/args.gni")
+import("//release/images/custom_signing.gni")
+import("//release/images/paths.gni")
+import("//release/images/size_checker/size_checker_input.gni")
+import("//release/images/vbmeta.gni")
+import("//release/images/vboot/vboot.gni")
+import("//release/info/info.gni")
+import("//release/product.gni")
+import("//release/sdk/config.gni")
+import("//release/sdk/product_bundle.gni")
+import("//release/security.gni")
+import("//release/zbi/zbi_input.gni")
+import("//release/zircon/tools.gni")
+import("//userspace/storage/fshost/generated_fshost_config.gni")
+
+assert(current_toolchain == default_toolchain,
+       "//release/images/* are only valid in the Fuchsia toolchain")
+
+assert(
+    bootfs_only == use_bringup_assembly,
+    "use_bringup_assembly is replacing bootfs_only, and MUST always be the same value")
+
+# This is a group that contains the one-and-only assembly implementation.  It
+# can be used in contexts that need either bringup or the full-fuchsia assembly
+# implementation's outputs.
+#
+# If a target requires the outputs of the full-fuchsia assembly implementation,
+# it should directly use it (//release/images/fuchsia).
+group("main_assembly") {
+  testonly = use_bringup_assembly || fuchsia_zbi_testonly
+  public_deps = [ labels.images ]
+}
+
+# Dependencies for all image targets referenced by paver_targets, i.e., the
+# images needed by the generated pave scripts.
+default_image_deps = [ labels.images ]
+
+board_name_file = "$root_build_dir/board_name"
+write_file(board_name_file, "${board_name}")
+
+###
+### Zircon Boot Images
+###
+
+default_image_deps += [ labels.qemu_kernel ]
+
+# This action runs a script that checks all vtables in fuchsia binaries are
+# in readonly data.
+action("check_vtables_in_rodata") {
+  testonly = true
+  hermetic_deps = false
+  script = "//scripts/clang/check_vtable_rodata.py"
+  outputs = [ "$root_build_dir/$target_name" ]
+  depfile = "$root_build_dir/$target_name.d"
+
+  # Ensure that all fuchsia binaries listed in `binaries.json` are created
+  # first.
+  deps = [ labels.images ]
+
+  args = [
+    # Ignore these specific libunwind symbols for now because these are from
+    # the libwundind prebuilts used by rust which we do not currently build
+    # with relative vtables.
+    "--exclude",
+    "vtable for libunwind::UnwindCursor<libunwind::LocalAddressSpace, libunwind::Registers_x86_64>",
+    "--exclude",
+    "vtable for libunwind::UnwindCursor<libunwind::LocalAddressSpace, libunwind::Registers_arm64>",
+
+    "--readelf",
+    "$rebased_clang_prefix/llvm-readelf",
+
+    # Write to a file.
+    "-o",
+    rebase_path(outputs[0], root_build_dir),
+
+    # Run in `fuchsia` mode, which looks for `binaries.json` in the provided
+    # output directory.
+    "fuchsia",
+
+    # Point to the output directory.
+    rebase_path("$root_build_dir", root_build_dir),
+
+    "--depfile",
+    rebase_path(depfile, root_build_dir),
+  ]
+}
+
+group("fvm.sparse.blk") {
+  testonly = fuchsia_zbi_testonly
+  public_deps = [ labels.images ]
+}
+
+group("fvm.fastboot.blk") {
+  testonly = fuchsia_zbi_testonly
+  public_deps = [ labels.images ]
+}
+
+group("fuchsia") {
+  testonly = fuchsia_zbi_testonly
+  public_deps = [ labels.images ]
+}
+
+group("fuchsia.vbmeta") {
+  testonly = fuchsia_zbi_testonly
+  public_deps = [ labels.images ]
+}
+
+# Pseudo-target to record information about the sizes of filesystems assembled
+# during the build for later analysis.
+# TODO(https://fxbug.dev/42162374): Only include this for builds that generate blobfs
+# once this targets is no longer hardcoded in infra.
+group("record_filesystem_sizes") {
+  testonly = true
+  if (!use_bringup_assembly) {
+    if (use_bazel_images_only) {
+      if (bazel_product_bundle_target != "") {
+        deps = [ "${bazel_product_bundle_target}_elf_sizes" ]
+      }
+    } else {
+      deps = [ "//release/images/sizes:elf_sizes.json" ]
+    }
+  }
+}
+
+default_image_deps += [ "//release/images/flash" ]
+
+# If a GPT image was specified, make it available as a build artifact.
+if (gpt_image != "") {
+  copy("gpt") {
+    testonly = true
+    sources = [ rebase_path(gpt_image, root_build_dir) ]
+    outputs = [ "$root_out_dir/gpt.bin" ]
+
+    metadata = {
+      images = [
+        {
+          label = get_label_info(":gpt", "label_with_toolchain")
+          archive = true
+          name = "gpt"
+          path = "gpt.bin"
+          type = "bin"
+        },
+      ]
+    }
+  }
+
+  default_image_deps += [ ":gpt" ]
+}
+
+default_image_deps += [ "//release/images/tools:board_tools" ]
+
+default_image_deps += [ labels.recovery_images ]
+
+# Build the UEFI disk image.
+# GCE, a consumer of this image, requires it to be named disk.raw
+if (build_uefi_disk && !product_skip_uefi_disk) {
+  uefi_disk_path = "$target_out_dir/disk.raw"
+  mkfs_label = "//zircon/third_party/uapp/mkfs-msdosfs($host_toolchain)"
+  mkfs_out_dir = get_label_info(mkfs_label, "root_out_dir")
+  mkfs_bin = "$mkfs_out_dir/mkfs-msdosfs"
+
+  if (!use_bringup_assembly && !fxfs_blob) {
+    fvm_tool_target = "//userspace/storage/bin/fvm($host_toolchain)"
+    fvm_tool_path = get_label_info(fvm_tool_target, "root_out_dir") + "/fvm"
+  }
+
+  compiled_action("uefi-disk") {
+    no_output_dir_leaks = false
+
+    deps = [
+      "//:product_bundles",
+      "//userspace/firmware/gigaboot/cpp:fuchsia",
+      labels.images,
+      labels.recovery_images,
+      mkfs_label,
+    ]
+    testonly = true
+    tool = "//tools/make-fuchsia-vol"
+    inputs = [
+      mkfs_bin,
+      "$root_build_dir/product_bundles.json",
+    ]
+
+    bootloader_path = rebase_path(
+            "${root_build_dir}/kernel.efi_${target_cpu}/fuchsia-efi.efi")
+
+    args = [
+      "--fuchsia-build-dir",
+      rebase_path("$root_build_dir"),
+      "--arch",
+      target_cpu,
+      "--product-bundle-name",
+      main_product_bundle_name,
+      "--bootloader",
+      bootloader_path,
+      "--depfile",
+      "--host-arch",
+      host_cpu,
+      "--resize",
+    ]
+    if (is_coverage) {
+      # Images are larger due to coverage overheads, so leave more room.
+      #
+      # TODO(https://fxbug.dev/42082088): Remove unnecessary packages from coverage
+      # builds and reduce image size.
+      args += [ "12000000000" ]  # 12GB
+    } else {
+      args += [ "10000000000" ]  # 10GB
+    }
+    if (fxfs_blob) {
+      args += [ "--use-fxfs" ]
+    }
+
+    depfile = "$uefi_disk_path.d"
+
+    if (use_bringup_assembly) {
+      args += [ "--ramdisk-only" ]
+    } else if (!fxfs_blob) {
+      inputs += [ fvm_tool_path ]
+      deps += [ "//userspace/storage/bin/fvm:fvm($host_toolchain)" ]
+    }
+
+    args += [ rebase_path(uefi_disk_path) ]
+    outputs = [ uefi_disk_path ]
+
+    metadata = {
+      images = [
+        {
+          label = get_label_info(":$target_name", "label_with_toolchain")
+          archive = false
+          name = "uefi-disk"
+          path = rebase_path(uefi_disk_path, root_build_dir)
+          type = "blk"
+        },
+      ]
+    }
+  }
+}
+
+group("images") {
+  testonly = true
+  deps = [
+    ":default-images",
+    "//release/images/archive:build_args_metadata",
+  ]
+}
+
+# The default-images target is a dependency of the top level default
+# target when appropriate, and contains the minimum set of images that
+# are typical given the requested build configuration.
+group("default-images") {
+  testonly = true
+
+  deps = default_image_deps
+
+  # Prune unsupported targets when Bazel assembly is enabled. This makes sure
+  # the build:
+  #
+  #  * does NOT take dependency on GN assembly when only Bazel assembly should
+  #    be used;
+  #  * does NOT generate unused outputs with incorrect content, which
+  #    accidentally become load-bearing.
+  #
+  if (!use_bazel_images_only) {
+    # Paving is not supported in Bazel assembly.
+    if (recovery_is_zedboot) {
+      deps += [
+        "//release/images/archive:paver-script",
+        "//release/images/archive:zedboot-script",
+        "//release/images/tools:bootserver",
+      ]
+    }
+  }
+
+  if (build_uefi_disk && !product_skip_uefi_disk) {
+    deps += [ ":uefi-disk" ]
+  }
+
+  # Even if Bazel assembly uses product bundle to flash, downstream tools can
+  # still expect flash.json and flash.sh to exist for flashing.
+  deps += [
+    "//release/images/flash:fastboot_manifest",
+    "//release/images/flash:flash_script",
+    "//release/images/tools:fastboot($host_toolchain)",
+  ]
+
+  if (use_bazel_images_only) {
+    if (bazel_product_bundle_target != "") {
+      deps += [ "${bazel_product_bundle_target}_size_targets" ]
+    }
+  } else {
+    if (size_checker_input != {
+        }) {
+      # Size checks only make sense when use_bringup_assembly is false, since
+      # they require system images in addition to the ZBI.
+      deps += [
+        "size_checker:run_product_size_checker",
+        "size_checker:size_report.json",
+      ]
+    }
+  }
+
+  if (!bootfs_only) {
+    if (!use_bringup_assembly) {
+      deps += [ ":record_filesystem_sizes" ]
+    }
+  }
+
+  # TODO(https://fxbug.dev/42123048): The build graph for "bringup" (use_bringup_assembly)
+  # MUST only contain one zircon-a metadata target, which means that anything
+  # reaching fuchsia.zbi must be excluded from the build graph.
+  if (!use_bringup_assembly) {
+    deps += [ "//release/images/updates" ]
+  }
+
+  if (check_vtables_in_rodata) {
+    deps += [ ":check_vtables_in_rodata" ]
+  }
+
+  if (build_usb_installer) {
+    deps += [ "//release/images/installer" ]
+  }
+
+  if (!use_bringup_assembly && bazel_product_bundle_target != "") {
+    deps += [ bazel_product_bundle_target ]
+    deps += extra_bazel_assembly_targets
+  }
+}

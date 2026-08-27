@@ -1,0 +1,66 @@
+# Copyright 2020 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/testing/cc_test_executable.gni")
+
+group("tests") {
+  testonly = true
+  deps = [ ":loader-service-test" ]
+}
+
+source_set("loader_service") {
+  sources = [ "loader_service.cc" ]
+
+  public_deps = [
+    "//sdk/fidl/fuchsia.ldsvc:fuchsia.ldsvc_cpp",
+    "//sdk/lib/async",
+    "//zircon/system/ulib/zx",
+  ]
+
+  deps = [
+    "//sdk/fidl/fuchsia.io:fuchsia.io_cpp",
+    "//sdk/lib/fdio",
+    "//sdk/lib/fidl",
+    "//sdk/lib/syslog/cpp",
+    "//userspace/lib/files",
+  ]
+}
+
+# Subclasses of LoaderServiceBase can reuse the test fixture used here.
+source_set("loader_service_test_fixture") {
+  testonly = true
+  sources = [ "loader_service_test_fixture.cc" ]
+
+  public_deps = [
+    ":loader_service",
+    "//sdk/lib/async-loop:async-loop-cpp",
+    "//sdk/lib/async-loop:async-loop-default",
+    "//sdk/lib/component/incoming/cpp",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//userspace/lib/testing/loop_fixture",
+    "//userspace/storage/memfs:lib",
+    "//zircon/system/ulib/fbl",
+  ]
+  deps = [
+    "//sdk/fidl/fuchsia.kernel:fuchsia.kernel_cpp",
+    "//userspace/lib/testing/predicates",
+  ]
+}
+
+cc_test_executable("loader_service_test") {
+  testonly = true
+  sources = [ "loader_service_test.cc" ]
+
+  deps = [
+    ":loader_service_test_fixture",
+    "//zircon/system/ulib/ldmsg",
+  ]
+}
+
+fuchsia_unittest_package("loader-service-test") {
+  manifest = "meta/loader-service-test.cml"
+  deps = [ ":loader_service_test" ]
+  test_type = "system"
+}

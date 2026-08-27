@@ -1,0 +1,67 @@
+# Copyright 2022 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//userspace/developer/ffx/build/ffx_action.gni")
+
+# Extract the structured configuration values in a system image.
+#
+# Parameters
+#
+#   product_bundle_path (required)
+#     [path] Path to product bundle.
+#
+#   output (required)
+#     [path] The JSON file to which to write the extracted values.
+#
+#   recovery (optional)
+#     [bool] Analyze recovery images rather than default fuchsia images.
+#
+#   deps, public_deps, data_deps (optional)
+#     Usual GN meaning.
+template("extract_assembled_structured_config") {
+  assert(defined(invoker.product_bundle_path),
+         "verify_bootfs_filelist() must specify product_bundle_path")
+  assert(defined(invoker.output),
+         "extract_assembled_structured_config() must specify an output")
+
+  ffx_action(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "deps",
+                             "public_deps",
+                             "data_deps",
+                             "visibility",
+                           ])
+    depfile = "$target_gen_dir/$target_name.d"
+    pb_manifest = "${invoker.product_bundle_path}/product_bundle.json"
+
+    inputs = [ pb_manifest ]
+    outputs = [ invoker.output ]
+
+    # The target below is generated as a part of the `ffx_tool` action at
+    # `//userspace/developer/ffx/plugins/scrutiny:ffx_scrutiny_tool`. See there
+    # for more information.
+    ffx_tool = "//userspace/developer/ffx/plugins/scrutiny:ffx_scrutiny_tool"
+    ffx_tool_output_name = "ffx-scrutiny"
+
+    args = [
+      "scrutiny",
+      "extract",
+      "structured-config",
+      "--depfile",
+      rebase_path(depfile, root_build_dir),
+      "--build-path",
+      rebase_path(root_build_dir, root_build_dir),
+      "--product-bundle",
+      rebase_path(invoker.product_bundle_path, root_build_dir),
+      "--output",
+      rebase_path(invoker.output, root_build_dir),
+    ]
+
+    if (defined(invoker.recovery) && invoker.recovery) {
+      args += [ "--recovery" ]
+    }
+  }
+}

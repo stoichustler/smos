@@ -1,0 +1,56 @@
+# Copyright 2024 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/component/config.gni")
+import("//release/components.gni")
+import("//release/fidl/fidl.gni")
+import("//release/rust/rustc_binary.gni")
+
+rustc_test("bin") {
+  edition = "2024"
+  source_root = "src/main.rs"
+  sources = [ source_root ]
+  name = "role_manager_test"
+  deps = [
+    "//sdk/fidl/fuchsia.scheduler:fuchsia.scheduler_rust",
+    "//sdk/rust/zx",
+    "//userspace/lib/diagnostics/reader/rust",
+    "//userspace/lib/fidl/rust/fidl",
+    "//userspace/lib/fuchsia",
+    "//userspace/lib/fuchsia-async",
+    "//userspace/lib/fuchsia-component",
+    "//userspace/lib/fuchsia-runtime",
+    "//userspace/testing/realm_proxy/client",
+    "//userspace/zircon/bin/role_manager/testing/fidl:test.rolemanager_rust",
+    "//third_party/rust_crates:anyhow",
+  ]
+}
+
+fuchsia_component("test-suite-component") {
+  testonly = true
+  component_name = "test-suite"
+  manifest = "meta/test-suite.cml"
+  deps = [ ":bin" ]
+}
+
+fuchsia_package("test-suite") {
+  testonly = true
+  deps = [ ":test-suite-component" ]
+}
+
+fuchsia_test_component("test-root") {
+  testonly = true
+
+  # This needs to be a system test to access fuchsia.kernel.ProfileResource.
+  test_type = "system"
+  manifest = "meta/test-root.cml"
+}
+
+fuchsia_test_package("role_manager-test") {
+  test_components = [ ":test-root" ]
+  subpackages = [
+    "//userspace/zircon/bin/role_manager/testing/realm-factory",
+    ":test-suite",
+  ]
+}

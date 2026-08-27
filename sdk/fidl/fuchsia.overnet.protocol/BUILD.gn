@@ -1,0 +1,21 @@
+# Copyright 2018 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/fidl/fidl.gni")
+
+fidl("fuchsia.overnet.protocol") {
+  sdk_category = "partner_internal"
+  sdk_area = "Unknown"
+  stable = true
+
+  sources = [
+    "labels.fidl",
+    "peer_protocol.fidl",
+    "zircon_proxy.fidl",
+  ]
+  public_deps = [
+    "//sdk/fidl/fuchsia.io",
+    "//zircon/vdso/zx",
+  ]
+}

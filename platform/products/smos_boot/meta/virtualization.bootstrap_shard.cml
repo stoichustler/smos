@@ -1,0 +1,50 @@
+// Copyright 2026 The Fuchsia Authors.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+    children: [
+        {
+            name: "vmm-launcher",
+            url: "fuchsia-boot:///smos-virtualization-host#meta/vmm_launcher.cm",
+        },
+        {
+            name: "zircon-guest-manager",
+            url: "fuchsia-boot:///smos-virtualization-host#meta/zircon_guest_manager.cm",
+        },
+    ],
+    offer: [
+        {
+            protocol: [
+                "fuchsia.kernel.HypervisorResource",
+                "fuchsia.kernel.VmexResource",
+            ],
+            from: "parent",
+            to: [ "#vmm-launcher", "#zircon-guest-manager" ],
+        },
+        {
+            protocol: "fuchsia.kernel.HypervisorResource",
+            from: "parent",
+            to: "#console-launcher",
+        },
+        {
+            protocol: "fuchsia.virtualization.ZirconGuestManager",
+            from: "#zircon-guest-manager",
+            to: "#console-launcher",
+        },
+        {
+            protocol: "fuchsia.scheduler.RoleManager",
+            from: "#role_manager",
+            to: [ "#vmm-launcher", "#zircon-guest-manager" ],
+        },
+        {
+            protocol: "fuchsia.sysinfo.SysInfo",
+            from: "#sysinfo",
+            to: [ "#vmm-launcher", "#zircon-guest-manager" ],
+        },
+        {
+            dictionary: "diagnostics",
+            from: "self",
+            to: [ "#vmm-launcher", "#zircon-guest-manager" ],
+        },
+    ],
+}

@@ -1,0 +1,77 @@
+// Copyright 2019 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+@available(added=HEAD)
+library fuchsia.hardware.cpu.ctrl;
+
+using zx;
+
+/// CpuOperatingPointInfo::frequency_hz and CpuOperatingPointInfo::voltage_uv
+/// are set to this if the frequency and voltage for the given operating point
+/// are unknown respectively.
+const FREQUENCY_UNKNOWN int64 = -1;
+const VOLTAGE_UNKNOWN int64 = -1;
+
+const DEVICE_OPERATING_POINT_P0 uint32 = 0;
+
+/// A collection of some basic information for a given operating point.
+type CpuOperatingPointInfo = struct {
+    // Frequency the core is operating at in hertz.
+    frequency_hz int64;
+
+    // Voltage the core is operating at in microvolts.
+    voltage_uv int64;
+};
+
+closed protocol Device {
+    /// Returns information about a given operating point of this performance domain.
+    strict GetOperatingPointInfo(struct {
+        // Operating point for which information is queried.
+        opp uint32;
+    }) -> (struct {
+        info CpuOperatingPointInfo;
+    }) error zx.Status;
+
+    /// Gets the current operating point of the device.
+    strict GetCurrentOperatingPoint() -> (struct {
+        out_opp uint32;
+    });
+
+    /// Sets the operating point of this device to the requested operating point.
+    strict SetCurrentOperatingPoint(struct {
+        requested_opp uint32;
+    }) -> (struct {
+        out_opp uint32;
+    }) error zx.Status;
+
+    /// Returns the number of operating points within this performance domain.
+    strict GetOperatingPointCount() -> (struct {
+        count uint32;
+    }) error zx.Status;
+
+    /// Returns the number of logical cores contained within this performance domain.
+    strict GetNumLogicalCores() -> (struct {
+        count uint64;
+    });
+
+    /// Returns a global system-wide core ID for the nth core in this performance domain.
+    strict GetLogicalCoreId(struct {
+        index uint64;
+    }) -> (struct {
+        id uint64;
+    });
+
+    /// Returns the id of this performance domain within its package.
+    strict GetDomainId() -> (struct {
+        domain_id uint32;
+    });
+
+    /// Returns the relative performance of this domain, if known.
+    strict GetRelativePerformance() -> (struct {
+        relative_performance uint8;
+    }) error zx.Status;
+};
+
+service Service {
+    device client_end:Device;
+};

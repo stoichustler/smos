@@ -1,0 +1,95 @@
+# Copyright 2021 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//release/components.gni")
+import("//release/test.gni")
+
+static_library("unwinder") {
+  public = [
+    "cfi_module.h",
+    "cfi_parser.h",
+    "dwarf_expr.h",
+    "error.h",
+    "fp_unwinder.h",  # Used by
+                      # //userspace/performance/experimental/profiler/sampler.cc.
+    "memory.h",
+    "module.h",
+    "platform.h",
+    "registers.h",
+    "unwind.h",
+  ]
+  sources = [
+    "cfi_module.cc",
+    "cfi_parser.cc",
+    "cfi_unwinder.cc",
+    "cfi_unwinder.h",
+    "dwarf_expr.cc",
+    "error.cc",
+    "fp_unwinder.cc",
+    "frame.h",
+    "memory.cc",
+    "plt_unwinder.cc",
+    "plt_unwinder.h",
+    "registers.cc",
+    "scs_unwinder.cc",
+    "scs_unwinder.h",
+    "unwind.cc",
+    "unwinder_base.h",
+  ]
+  deps = [ "//sdk/lib/fit" ]
+  friend = [ ":tests" ]
+
+  if (is_mac) {
+    deps += [ "//userspace/developer/debug/shared:elf_h_on_mac" ]
+  } else {
+    # UnwindLocal() is only available on ELF systems.
+    public += [
+      "third_party/libunwindstack/context.h",
+      "unwind_local.h",
+    ]
+    sources += [ "unwind_local.cc" ]
+    if (current_cpu == "x64") {
+      sources += [ "third_party/libunwindstack/context_x86_64.S" ]
+    }
+  }
+
+  if (is_fuchsia) {
+    public += [ "fuchsia.h" ]
+    sources += [ "fuchsia.cc" ]
+  } else if (is_linux) {
+    public += [ "linux.h" ]
+    sources += [ "linux.cc" ]
+  }
+}
+
+test("unwinder_tests_bin") {
+  output_name = "unwinder_tests"
+  sources = [
+    "dwarf_expr_unittest.cc",
+    "memory_unittest.cc",
+  ]
+
+  deps = [
+    ":unwinder",
+    "//userspace/lib/fxl/test:gtest_main",
+    "//third_party/googletest:gtest",
+  ]
+
+  if (!is_mac) {
+    deps += [ "tests" ]
+  }
+}
+
+fuchsia_unittest_package("unwinder_tests") {
+  deps = [ ":unwinder_tests_bin" ]
+}
+
+group("tests") {
+  testonly = true
+
+  deps = [
+    ":unwinder_tests",
+    ":unwinder_tests_bin($host_toolchain)",
+  ]
+}
