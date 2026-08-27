@@ -68,8 +68,6 @@ tmp/
 
 # For storing local scripts and data files in a source tree.
 /out/
-/release/secondary/third_party/ffmpeg
-/release/secondary/third_party/protobuf
 
 # rust-analyzer
 /rust-project.json
