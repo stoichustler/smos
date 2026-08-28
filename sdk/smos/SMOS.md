@@ -331,19 +331,19 @@ and calls `userboot_init` at `:204-205`.
 
 `userboot_init` is at `zircon/kernel/lib/userabi/userboot.cc:308`. It creates
 the `userboot` process and root VMAR under the root job, prepares startup
-handles for the vDSO, ZBI VMO, BootOptions, root job and MMIO/IRQ/SMC/System
-resources (`bootstrap_vmos`), and creates a channel for the kernel to write the
-bootstrap message and userspace to receive it. It then maps the userboot code,
-vDSO and initial stack, creates a thread, and enters userspace at `:409-412`
+handles for the vDSO, ZBI VMO, BootOptions, root job, and MMIO/IRQ/SMC/System
+resources (`bootstrap_vmos`). It creates a channel for the kernel to write the
+bootstrap message and for user space to receive it, then maps the userboot code,
+vDSO, and initial stack, creates a thread, and enters user space at `:409-412`
 with `ThreadDispatcher::Start(entry, sp, hv, vdso_base)`.
 
-Here `hv` is the channel handle passed to the userspace `_start`; it is not a
+Here `hv` is the channel handle passed to the user-space `_start`; it is not a
 file descriptor, but a Zircon channel carrying `zx_proc_args_t` and capability
 handles.
 
 #### 4. Userspace `userboot` loads `userboot.next`
 
-The first userspace instruction is at
+The first user-space instruction is at
 `zircon/kernel/lib/userabi/userboot/start.cc:568`: `_start(arg)` calls
 `Bootstrap(zx::channel{arg})`. `Bootstrap` reads the kernel message, decompresses
 the ZBI's `ZBI_TYPE_STORAGE_BOOTFS`, and parses `userboot.*` command-line
@@ -355,7 +355,7 @@ load the ELF/interpreter and `elf_load_vdso` to map the vDSO, allocates a stack,
 places `/svc`, the BootFS VMO, debuglog, process/VMAR/thread self handles and
 resource handles into `ChildMessageLayout`, sends the message at
 `start.cc:369-376`, and calls `zx_process_start`. Thus the final kernel ABI
-operation from the kernel to the first ordinary userspace process is
+operation from the kernel to the first ordinary user-space process is
 `zx_process_start`, not a Rust call inside component manager.
 
 #### 5. `component_manager` establishes the userspace root
@@ -378,7 +378,7 @@ capability routing, while Zircon continues to provide process/thread/VMO/channel
 objects and the syscall ABI.
 
 The endpoint is not "the kernel loading a shell." The shell, console, driver
-manager and driver-host are later userspace components in the root component
+manager, and driver-host are later user-space components in the root component
 graph. They start through component-manager-routed FIDL/channels and devfs
 capabilities, after which the `smos:\> ` prompt becomes available.
 
@@ -520,8 +520,9 @@ it does not imply that a conventional network stack is installed.
 
 SMOS does not replace the Zircon kernel with a special server kernel. Its
 product configuration selects a smaller user-space assembly while retaining
-the kernel's fundamental resource model. The modules below describe the path a
-console process or user-space driver takes when it uses those resources.
+the kernel's fundamental resource model. The sections below describe the
+kernel mechanisms a console process or user-space driver uses; "modules" here
+means logical subsystems, not dynamically loaded kernel objects.
 
 ### SMOS syscall implementation
 
@@ -623,7 +624,7 @@ handle to it automatically.
 | --- | --- | --- | --- |
 | Tasks | job, process, thread | component manager, console, driver-host lifecycle and execution | job policy, task rights, process handle table |
 | IPC | channel, socket, FIFO, stream, IOBuffer | FIDL/framework messages, virtio socket transport, buffered data paths | channel/socket rights and transferred handles |
-| Signaling | event, eventpair, counter, futex | one-shot notifications, peer closure, userspace synchronization | signal rights; futex also checks the user address |
+| Signaling | event, eventpair, counter, futex | one-shot notifications, peer closure, user-space synchronization | signal rights; futex also checks the user address |
 | Waiting | port, timer | aggregate async events, timer deadlines, interrupt packets | wait/queue rights and port ownership |
 | Memory | VMO, VMAR, pager | process address spaces, BootFS/file-backed data, shared buffers | VMO/VMAR rights, mapping flags, pager protocol |
 | Scheduling | profile | priority/deadline configuration for selected threads | profile creation and task-set-profile rights |
@@ -809,7 +810,7 @@ network interface, and SMOS does not assemble a netstack around it.
 **FIFO** and **stream** objects provide specialized byte or record operations;
 they are useful when a protocol does not need FIDL's typed channel messages.
 **Event**, **eventpair**, **counter**, and **futex** provide signaling or
-userspace synchronization. **Port** combines waits from multiple sources into
+user-space synchronization. **Port** combines waits from multiple sources into
 packets, which is why driver and async service loops can wait on channels,
 interrupts, and timers through one dispatcher.
 
@@ -940,69 +941,266 @@ block, or driver bind failure.
 
 ### Memory
 
-Memory is represented in layers. Physical memory is discovered during the
-`phys`/boot-shim hand-off and made available to the kernel's page allocator.
-The kernel then manages VMOs (page-backed objects), VMARs (address regions),
-and mappings. A process receives a private address space and accesses a VMO
-through a mapping or a handle transferred over a channel.
+Memory is a kernel-owned mechanism, not a standalone SMOS service. The
+boot-shim and `kernel.phys` discover usable physical ranges, the physical
+memory manager (PMM) owns page allocation, and the virtual-memory (VM) layer
+turns those pages into capability-protected objects and mappings. User space
+sees VMOs and VMARs through handles; it never receives an unmediated pointer to
+the kernel's page allocator.
 
-    boot-shim / ZBI
-          |
-          v
-    physical memory ranges
-          |
-          v
-    PMM + page allocator ----> physical pages
-          |
-          +--> VMO (owned pages or a pager-backed source)
-                       |
-                       v
-                   VMAR mapping
-                       |
-                       v
-                 process virtual address
+#### Memory concepts and ownership
 
-For SMOS, the important memory consumers are the kernel, component manager,
-`driver-host` processes, fshost, and the console. A driver normally receives a
-buffer or VMO handle through a framework/FIDL protocol; it does not directly
-walk physical memory. Direct MMIO or DMA access requires the appropriate
-resource, BTI, and protocol path supplied by the driver framework.
+| Concept | Kernel representation | Ownership and purpose |
+| --- | --- | --- |
+| Physical page | `vm_page_t` managed by `Pmm::Node()` | A page-sized unit from a discovered memory arena; allocated, wired, free, or reclaimable. |
+| PMM | `zircon/kernel/vm/pmm.cc` and `pmm_node.cc` | Tracks arenas and free pages, services allocation requests, and ends the phys hand-off. |
+| VMO | `VmObject`/`VmObjectPaged`, exposed by `VmObjectDispatcher` | A capability-bearing byte range. Pages can be anonymous, pager-backed, contiguous, physical, pinned, or COW children. |
+| VMAR | `VmAddressRegion` and `VmAddressRegionDispatcher` | A hierarchical virtual-address reservation. A mapping attaches a VMO range to one VMAR. |
+| Mapping | `VmMapping` | Connects a VMO offset and length to virtual addresses and records permissions/cache policy. |
+| Address space | `VmAspace` | Owns the architecture page tables for one kernel, user, or guest address space. |
+| Handle | `Handle` plus an object dispatcher | Carries object identity and rights (`READ`, `WRITE`, `MAP`, `EXECUTE`, and so on) across syscalls and channels. |
+
+#### Memory concepts relationship
+
+The concepts form a resource-to-address pipeline. The box-drawing view below
+shows which object owns or describes each part of that pipeline and where
+capability checks or external page supply enter it.
+
+```text
+┌───────────────────────────────┐
+│ Physical memory ranges        │  boot-shim/ZBI discovery
+└───────────────┬───────────────┘
+                │ initializes arenas
+                ▼
+┌───────────────────────────────┐
+│ PMM: Pmm::Node()              │  allocates, frees, wires pages
+│ arenas and page queues        │
+└───────────────┬───────────────┘
+                │ owns physical pages
+                ▼
+┌───────────────────────────────┐       ┌───────────────────────────────┐
+│ VMO: VmObject/VmObjectPaged   │◄──────│ PageSource / pager            │
+│ logical byte range + page map │ supply│ supplies missing pages        │
+└───────────────┬───────────────┘       └───────────────────────────────┘
+                │
+                ├───────────────►┌───────────────────────────────┐
+                │                │ VMO variants                  │
+                │                │ COW, contiguous, physical,    │
+                │                │ pinned, discardable           │
+                │                └───────────────────────────────┘
+                │ mapped VMO range
+                ▼
+┌───────────────────────────────┐
+│ Mapping: VmMapping            │
+│ VMO offset + length + perms   │
+└───────────────┬───────────────┘
+                │ is contained by
+                ▼
+┌───────────────────────────────┐
+│ VMAR: VmAddressRegion         │  reserves and subdivides VA ranges
+│ hierarchical address regions  │
+└───────────────┬───────────────┘
+                │ belongs to
+                ▼
+┌───────────────────────────────┐       ┌───────────────────────────────┐
+│ VmAspace                      │◄──────│ Handle + dispatcher           │
+│ page-table root and MMU state │ rights│ names VMO/VMAR; gates syscalls│
+└───────────────┬───────────────┘       └───────────────────────────────┘
+                │ translates mapping
+                ▼
+┌───────────────────────────────┐
+│ Process virtual address       │  load/store -> page fault if absent
+│ user code, stack, or buffer   │
+└───────────────────────────────┘
+```
+
+Read the main vertical path as "physical capacity becomes a VMO, the VMO is
+attached to a VMAR mapping, and the process `VmAspace` translates that mapping
+through architecture page tables." The `Handle + dispatcher` box does not own
+the bytes: it grants a process specific rights to name and operate on a VMO or
+VMAR. `PageSource` can provide content when a page is absent, while COW,
+pinning, and contiguous/physical variants change how the VMO obtains or keeps
+its physical pages.
+
+The ownership boundary is summarized below. Arrows describe ownership,
+construction, or a handle/protocol crossing into a different process; the
+labels identify which kind of relationship each edge represents.
+
+```text
+                         SMOS user space
+  +----------------------------------------------------------------------------+
+  | userboot | component_manager | fshost | driver-host | console | VMM        |
+  |     ELF/BootFS, stacks, shared buffers, guest memory, device mappings      |
+  +-----------------------------+-------------------+--------------------------+
+                                |  VMO/VMAR handles, FIDL, zx_* syscalls
+                                v
+  +----------------------------------------------------------------------------+
+  | Object layer: HandleTable -> VmObjectDispatcher / VmAddressRegionDispatcher|
+  | Rights checks, lifetime, namespace and cross-process handle transfer       |
+  +-----------------------------+-------------------+--------------------------+
+                                |  validated object operations
+                                v
+  +----------------------------------------------------------------------------+
+  | VM layer: VmAspace -> VmAddressRegion -> VmMapping -> VmObjectPaged        |
+  | page faults, pager requests, COW, decommit, pinning, cache attributes      |
+  +-----------------------------+-------------------+--------------------------+
+                                |  page requests / physical addresses
+                                v
+  +----------------------------------------------------------------------------+
+  | PMM: Pmm::Node() -> arenas -> free/loaned/wired pages -> arch MMU          |
+  +-----------------------------+-------------------+--------------------------+
+                                ^
+                                | memory ranges and boot hand-off state
+  +----------------------------------------------------------------------------+
+  | boot-shim -> ZBI -> kernel.phys -> PhysHandoff -> Zircon kernel            |
+  +----------------------------------------------------------------------------+
+```
 
 The boot-shim contributes memory and platform items to the ZBI; it does not
-allocate the final user process address spaces. The arm64 and riscv64 shims
-use different devicetree matchers, but both converge on the same Zircon VM
-model after the hand-off.
+create final user address spaces. The arm64 and riscv64 shims have different
+devicetree and interrupt details, but both converge on the same PMM/VM object
+model after `PhysbootHandoff` enters the kernel.
 
-Useful implementation areas:
+#### Memory initialization code path
 
-- `zircon/kernel/vm/`: VM objects, mappings, page allocation, and faults.
-- `zircon/kernel/phys/`: early physical-memory and boot hand-off code.
-- `zircon/kernel/object/`: VMO, VMAR, process, and handle dispatchers.
+The initialization path establishes physical pages before any user process can
+map memory. `InitMemory` at the physical stages parses the memory ZBI items and
+initializes the temporary physical address space. During kernel startup,
+`pmm_init` imports the discovered `memalloc::Range` values and `vm_init` builds
+the kernel address space and its zero page.
 
-#### Memory code path: VMO creation and mapping
+```text
+Firmware/QEMU DTB and data ZBI
+  |
+  +--> arch boot-shim PhysMain
+  |      linux-arm64-boot-shim.cc / linux-riscv64-boot-shim.cc
+  |      |-- InitMemory(fdt, nullptr)
+  |      |-- DevicetreeBootShim::Init()
+  |      |     `-- append ZBI_TYPE_MEM_CONFIG and platform items
+  |      `-- BootZbi::Boot() -> kernel.phys entry
+  |
+  +--> kernel.phys PhysMain -> ZbiMain
+  |      zircon/kernel/phys/zbi-main.cc, physload.cc
+  |      |-- InitMemory(zbi, &aspace)
+  |      |-- unpack kernel/BOOTFS and build PhysHandoff
+  |      `-- PhysLoadModuleMain() -> BootZircon()
+  |
+  +--> Zircon kernel PhysbootHandoff -> lk_main
+         zircon/kernel/top/main.cc
+         |-- arch_early_init/platform_early_init
+         |-- vm_init_preheap()
+         |-- heap_init()
+         |-- vm_init()
+         |     |-- VmAspace::KernelAspaceInit()
+         |     |-- pmm_alloc_page() for the wired zero page
+         |     `-- initialize kernel image/physmap VMARs
+         |-- topology_init() / kernel_init()
+         `-- bootstrap2() -> userboot_init()
+                `-- ProcessDispatcher creates a user VmAspace
+```
 
-The exact syscall wrapper varies by syscall, but the common ownership path is:
+The principal implementation points are `zircon/kernel/phys/zbi-memory.cc`,
+`zircon/kernel/vm/pmm.cc:pmm_init`, and `zircon/kernel/vm/vm.cc`.
+`vm_init_preheap` is intentionally a pre-heap hook; the global VM structures
+and the kernel zero page are initialized by `vm_init` after the kernel heap is
+available. The physmap maps physical pages for kernel use, while each user
+process receives an isolated `VmAspace` with its own page-table root; the
+creation path is in `zircon/kernel/object/process_dispatcher.cc`.
 
-    user process
-       |
-       | zx_vmo_create / zx_vmar_map
-       v
-    syscall implementation
-       |
-       +--> VmObjectPaged::Create(...)
-       |       |
-       |       `--> PMM obtains pages on demand or on commit
-       |
-       `--> ProcessDispatcher's VmAspace / VMAR
-               |
-               `--> page tables + user virtual address
+#### Runtime mapping and page-fault code path
 
-`ProcessDispatcher` creates the user `VmAspace`; VMO and VMAR dispatcher code
-checks handle rights and mapping permissions before the address-space layer is
-updated. A first access can fault and populate a page later, so "a VMO exists"
-does not necessarily mean every byte has already consumed physical RAM. This
-distinction matters when comparing a compact image's static size with its boot
-and runtime memory footprint.
+The normal user workflow has two phases: create a logical VMO and mapping, then
+materialize pages when code first touches the mapped virtual address. The
+following path names both syscall entry points and the VM functions that carry
+the request.
+
+```text
+User process calls zx_vmo_create(size, options)
+  |
+  `--> zircon/kernel/lib/syscalls/vmo.cc:sys_vmo_create
+         |-- ProcessDispatcher::EnforceBasicPolicy(ZX_POL_NEW_VMO)
+         |-- VmObjectDispatcher::parse_create_syscall_flags()
+         |-- VmObjectPaged::Create(PMM_ALLOC_FLAG_ANY | CAN_WAIT, ...)
+         |-- VmObjectDispatcher::Create()
+         `-- ProcessDispatcher::MakeAndAddHandle() -> VMO handle + rights
+
+User process calls zx_vmar_map(vmar, options, vmo, offset, len)
+  |
+  `--> zircon/kernel/lib/syscalls/vmar.cc:sys_vmar_map
+         |-- HandleTable lookup for VMAR and VMO dispatchers
+         |-- validate VMAR/VMO rights and map permissions
+         `-- vmar_map_common() -> VmAddressRegion::Map()
+                `-- create VmMapping and install the mapping metadata
+
+First load/store at the returned virtual address
+  |
+  `--> architecture exception entry -> VmAspace::PageFault(va, flags)
+         zircon/kernel/vm/vm_aspace.cc
+         |-- locate the containing VmMapping
+         `-- VmMapping::PageFaultLocked()
+                zircon/kernel/vm/vm_mapping.cc
+                |-- derive MMU permissions and VMO offset
+                |-- request page from VmObject/PageSource
+                |-- VmObjectPaged commits or retrieves a page
+                |      (PMM allocation, pager, zero page, or COW copy)
+                |-- update architecture page tables
+                `-- retry the faulting instruction
+```
+
+`zx_vmo_create` allocates the VMO object and its metadata; it does not promise
+that every byte has a resident physical page. A page may be supplied by a
+pager, shared through a clone, represented by the global zero page until a
+write, or allocated on demand by `VmObjectPaged::CommitRangeInternal`. A
+mapping can therefore be large while its resident set is small. Conversely,
+`ZX_VM_MAP_RANGE`-style pre-faulting, `zx_vmo_op_range`, pinning, or a
+contiguous/physical VMO can make allocation happen earlier and impose stronger
+PMM constraints.
+
+The important failure exits are:
+
+- syscall policy or handle lookup failure (`ZX_ERR_ACCESS_DENIED`,
+  `ZX_ERR_BAD_HANDLE`), before the VM layer is entered;
+- invalid alignment, range, permission, or overlap, rejected by
+  `vmar_map_common`/`VmAddressRegion::Map`;
+- an unmapped or protection-faulting address, returned from
+  `VmAspace::PageFault` as a user exception;
+- no available page, failed pager request, or an unsupported pin/contiguous
+  request, propagated as `ZX_ERR_NO_MEMORY` or the pager's status.
+
+#### SMOS consumers and special memory types
+
+SMOS uses the standard Zircon objects in several constrained roles:
+
+- `userboot` maps the ZBI/BootFS VMO, the vDSO, the next ELF image, and the
+  initial stack before starting `component_manager`.
+- `component_manager` and each `driver-host` receive only the VMOs and VMAR
+  capabilities offered by their component manifests. FIDL messages commonly
+  transfer a VMO handle for a buffer instead of copying the buffer through the
+  channel.
+- QEMU serial/block/RTC/random drivers map only the buffers and resources
+  supplied by the driver framework. MMIO and DMA require the corresponding
+  resource, BTI, and cache-policy checks; a driver cannot infer authority from
+  a physical address value.
+- The arm64 VMM maps guest-physical memory and device buffers through the
+  hypervisor-specific capabilities documented in the virtualization sections;
+  this remains an object/rights operation, not a second PMM implementation.
+
+VMO variants explain the ownership seen in these consumers. Anonymous paged
+VMOs use `VmObjectPaged` and can be copy-on-write clones. Pager-backed VMOs
+delegate missing-page supply to a `PageSource`. Contiguous and physical VMOs
+describe fixed physical placement and are used only where the caller has the
+required rights. Pinned VMOs prevent reclamation for a bounded range. Decommit,
+discardable state, compression, and the page queues can reduce resident usage
+without changing the VMO's logical size.
+
+Useful implementation and diagnostics areas:
+
+- `zircon/kernel/phys/`: early memory discovery and phys hand-off.
+- `zircon/kernel/vm/`: PMM, VM objects, mappings, page queues, pager, and faults.
+- `zircon/kernel/object/`: VMO/VMAR dispatchers, handle rights, and diagnostics.
+- `zircon/kernel/lib/syscalls/vmo.cc` and `vmar.cc`: user ABI validation.
+- `zircon/kernel/object/diagnostics.cc`: process/VMO attribution and memory
+  usage reporting used when investigating resident versus logical size.
 
 ### Scheduling
 
@@ -1581,8 +1779,9 @@ tools/smos-boot/preflight.sh --root "$PWD" arm64
 tools/smos-boot/preflight.sh --root "$PWD" riscv64
 ```
 
-When `SMOS_SDK_ROOT` is exported, `configure.sh` validates the SDK before running GN and does not create a source-root `prebuilt`
-directory or symlink. It passes absolute SDK paths into GN, and never links
+When `SMOS_SDK_ROOT` is exported, `configure.sh` validates the SDK before running GN;
+it does not create a source-root `prebuilt` directory or symlink. It passes
+absolute SDK paths into GN and never links
 `.cipd` or third-party Git metadata. Once SDK creation succeeds, the compatible
 source checkout can be removed or made unavailable.
 
@@ -1636,9 +1835,9 @@ tools/smos-boot/run-qemu.sh riscv64
 arm64 retains Zircon hypervisor syscalls, the VMM, guest manager, guest
 configuration libraries, virtio socket, and the headless guest devices for
 block, console, RNG, vsock, balloon, and memory. GPU virtualization devices are removed,
-including virtio-gpu, display input, virtual sound, virtio-net, Wayland, Magma,
-Goldfish, Scenic, Mesa, and Vulkan integration. The current arm64 physical
-loader drops QEMU from EL2 to EL1 before starting Zircon, so
+including virtio-gpu, display input, virtual sound, virtio-net,
+Wayland, Magma, Goldfish, Scenic, Mesa, and Vulkan integration. The current
+arm64 physical loader drops QEMU from EL2 to EL1 before starting Zircon, so
 `virtcheck` reports
 `VIRTUALIZATION:ARM64:NO_NESTED_EL2` in this QEMU boot path; the virtualization
 implementation remains compiled and packaged for an EL2-capable launch path.

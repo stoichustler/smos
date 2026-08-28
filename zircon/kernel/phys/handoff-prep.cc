@@ -411,6 +411,16 @@ void HandoffPrep::ConstructKernelAddressSpace(const ElfImage& kernel) {
   // context of the physboot's hand-off contract with the kernel.
   arch::CleanAndInvalidateLocalCaches();
 #endif
+  // [smos] (20260828) Explain physboot-to-kernel handoff
+  //
+  // Note: This is a typed indirect call, not a direct C++ call to lk_main.
+  // ElfImage::Handoff<F> delegates to Call<F>, which casts the loaded ELF's
+  // entry() address to F* and invokes it. Here F is void(PhysHandoff*), so the
+  // entry symbol is PhysbootHandoff and handoff() is passed in the ABI argument
+  // register. The arm64 and riscv64 start.S entry points preserve that physical
+  // address, perform early CPU setup, and call lk_main(handoff_paddr). lk_main
+  // then calls HandoffFromPhys to import the handoff before normal Zircon
+  // kernel initialization continues.
   kernel.Handoff<void(PhysHandoff*)>(handoff());
   ZX_PANIC("ElfImage::Handoff returned!");
 }

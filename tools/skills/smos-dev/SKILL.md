@@ -143,7 +143,8 @@ release and maintenance must preserve the full traceability record.
   ```text
   [smos] (20260822) <Topic>
 
-  详细描述: 内容可包含ASCII流程图, 时序图，框架图结合文字描述
+  Note: The description must be written in English. It may include ASCII
+  flowcharts, sequence diagrams, or framework diagrams with explanatory text.
   ```
 
   Keep the description focused on the SMOS-specific behavior or constraint.
