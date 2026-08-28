@@ -77,7 +77,7 @@ struct dlog_header {
   // (|DLOG_HDR_READLEN|) and the record's size when padded out to live in the
   // FIFO (|DLOG_HDR_FIFOLEN|).
   //
-  // After being read out of a debuglog, the |preamble| field is 0.
+  // After being read out of a debuglog, the record-size fields of |preamble| are 0.
   uint32_t preamble;
   uint16_t datalen;
   uint8_t severity;

@@ -38,6 +38,24 @@ struct DLogOutputTest final : public DLog {
 }  // namespace
 
 struct DebuglogTests {
+#ifdef SMOS_HYPER
+  static bool cpu_prefix_format() {
+    BEGIN_TEST;
+
+    dlog_header_t header{};
+    header.preamble = DLOG_HDR_SET_CPU(0, 1);
+    char output[64];
+    const size_t output_size = DLog::FormatHeader({output, sizeof(output)}, header);
+    const ktl::string_view expected{"(1) [00000.000] 00000:00000> "};
+
+    EXPECT_EQ(expected.size(), output_size);
+    EXPECT_BYTES_EQ(reinterpret_cast<const uint8_t*>(expected.data()),
+                    reinterpret_cast<const uint8_t*>(output), expected.size());
+
+    END_TEST;
+  }
+#endif
+
   static bool log_format() {
     BEGIN_TEST;
 
@@ -137,7 +155,12 @@ struct DebuglogTests {
     dlog_record_t rec{};
     ASSERT_EQ(ZX_OK, reader.Read(0, &rec, &got));
     ASSERT_EQ(sizeof(dlog_header) + sizeof(msg), got);
+#ifdef SMOS_HYPER
+    EXPECT_EQ(0u, DLOG_HDR_GET_FIFOLEN(rec.hdr.preamble));
+    EXPECT_EQ(0u, DLOG_HDR_GET_READLEN(rec.hdr.preamble));
+#else
     EXPECT_EQ(0u, rec.hdr.preamble);
+#endif
     // Sequence should start at 0.
     EXPECT_EQ(0u, rec.hdr.sequence);
     EXPECT_EQ(sizeof(msg), rec.hdr.datalen);
@@ -177,7 +200,12 @@ struct DebuglogTests {
     ASSERT_EQ(sizeof(dlog_header) + sizeof(msg), got);
 
     EXPECT_EQ(DEBUGLOG_WARNING, rec.hdr.severity);
+#ifdef SMOS_HYPER
+    EXPECT_EQ(0u, DLOG_HDR_GET_FIFOLEN(rec.hdr.preamble));
+    EXPECT_EQ(0u, DLOG_HDR_GET_READLEN(rec.hdr.preamble));
+#else
     EXPECT_EQ(0u, rec.hdr.preamble);
+#endif
     EXPECT_EQ(0, rec.hdr.flags);
     EXPECT_EQ(ZX_KOID_INVALID, rec.hdr.pid);
     EXPECT_NE(ZX_KOID_INVALID, rec.hdr.tid);
@@ -199,7 +227,12 @@ struct DebuglogTests {
       num_read++;
       ASSERT_EQ(sizeof(dlog_header) + sizeof(msg), got);
       EXPECT_EQ(DEBUGLOG_WARNING, rec.hdr.severity);
+#ifdef SMOS_HYPER
+      EXPECT_EQ(0u, DLOG_HDR_GET_FIFOLEN(rec.hdr.preamble));
+      EXPECT_EQ(0u, DLOG_HDR_GET_READLEN(rec.hdr.preamble));
+#else
       EXPECT_EQ(0u, rec.hdr.preamble);
+#endif
       EXPECT_EQ(0, rec.hdr.flags);
       EXPECT_EQ(ZX_KOID_INVALID, rec.hdr.pid);
       EXPECT_NE(ZX_KOID_INVALID, rec.hdr.tid);
@@ -585,6 +618,9 @@ struct DebuglogTests {
 #define DEBUGLOG_UNITTEST(fname) UNITTEST(#fname, fname)
 
 UNITTEST_START_TESTCASE(debuglog_tests)
+#ifdef SMOS_HYPER
+DEBUGLOG_UNITTEST(DebuglogTests::cpu_prefix_format)
+#endif
 DEBUGLOG_UNITTEST(DebuglogTests::log_format)
 DEBUGLOG_UNITTEST(DebuglogTests::log_wrap)
 DEBUGLOG_UNITTEST(DebuglogTests::log_reader_read)

@@ -354,6 +354,10 @@ if (is_kernel) {
       "EXPERIMENTAL_THREAD_SAMPLER_ENABLED=$experimental_thread_sampler_enabled",
     ]
 
+    if (smos_boot_build) {
+      defines += [ "SMOS_HYPER" ]
+    }
+
     if (kernel_no_userabi) {
       defines += [ "KERNEL_NO_USERABI" ]
     }

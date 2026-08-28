@@ -61,9 +61,16 @@ impl SerialConfig {
             ftrace::Id::random(),
         );
         while let Some(log) = log_stream.next().await {
-            SerialWriter::log(log.as_ref(), &denied_tags, &mut sink).ok();
+            SerialWriter::log(log.as_ref(), current_cpu(), &denied_tags, &mut sink).ok();
         }
     }
+}
+
+fn current_cpu() -> u32 {
+    fuchsia_runtime::thread_self()
+        .get_stats()
+        .expect("current thread stats must be readable")
+        .last_scheduled_cpu
 }
 
 /// A sink to write to serial. This Write implementation must be used together with SerialWriter.
@@ -130,11 +137,13 @@ impl<S: Write> Write for SerialWriter<'_, S> {
 impl<'a, S: Write> SerialWriter<'a, S> {
     fn log(
         log: &Data<Logs>,
+        cpu: u32,
         denied_tags: &'a HashSet<String>,
         sink: &'a mut S,
     ) -> Result<(), Error> {
         let mut this =
             Self { buffer: Vec::with_capacity(MAX_SERIAL_WRITE_SIZE), sink, denied_tags };
+        write!(&mut this, "({cpu}) ")?;
         write!(
             &mut this,
             "[{:05}.{:03}] {:05}:{:05}> [",
@@ -234,7 +243,7 @@ mod tests {
         .build();
         let denied_tags = HashSet::from_iter(["denied-tag".to_string()]);
         let mut sink = Vec::new();
-        SerialWriter::log(&log, &denied_tags, &mut sink).expect("write succeeded");
+        SerialWriter::log(&log, 1, &denied_tags, &mut sink).expect("write succeeded");
         assert!(sink.is_empty());
     }
 
@@ -259,13 +268,13 @@ mod tests {
         .set_tid(5678)
         .build();
         let mut sink = Vec::new();
-        SerialWriter::log(&log, &HashSet::new(), &mut sink).expect("write succeeded");
+        SerialWriter::log(&log, 1, &HashSet::new(), &mut sink).expect("write succeeded");
         assert_eq!(
             String::from_utf8(sink).unwrap(),
             format!(
-                "[00000.123] 01234:05678> [bar] INFO: {}\n{} key=value other_key=3\n",
-                &message[..218],
-                &message[218..]
+                "(1) [00000.123] 01234:05678> [bar] INFO: {}\n{} key=value other_key=3\n",
+                &message[..214],
+                &message[214..]
             )
         );
     }
@@ -283,10 +292,10 @@ mod tests {
         .set_tid(5678)
         .build();
         let mut sink = Vec::new();
-        SerialWriter::log(&log, &HashSet::new(), &mut sink).expect("write succeeded");
+        SerialWriter::log(&log, 1, &HashSet::new(), &mut sink).expect("write succeeded");
         assert_eq!(
             String::from_utf8(sink).unwrap(),
-            "[00000.123] 01234:05678> [foo] INFO: my msg\n"
+            "(1) [00000.123] 01234:05678> [foo] INFO: my msg\n"
         );
     }
 
@@ -333,12 +342,15 @@ mod tests {
         // We must see the logs emitted before we installed the serial listener and after. We must
         // not see the log from /core/baz and we must not see the log from bootstrap/bar with tag
         // "foo".
-        assert_eq!(
-            received,
-            vec![
-                "[00000.000] 00001:00002> [foo] DEBUG: a\n",
-                "[00000.000] 00001:00002> [foo] DEBUG: c\n"
-            ]
-        );
+        let expected = [
+            "[00000.000] 00001:00002> [foo] DEBUG: a\n",
+            "[00000.000] 00001:00002> [foo] DEBUG: c\n",
+        ];
+        assert_eq!(received.len(), 2);
+        for (log, expected) in received.iter().zip(expected) {
+            assert!(log.starts_with('('));
+            assert!(log.contains(") [00000.000] 00001:00002> [foo] DEBUG:"));
+            assert!(log.ends_with(expected));
+        }
     }
 }

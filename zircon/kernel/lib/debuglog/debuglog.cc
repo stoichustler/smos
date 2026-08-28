@@ -203,7 +203,12 @@ zx_status_t DLog::Write(uint32_t severity, uint32_t flags, ktl::string_view str)
 
   // Prepare the record header before taking the lock
   dlog_header_t hdr;
+#ifdef SMOS_HYPER
+  hdr.preamble = static_cast<uint32_t>(DLOG_HDR_SET_CPU(
+      DLOG_HDR_SET(wiresize, sizeof(dlog_header) + len), arch_curr_cpu_num()));
+#else
   hdr.preamble = static_cast<uint32_t>(DLOG_HDR_SET(wiresize, sizeof(dlog_header) + len));
+#endif
   hdr.datalen = static_cast<uint16_t>(len);
   hdr.severity = static_cast<uint8_t>(severity);
   hdr.flags = static_cast<uint8_t>(flags);
@@ -510,7 +515,11 @@ zx_status_t DlogReader::Read(uint32_t flags, dlog_record_t* record, size_t* actu
       // out.
       rtail += DLOG_HDR_GET_FIFOLEN(record->hdr.preamble);
       *actual = DLOG_HDR_GET_READLEN(record->hdr.preamble);
+#ifdef SMOS_HYPER
+      record->hdr.preamble = DLOG_HDR_SET_CPU(0, DLOG_HDR_GET_CPU(record->hdr.preamble));
+#else
       record->hdr.preamble = 0;
+#endif
       status = ZX_OK;
     }
 

@@ -32,6 +32,11 @@ static constexpr size_t kDLogHeaderFifoAlignment = 4;
 #define DLOG_HDR_SET(fifosize, readsize) ((((readsize) & 0xFFF) << 12) | ((fifosize) & 0xFFF))
 #define DLOG_HDR_GET_FIFOLEN(n) ((n) & 0xFFF)
 #define DLOG_HDR_GET_READLEN(n) (((n) >> 12) & 0xFFF)
+#ifdef SMOS_HYPER
+static_assert(SMP_MAX_CPUS <= 256);
+#define DLOG_HDR_SET_CPU(n, cpu) ((n) | (((cpu) & 0xFF) << 24))
+#define DLOG_HDR_GET_CPU(n) (((n) >> 24) & 0xFF)
+#endif
 
 class DlogReader;
 struct DebuglogTests;
@@ -119,9 +124,17 @@ class DLog {
       return 0;
     }
 
+#ifdef SMOS_HYPER
+    int res = snprintf(target.data(), target.size(), "(%u) [%05d.%03d] %05" PRIu64 ":%05" PRIu64
+                                                     "> ",
+                       DLOG_HDR_GET_CPU(hdr.preamble),
+                       static_cast<int>(hdr.timestamp / ZX_SEC(1)),
+                       static_cast<int>((hdr.timestamp / ZX_MSEC(1)) % 1000ULL), hdr.pid, hdr.tid);
+#else
     int res = snprintf(target.data(), target.size(), "[%05d.%03d] %05" PRIu64 ":%05" PRIu64 "> ",
                        static_cast<int>(hdr.timestamp / ZX_SEC(1)),
                        static_cast<int>((hdr.timestamp / ZX_MSEC(1)) % 1000ULL), hdr.pid, hdr.tid);
+#endif
     size_t ret = (res < 0) ? 0 : static_cast<size_t>(res);
 
     return (target.data() == nullptr) ? ret : ktl::min(target.size(), ret);
