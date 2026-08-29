@@ -39,7 +39,17 @@ static zx_status_t send_kernel_debug_command(const char* command, size_t length)
   auto result = fidl::WireSyncClient(std::move(*client_end))
                     ->SendDebugCommand(fidl::StringView::FromExternal(command, length));
 
-  return result.status();
+  // [smos] (20260829) Distinguish FIDL transport and command status
+  //
+  // SendDebugCommand reports two independent outcomes:
+  //   * result.status() is the FIDL transport status, such as a closed channel.
+  //   * result->status is the kernel debug command's application status.
+  // Check the transport first because the response body is unavailable when
+  // the FIDL transaction itself fails.
+  if (result.status() != ZX_OK) {
+    return result.status();
+  }
+  return result->status;
 }
 
 static int send_kernel_tracing_enabled(bool enabled) {
