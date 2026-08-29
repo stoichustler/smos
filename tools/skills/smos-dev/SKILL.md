@@ -19,6 +19,30 @@ file paths, command names, and protocol identifiers exactly as written. Use
 another language only when the requester explicitly asks for it or when a
 quoted source requires it.
 
+## Markdown diagram convention
+
+Use [Workflow.md](../../../sdk/smos/Workflow.md) as the canonical source for
+SMOS workflow and framework diagrams. Prefer its Unicode box-drawing style and
+copy one of its templates before inventing a new layout.
+
+| Pattern | Meaning |
+| --- | --- |
+| `┌─┐` / `└─┘` | Step, component, service, or logical boundary |
+| `╭─╮` / `╰─╯` | Rounded container or externally visible stage |
+| `▼` `▲` `►` `◄` | Control, data, or lifecycle direction |
+| `─┬─` / `─┴─` | Parallel split or merge |
+| `──┤` / `├──` | Branch point or crossed boundary |
+| `╰─▶` / `◀─╮` | Return, feedback, or cross-level relationship |
+
+Choose `Code flow` for execution order and `Framework` for ownership,
+layering, capability boundaries, or peer components. Put diagrams in fenced
+`text` blocks, preserve whitespace, target 88 columns or less, and label edges
+when they carry a protocol, capability, event, or condition. Do not rely on
+color or position alone to convey meaning. If a renderer cannot preserve
+Unicode box-drawing characters, provide an ASCII equivalent with the same
+topology and labels. Explain any deliberate deviation from `Workflow.md` next
+to the diagram.
+
 ## Required V-model lifecycle
 
 Every development task follows the lifecycle below. Do not silently skip a
@@ -148,6 +172,13 @@ release and maintenance must preserve the full traceability record.
   ```
 
   Keep the description focused on the SMOS-specific behavior or constraint.
+  Add an ASCII framework, flow, or sequence diagram when it makes a complex
+  control path, ownership boundary, or state transition easier to review.
+  Keep one reading direction, use aligned nodes and explicit arrows, and label
+  branches or protocol crossings when their meaning is not obvious. Keep the
+  diagram at 88 columns or less and follow it with concise English prose. Do
+  not rely on color, font, or renderer-specific features, and do not use a
+  diagram to replace required invariants or error-handling details.
   Existing upstream comments do not need to be rewritten unless the change
   modifies their surrounding logic.
 

@@ -16,12 +16,6 @@
     capabilities: [
         { service: 'fuchsia.hardware.pci.Service' },
     ],
-    use: [
-        {
-            service: 'fuchsia.hardware.pci.BoardConfiguration',
-            availability: 'optional',
-        },
-    ],
     expose: [
         {
             service: 'fuchsia.hardware.pci.Service',

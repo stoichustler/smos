@@ -23,7 +23,7 @@
                     "/bootstrap/console",
                     "/core/profiler",
                     "/core/trace_manager/cpuperf_provider/cpu-trace",
-                    "/trace_manager/ktrace_provider",
+                    "/core/ktrace_provider",
 
                     // TODO(https://fxbug.dev/42080863): Remove once the shell tools that use this
                     // capability no longer run in the sshd realm.

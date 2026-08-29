@@ -24,11 +24,11 @@ static int print_dm_help() {
   return 0;
 }
 
-static int send_kernel_debug_command(const char* command, size_t length) {
+static zx_status_t send_kernel_debug_command(const char* command, size_t length) {
   if (length > fuchsia_kernel::wire::kDebugCommandMax) {
     fprintf(stderr, "error: kernel debug command longer than %u bytes: '%.*s'\n",
             fuchsia_kernel::wire::kDebugCommandMax, (int)length, command);
-    return -1;
+    return ZX_ERR_INVALID_ARGS;
   }
 
   auto client_end = component::Connect<fuchsia_kernel::DebugBroker>();
@@ -38,11 +38,8 @@ static int send_kernel_debug_command(const char* command, size_t length) {
 
   auto result = fidl::WireSyncClient(std::move(*client_end))
                     ->SendDebugCommand(fidl::StringView::FromExternal(command, length));
-  if (result.status() != ZX_OK || result->status != ZX_OK) {
-    return -1;
-  }
 
-  return 0;
+  return result.status();
 }
 
 static int send_kernel_tracing_enabled(bool enabled) {
@@ -233,9 +230,9 @@ int zxc_k(int argc, char** argv) {
   }
   command_length = command_end - buffer;
 
-  int send_result = send_kernel_debug_command(buffer, command_length);
-  if (send_result != 0) {
-    fprintf(stderr, "Unable to send kernel debug command, is kernel debugging disabled?\n");
+  zx_status_t send_result = send_kernel_debug_command(buffer, command_length);
+  if (send_result == ZX_ERR_NOT_SUPPORTED) {
+    fprintf(stderr, "error: Unable to send kernel debug command: Kernel debugging is disabled\n");
   }
   return send_result;
 }

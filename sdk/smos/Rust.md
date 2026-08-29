@@ -163,6 +163,14 @@ arguments so non-UTF-8 filenames are not lost.
 
 ## 3. Ownership, Borrowing, and Lifetimes
 
+> **Ownership** Rules:
+>
+> ➊ Each value in Rust has an owner.
+>
+> ➋ There can only be one owner at a time.
+>
+> ➌ When the owner goes out of scope, the value will be dropped.
+
 Ownership is the most important difference between Rust and C/C++. Every value
 has an owner, and the value is released automatically when the owner leaves its
 scope. Assignment moves by default; automatic copying applies only to simple

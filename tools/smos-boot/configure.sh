@@ -15,7 +15,7 @@ milestone_sdk="${MILESTONE_SDK:-27}"
 [[ "$milestone_sdk" =~ ^[0-9]+$ ]] ||
   die "MILESTONE_SDK must be a non-negative integer: $milestone_sdk"
 
-[[ -n "${SMOS_SDK_ROOT:-}" ]] || die "SMOS_SDK_ROOT is required"
+[[ -n "${SMOS_SDK_ROOT:-}" ]] || die "SMOS_SDK_ROOT is required (check //README.md)"
 [[ -d "$SMOS_SDK_ROOT" ]] ||
   die "SDK root is not a directory: $SMOS_SDK_ROOT"
 SMOS_SDK_ROOT="$(realpath "$SMOS_SDK_ROOT")"

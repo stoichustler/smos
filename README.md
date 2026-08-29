@@ -25,6 +25,8 @@ make build
 make verify
 ```
 
+[`smos-sdk` BaiduNetDisk Link](https://pan.baidu.com/s/1pp3QYEmQ4r7NMsNDXF8gIQ?pwd=wukm)
+
 This builds and automatically boot-tests the default `arm64` image. Start an
 interactive QEMU console with `make run`; additional QEMU options can be passed
 with `make run QEMU_ARGS='-d guest_errors'`.

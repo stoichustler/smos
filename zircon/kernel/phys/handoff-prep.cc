@@ -411,16 +411,32 @@ void HandoffPrep::ConstructKernelAddressSpace(const ElfImage& kernel) {
   // context of the physboot's hand-off contract with the kernel.
   arch::CleanAndInvalidateLocalCaches();
 #endif
-  // [smos] (20260828) Explain physboot-to-kernel handoff
+  // [smos] (20260829) Explain physboot-to-kernel handoff
   //
-  // Note: This is a typed indirect call, not a direct C++ call to lk_main.
-  // ElfImage::Handoff<F> delegates to Call<F>, which casts the loaded ELF's
-  // entry() address to F* and invokes it. Here F is void(PhysHandoff*), so the
-  // entry symbol is PhysbootHandoff and handoff() is passed in the ABI argument
-  // register. The arm64 and riscv64 start.S entry points preserve that physical
-  // address, perform early CPU setup, and call lk_main(handoff_paddr). lk_main
-  // then calls HandoffFromPhys to import the handoff before normal Zircon
-  // kernel initialization continues.
+  // F is the function type void(PhysHandoff*); it does not name the entry
+  // symbol at compile time. Call<F> gets the runtime ELF entry address
+  // (ehdr.entry + load_bias), casts it to F*, and invokes it. For the kernel
+  // image, that address is the PhysbootHandoff label on the architecture
+  // _start entry. The pointer value is the physical address of the handoff
+  // data, passed through the architecture ABI register.
+  //
+  //   physboot C++                         kernel ELF / arch entry
+  //   handoff() [physical address]
+  //           |
+  //           v
+  //   Handoff<F> ----> PhysbootHandoff(handoff_paddr)
+  //                            |
+  //                            | start.S: early CPU setup
+  //                            v
+  //                      lk_main(handoff_paddr)
+  //                            |
+  //                            | HandoffFromPhys(...)
+  //                            v
+  //                      normal kernel initialization
+  //
+  // The arm64 and riscv64 entry points preserve handoff_paddr while setting up
+  // the CPU, then pass it to lk_main. Handoff is [[noreturn]] and panics if the
+  // loaded entry point returns.
   kernel.Handoff<void(PhysHandoff*)>(handoff());
   ZX_PANIC("ElfImage::Handoff returned!");
 }

@@ -84,13 +84,10 @@ class BoardGraphPolicyTest(unittest.TestCase):
         self.assertIn(":logging-dfv1", text)
         self.assertIn(":logging-dfv2", text)
 
-    def test_optional_pci_board_metadata_is_quiet_when_not_offered(self) -> None:
+    def test_pci_board_metadata_is_not_declared_without_a_provider(self) -> None:
         manifest = PCI_MANIFEST.read_text()
         bus = PCI_BUS.read_text()
-        self.assertRegex(
-            manifest,
-            r"(?s)fuchsia\.hardware\.pci\.BoardConfiguration.*?availability:\s*'optional'",
-        )
+        self.assertNotIn("fuchsia.hardware.pci.BoardConfiguration", manifest)
         self.assertIn("GetMetadataIfExists<PciFidl::BoardConfiguration>", bus)
 
 
