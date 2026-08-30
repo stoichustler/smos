@@ -140,6 +140,10 @@ async fn graceful_stop_guest<P: PlatformServices>(
             send_stop_shell_command(ShutdownCommand::DebianShutdownCommand, guest_endpoint.clone())
                 .await
         }
+        arguments::GuestType::Linux => {
+            send_stop_shell_command(ShutdownCommand::DebianShutdownCommand, guest_endpoint.clone())
+                .await
+        }
         arguments::GuestType::Termina => send_stop_rpc(services, guest).await,
     }?;
 

@@ -355,8 +355,11 @@ mod test {
     }
 
     #[test]
-    fn default_summary_lists_only_zircon() {
-        assert_eq!(arguments::GuestType::all_guests(), vec![arguments::GuestType::Zircon]);
+    fn default_summary_lists_zircon_and_linux() {
+        assert_eq!(
+            arguments::GuestType::all_guests(),
+            vec![arguments::GuestType::Zircon, arguments::GuestType::Linux]
+        );
     }
 
     #[fasync::run_until_stalled(test)]

@@ -11,6 +11,10 @@
             name: "zircon-guest-manager",
             url: "fuchsia-boot:///smos-virtualization-host#meta/zircon_guest_manager.cm",
         },
+        {
+            name: "linux-guest-manager",
+            url: "fuchsia-boot:///smos-virtualization-host#meta/linux_guest_manager.cm",
+        },
     ],
     offer: [
         {
@@ -19,7 +23,7 @@
                 "fuchsia.kernel.VmexResource",
             ],
             from: "parent",
-            to: [ "#vmm-launcher", "#zircon-guest-manager" ],
+            to: [ "#vmm-launcher", "#zircon-guest-manager", "#linux-guest-manager" ],
         },
         {
             protocol: "fuchsia.kernel.HypervisorResource",
@@ -32,19 +36,24 @@
             to: "#console-launcher",
         },
         {
+            protocol: "fuchsia.virtualization.LinuxGuestManager",
+            from: "#linux-guest-manager",
+            to: "#console-launcher",
+        },
+        {
             protocol: "fuchsia.scheduler.RoleManager",
             from: "#role_manager",
-            to: [ "#vmm-launcher", "#zircon-guest-manager" ],
+            to: [ "#vmm-launcher", "#zircon-guest-manager", "#linux-guest-manager" ],
         },
         {
             protocol: "fuchsia.sysinfo.SysInfo",
             from: "#sysinfo",
-            to: [ "#vmm-launcher", "#zircon-guest-manager" ],
+            to: [ "#vmm-launcher", "#zircon-guest-manager", "#linux-guest-manager" ],
         },
         {
             dictionary: "diagnostics",
             from: "self",
-            to: [ "#vmm-launcher", "#zircon-guest-manager" ],
+            to: [ "#vmm-launcher", "#zircon-guest-manager", "#linux-guest-manager" ],
         },
     ],
 }

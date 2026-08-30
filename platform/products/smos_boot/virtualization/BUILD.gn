@@ -50,9 +50,19 @@ fuchsia_component("zircon_guest_manager_component") {
   ]
 }
 
+fuchsia_component("linux_guest_manager_component") {
+  component_name = "linux_guest_manager"
+  manifest = "meta/linux_guest_manager.cml"
+  deps = [
+    ":vmm_component",
+    "//userspace/virtualization/bin/guest_manager:bin",
+  ]
+}
+
 fuchsia_package("host") {
   package_name = "smos-virtualization-host"
   deps = [
+    ":linux_guest_manager_component",
     ":vmm_launcher_component",
     ":vmm_launcher_config",
     ":zircon_guest_manager_component",

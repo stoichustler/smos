@@ -598,7 +598,7 @@ This path is separate from a kernel console command. A command sent through
 the EL0 `svc` syscall table. Likewise, `zx_smc_call` executes an SMC conduit on
 arm64; it is not an HVC call to the EL2 monitor.
 
-### SMOS kernel objects
+### Zircon Object Model
 
 Zircon is an object-based kernel. A user process does not receive a raw pointer
 to a kernel subsystem; it receives a process-local handle that names a kernel
@@ -611,6 +611,13 @@ file descriptor. A component capability may be implemented by a FIDL channel,
 and a libc file descriptor may wrap a channel, socket, VMO, or another object.
 The kernel only enforces the underlying object type, handle rights, signals,
 and task/capability boundaries.
+
+Read the model from containment to authority: a **job** governs processes, a
+**process** owns an address space and handle table, and a **thread** executes
+within that process. A **handle** is the process-local name for a kernel
+**object**; its **rights** determine which operations the holder may request.
+Transferring a handle changes where that name is installed, not the identity of
+the underlying object.
 
 #### Object taxonomy in the SMOS profile
 
@@ -637,26 +644,24 @@ The object framework can be viewed as four cooperating planes rather than a
 flat list of syscalls:
 
 ```text
-+---------------------------- SMOS user space ----------------------------+
-| component_manager | console/dash | fshost | driver-host | VMM           |
-|        FIDL channels, sockets, VMOs, events, ports, task handles        |
-+-------------------------------+-----------------------------------------+
-                                |
-                                | handle table + rights + signals
-                                v
-+---------------------------- Zircon kernel ------------------------------+
-| syscall veneer -> dispatcher -> object lifetime -> scheduler / VM / IRQ |
-|                                                                         |
-|  tasks     IPC       wait/signal       memory       driver/hypervisor   |
-|  job       channel   event/port        VMO/VMAR     IRQ/resource/guest  |
-|  process   socket    timer/futex       pager         VCPU/BTI           |
-|  thread    stream    counter            mapping       IOMMU             |
-+-------------------------------+-----------------------------------------+
-                                |
-                                v
-+-------------------------- hardware / monitor ---------------------------+
-| QEMU virtio, UART, block, RTC, RNG | GIC/PLIC | EL2/EL3 monitor         |
-+-------------------------------------------------------------------------+
+┌────────────────────────────────────────────────────────────────────────┐
+│ SMOS user space                                                        │
+│ component manager, console, fshost, driver-host, VMM                   │
+│ channels, sockets, VMOs, events, ports, task handles                   │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │ handles + rights + signals
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ Zircon kernel                                                          │
+│ syscall veneer → dispatcher → object lifetime → scheduler / VM / IRQ   │
+│ tasks | IPC | wait/signal | memory | driver/hypervisor                 │
+│ job/process/thread | channel/port | VMO/VMAR | IRQ/resource/guest      │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │ authorized hardware operation
+                                   ▼
+╭────────────────────────────────────────────────────────────────────────╮
+│ QEMU devices, GIC/PLIC, and EL2/EL3 monitor                            │
+╰────────────────────────────────────────────────────────────────────────╯
 ```
 
 The upper plane expresses a capability through a handle; the middle plane
@@ -680,12 +685,18 @@ object. Two handles in one process may refer to the same object while carrying
 different rights.
 
 ```text
-process A handle table                         kernel object
-  0x100 -> {object X, READ | WAIT} ------------------+
-  0x104 -> {object X, READ | WRITE} -----------------+--> Channel/VMO/Event/...
-                                                     |
-process B handle table                               |
-  0x208 -> {object X, READ} -------------------------+
+┌─────────────────────────────┐       ┌─────────────────────────────┐
+│ Process A handle table      │       │ Process B handle table      │
+│ 0x100: X + READ | WAIT      │       │ 0x208: X + READ             │
+│ 0x104: X + READ | WRITE     │       └──────────────┬──────────────┘
+└──────────────┬──────────────┘                      │ names X
+               │ names X                             │
+               └──────────────────┬──────────────────┘
+                                  ▼
+              ╭───────────────────────────────────────╮
+              │ One kernel object X                   │
+              │ channel, VMO, event, or another type  │
+              ╰───────────────────────────────────────╯
 ```
 
 The normal handle operations are:
@@ -709,24 +720,25 @@ value changes when a handle is installed in another process; the underlying
 object does not:
 
 ```text
-client process              kernel                           server process
-      |                         |                                  |
-      | zx_channel_create()     |                                  |
-      |------------------------>| create channel pair              |
-      |<------------------------| h_client, h_server               |
-      |                         |                                  |
-      | zx_channel_write(bootstrap, h_server)                      |
-      |------------------------>| h_server becomes in-transit      |
-      |                         | queue message + object ref       |
-      |                         |--------------------------------->|
-      |                         |                  zx_channel_read()
-      |                         |<---------------------------------|
-      |                         | install h_server' in server table
-      |                         |                                  |
-      | zx_handle_close(h_client)                                  |
-      |------------------------>| peer signal if last active handle|
-      |                         |--------------------------------->|
-      |                         |                    PEER_CLOSED   |
+╭──────────────────╮  ╭─────────────────────────╮  ╭──────────────────╮
+│ Client process   │  │ Zircon channel / kernel │  │ Server process   │
+╰────────┬─────────╯  ╰────────────┬────────────╯  ╰────────┬─────────╯
+         │                         │                        │
+         │ zx_channel_create()     │                        │
+         ├────────────────────────►│ create channel pair    │
+         │◄────────────────────────┤ h_client, h_server     │
+         │                         │                        │
+         │ zx_channel_write(bootstrap, h_server)            │
+         ├────────────────────────►│ h_server in transit    │
+         │                         │ queue message + ref    │
+         │                         ├───────────────────────►│
+         │                         │                        │ zx_channel_read()
+         │                         │◄───────────────────────┤
+         │                         │ install h_server'      │
+         │                         │                        │
+         │ zx_handle_close(h_client)                        │
+         ├────────────────────────►│ last active peer closes│
+         │                         ├───────────────────────►│ PEER_CLOSED
 ```
 
 If the message is discarded before the receiver reads it, the kernel closes
@@ -742,16 +754,24 @@ other handles, in-transit handles, child objects, or kernel references may keep
 it alive.
 
 ```text
-zx_channel_create / zx_vmo_create
-        |
-        v
-object + first handle in process table
-        |
-        +--> duplicate / transfer / child mapping
-        |
-        +--> close one handle: object remains if references exist
-        |
-        `--> final reference: object destruction or deferred reclamation
+┌──────────────────────────────────────────┐
+│Create object + first process-local handle│
+└─────────────────────┬────────────────────┘
+                      │ duplicate, transfer, mapping, or child relation
+                      ▼
+┌──────────────────────────────────────────┐
+│ One or more live object references       │
+└─────────────────────┬────────────────────┘
+                      │ close a handle
+                      ▼
+              ┌───────┴────────┐
+              │references left?│
+              └───┬─────────┬──┘
+                 yes        no
+                  ▼         ▼
+┌───────────────────────┐  ╭───────────────────────────────────╮
+│ Object remains alive  │  │ Destroy or defer reclamation      │
+└───────────────────────┘  ╰───────────────────────────────────╯
 ```
 
 Parent/child relationships also extend lifetime. A live thread keeps its
@@ -771,13 +791,28 @@ shutdown signal for component and driver connections; it is not a kernel crash.
 Tasks form a containment tree:
 
 ```text
-root job
-  |
-  +-- component-manager job
-  |     +-- component process -> threads
-  |     `-- driver-host process -> driver threads
-  |
-  `-- console / fshost / service jobs
+╭──────────────────────────────────────────────────╮
+│ Root job                                         │
+╰───────────────────────┬──────────────────────────╯
+                        │ contains child jobs and processes
+          ┌─────────────┴─────────────┐
+          ▼                           ▼
+┌──────────────────────────┐  ┌───────────────────────────────┐
+│ Component-manager job    │  │ Console, fshost, service jobs │
+└─────────────┬────────────┘  └───────────────────────────────┘
+              │ contains
+      ┌───────┴────────┐
+      ▼                ▼
+┌───────────────┐  ┌────────────────┐
+│ Component     │  │ Driver-host    │
+│ process       │  │ process        │
+└───────┬───────┘  └───────┬────────┘
+        │ owns threads     │ owns threads
+        ▼                  ▼
+╭───────────────╮          ╭────────────────╮
+│ Runnable      │          │ Driver threads │
+│ threads       │          ╰────────────────╯
+╰───────────────╯
 ```
 
 - A **job** contains child jobs and processes. Job policies, critical-process
@@ -815,12 +850,16 @@ packets, which is why driver and async service loops can wait on channels,
 interrupts, and timers through one dispatcher.
 
 ```text
-driver / component thread
-        |
-        +--> zx_channel_call()     request/reply FIDL
-        +--> zx_handle_wait_one()  event or peer-closed signal
-        +--> zx_port_wait()        channel + interrupt + timer packets
-        `--> zx_futex_wait()       userspace lock contention
+┌────────────────────────────────────────────────────┐
+│ Driver or component thread                         │
+└────────────────────────┬───────────────────────────┘
+                         │ selects a blocking operation
+           ┌─────────────┼─────────────┬──────────────┐
+           ▼             ▼             ▼              ▼
+┌────────────────┐ ┌──────────────┐ ┌─────────────┐ ┌──────────────┐
+│ channel_call   │ │ wait_one     │ │ port_wait   │ │ futex_wait   │
+│ FIDL reply     │ │ signal/peer  │ │ many events │ │ lock wait    │
+└────────────────┘ └──────────────┘ └─────────────┘ └──────────────┘
 ```
 
 An asynchronous service loop usually binds several objects to one port. The
@@ -828,17 +867,21 @@ port packet identifies the source with a user-selected key; the object-specific
 dispatcher remains responsible for the signal or packet semantics:
 
 ```text
-zx_object_wait_async(channel, port, key=1)
-zx_object_wait_async(interrupt, port, key=2)
-zx_timer_set(timer, deadline)
-        |                         |                         |
-        +------------+------------+-------------------------+
-                     v
-              zx_port_wait(port)
-                     |
-                     +--> key=1: read FIDL message
-                     +--> key=2: acknowledge IRQ / schedule work
-                     `--> timer packet: run timeout handler
+┌──────────────────────────────────────────────────────┐
+│ Bind channel (key 1), interrupt (key 2), and timer   │
+│ to one port                                          │
+└──────────────────────────┬───────────────────────────┘
+                           │ zx_port_wait(port)
+                           ▼
+                 ┌─────────┴─────────┐
+                 │ Port packet key   │
+                 └───┬───────────┬───┘
+                     1           2             timer
+                     ▼           ▼               ▼
+   ┌──────────────────┐ ┌────────────────────┐ ┌──────────────────────┐
+   │ Read FIDL message│ │ Acknowledge IRQ and│ │ Run timeout handler  │
+   └──────────────────┘ │ schedule work      │ └──────────────────────┘
+                        └────────────────────┘
 ```
 
 This pattern is used at the framework boundary: a driver-host can wait for a
@@ -853,10 +896,19 @@ into a VMAR creates a process virtual-address view; it does not turn the VMO
 into a raw physical pointer.
 
 ```text
-VMO (pages, file/data backing, or shared buffer)
-  |  zx_vmar_map(vmar, vmo, ...)
-  v
-process VMAR -> page tables -> virtual address
+┌────────────────────────────────────────────┐
+│ VMO: pages, file backing, or shared buffer │
+└────────────────────┬───────────────────────┘
+                     │ zx_vmar_map(vmar, vmo, ...)
+                     ▼
+┌────────────────────────────────────────────┐
+│ Process VMAR and page-table mapping        │
+└────────────────────┬───────────────────────┘
+                     │ translates load/store
+                     ▼
+╭────────────────────────────────────────────╮
+│ Process virtual address                    │
+╰────────────────────────────────────────────╯
 ```
 
 VMO rights control read/write/execute and mapping-related operations. VMAR
@@ -896,19 +948,22 @@ the virtualization host unsupported.
 The driver and hypervisor capability flow is intentionally explicit:
 
 ```text
-component_manager / driver_manager
-          |
-          | framework capability routing
-          |  channel + VMO + interrupt/resource/BTI handles
-          v
-     isolated driver-host                 arm64 VMM
-          |                                  |
-          | zx_channel_call                  | guest/vcpu syscalls
-          | zx_vmar_map(VMO)                 | validate hypervisor rights
-          | zx_interrupt_wait                v
-          |                          EL2 monitor / virtual devices
-          v
- QEMU device driver -> devfs/FIDL -> console or fshost
+┌─────────────────────────────────────────────────────────────┐
+│ component_manager / driver_manager                          │
+└─────────────────────────────┬───────────────────────────────┘
+                              │ offers channels, VMOs, IRQ/resource/BTI handles
+                ┌─────────────┴─────────────┐
+                ▼                           ▼
+┌──────────────────────────────┐  ┌───────────────────────────┐
+│ Isolated driver-host         │  │ arm64 VMM                 │
+│ call, map, and wait syscalls │  │ guest/VCPU syscalls       │
+└──────────────┬───────────────┘  └─────────────┬─────────────┘
+               │ devfs / FIDL                   │ hypervisor right
+               ▼                                ▼
+╭──────────────────────────────╮  ╭───────────────────────────╮
+│ QEMU device and SMOS service │  │ EL2 monitor / virtual     │
+│ endpoint                     │  │ devices                   │
+╰──────────────────────────────╯  ╰───────────────────────────╯
 ```
 
 The resource and interrupt handles in this diagram are not synthesized by the

@@ -105,6 +105,9 @@ to the affected phase for review.
 - For C++ changes, use
   [`tools/skills/cpp-code-review/SKILL.md`](../cpp-code-review/SKILL.md) and
   report findings before proceeding.
+- For Rust changes, use
+  [`tools/skills/rust-code-review/SKILL.md`](../rust-code-review/SKILL.md) and
+  report findings before proceeding.
 - Resolve blocking findings and record accepted residual risks.
 - Output: review findings, resolutions, and approval to validate.
 - Gate: obtain human approval before starting Test and verification.

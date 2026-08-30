@@ -6,9 +6,9 @@ use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, Read, Write};
 
-fn usage() -> ! {
+fn usage() -> i32 {
     eprintln!("Usage: cat [-u] [file ...]");
-    std::process::exit(1);
+    1
 }
 
 fn copy<R: Read, W: Write>(reader: &mut R, writer: &mut W) -> io::Result<()> {
@@ -43,11 +43,15 @@ where
             // std::io::copy writes directly to the locked stdout stream, so
             // there is no additional userspace output buffer to disable.
         } else if options && arg.to_string_lossy().starts_with('-') {
-            usage();
+            return usage();
         } else {
             options = false;
             files.push(arg);
         }
+    }
+
+    if files.is_empty() {
+        return usage();
     }
 
     let stdin = io::stdin();
@@ -56,32 +60,25 @@ where
     let mut output = stdout.lock();
     let mut status = 0;
 
-    if files.is_empty() {
-        if let Err(error) = copy(&mut input, &mut output) {
-            eprintln!("cat: <stdin>: {error}");
-            status = 1;
-        }
-    } else {
-        for path in files {
-            if path == OsStr::new("-") {
-                if let Err(error) = copy(&mut input, &mut output) {
-                    eprintln!("cat: <stdin>: {error}");
-                    status = 1;
-                }
-                continue;
+    for path in files {
+        if path == OsStr::new("-") {
+            if let Err(error) = copy(&mut input, &mut output) {
+                eprintln!("cat: <stdin>: {error}");
+                status = 1;
             }
+            continue;
+        }
 
-            match File::open(&path) {
-                Ok(mut file) => {
-                    if let Err(error) = copy(&mut file, &mut output) {
-                        eprintln!("cat: {}: {error}", path.to_string_lossy());
-                        status = 1;
-                    }
-                }
-                Err(error) => {
+        match File::open(&path) {
+            Ok(mut file) => {
+                if let Err(error) = copy(&mut file, &mut output) {
                     eprintln!("cat: {}: {error}", path.to_string_lossy());
                     status = 1;
                 }
+            }
+            Err(error) => {
+                eprintln!("cat: {}: {error}", path.to_string_lossy());
+                status = 1;
             }
         }
     }
@@ -124,5 +121,10 @@ mod tests {
         let mut output = Vec::new();
         copy(&mut input, &mut output).unwrap();
         assert_eq!(output, b"\n");
+    }
+
+    #[test]
+    fn rejects_missing_file_operand_without_reading_stdin() {
+        assert_eq!(run(Vec::<OsString>::new()), 1);
     }
 }

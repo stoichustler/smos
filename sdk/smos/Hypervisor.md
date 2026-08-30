@@ -210,28 +210,28 @@ Rust manager implementations.
 ### Stop, Exit, and Recovery Flow
 
 ```text
-Guest client       GuestManager          VmmController/Vmm       vmm component
-    |                  |                         |                     |
-    | ForceShutdown    |                         |                     |
-    |----------------->| state = STOPPING        |                     |
-    |                  | GuestLifecycle.Stop()   |                     |
-    |                  |------------------------>|                     |
-    |                  |                         | post teardown task  |
-    |                  |                         | NotifyClientsShutdown
-    |                  |                         | destroy Vmm         |
-    |                  |<------------------------| Run error/complete  |
-    |                  | state = STOPPED         |                     |
-    |<-----------------| complete pending shutdown callbacks           |
-    |                  |                         |                     |
-    | guest exits or   |                         |                     |
-    | VMM reports err  |                         | ScheduleVmmTeardown |
-    |                  |<------------------------|                     |
-    |                  | Handle Run result       |                     |
-    |                  | state = STOPPED         |                     |
-    |                  |                         |                     |
-    | VMM process dies | lifecycle channel error |                     |
-    |                  | state = VMM_UNEXPECTED_TERMINATION            |
-    |                  | next Launch opens a new lifecycle channel     |
+Guest client       GuestManager          VmmController/Vmm         vmm component
+    |                  |                         |                       |
+    | ForceShutdown    |                         |                       |
+    |----------------->| state = STOPPING        |                       |
+    |                  | GuestLifecycle.Stop()   |                       |
+    |                  |------------------------>|                       |
+    |                  |                         | post teardown task    |
+    |                  |                         | NotifyClientsShutdown |
+    |                  |                         | destroy Vmm           |
+    |                  |<------------------------| Run error/complete    |
+    |                  | state = STOPPED         |                       |
+    |<-----------------| complete pending shutdown callbacks             |
+    |                  |                         |                       |
+    | guest exits or   |                         |                       |
+    | VMM reports err  |                         | ScheduleVmmTeardown   |
+    |                  |<------------------------|                       |
+    |                  | Handle Run result       |                       |
+    |                  | state = STOPPED         |                       |
+    |                  |                         |                       |
+    | VMM process dies | lifecycle channel error |                       |
+    |                  | state = VMM_UNEXPECTED_TERMINATION              |
+    |                  | next Launch opens a new lifecycle channel       |
 ```
 
 `VmmController::Stop` schedules teardown and acknowledges the stop request;
@@ -352,7 +352,7 @@ data aborts, virtual timer events, and virtual interrupts.
                         v                         v
 +--------------------------------+     +------------------------------+
 | EL1 management domain          |     | EL1 guest domain(s)          |
-| SMOS kernel and user space   |     | Zircon or another guest OS   |
+| SMOS kernel and user space     |     | Zircon or another guest OS   |
 |                                |     |                              |
 | C++ guest policy / lifecycle   |     | guest vCPUs and guest RAM    |
 | Rust/C++ virtio backends       |     | virtio frontends             |

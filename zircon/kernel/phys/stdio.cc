@@ -26,7 +26,7 @@ PhysConsole& PhysConsole::Get() {
 void InitStdout() { FILE::stdout_ = PhysConsole::Get().mux_; }
 
 void PrintBootBanner() {
-  printf("kicking [zircon microkernel] 🅡  20250309 → SMOS\n"
+  printf("\nkicking [zircon microkernel] 🅡  20250309 → SMOS\n"
          "                                         _ _\n"
          "  ___ ___ __ _  _ _ _ ___ _ __  ___ _ _ (_) |_ ___ _ _ \n"
          " (_-</ -_) _| || | '_/ -_) '  \\/ _ \\ ' \\| |  _/ _ \\ '_|\n"

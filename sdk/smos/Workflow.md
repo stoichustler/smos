@@ -134,6 +134,34 @@ Use peer diagrams for IPC, driver discovery, or a capability hand-off. Keep
 the protocol or capability name on the connector when more than one relation
 exists between the same pair of boxes.
 
+### Sequence Diagram
+
+Use a sequence diagram when the order of messages between two or more peers is
+the subject of the explanation. Place participants from left to right and read
+time from top to bottom.
+
+```text
+╭──────────────────╮  ╭──────────────────╮  ╭────────────────────╮
+│ Client           │  │ Service          │  │ Peer / kernel obj  │
+╰────────┬─────────╯  ╰────────┬─────────╯  ╰─────────┬──────────╯
+         │                     │                      │
+         │ request             │                      │
+         ├────────────────────►│ validate / dispatch  │
+         │                     │ operation            │
+         │                     ├─────────────────────►│
+         │                     │◄─────────────────────┤ result
+         │◄────────────────────┤ reply                │
+         │                     │                      │
+         │                     │◄─────────────────────┤ event / peer close
+         │◄────────────────────┤ forward event        │
+```
+
+The vertical line below each participant is its lifeline. A horizontal arrow
+starts at the sender and ends at the receiver; label it with the protocol,
+operation, result, or event. Write state such as `in transit`, `PEER_CLOSED`,
+or an error beside the message that causes or observes it. Use a separate
+sequence diagram when interactions would otherwise cross or exceed 88 columns.
+
 ## Authoring rules
 
 1. Choose one diagram purpose: execution order, ownership, layering, or peer
