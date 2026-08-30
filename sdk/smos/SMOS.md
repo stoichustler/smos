@@ -809,9 +809,9 @@ Tasks form a containment tree:
 └───────┬───────┘  └───────┬────────┘
         │ owns threads     │ owns threads
         ▼                  ▼
-╭───────────────╮          ╭────────────────╮
-│ Runnable      │          │ Driver threads │
-│ threads       │          ╰────────────────╯
+╭───────────────╮       ╭────────────────╮
+│ Runnable      │       │ Driver threads │
+│ threads       │       ╰────────────────╯
 ╰───────────────╯
 ```
 
@@ -1521,69 +1521,233 @@ switch records to `TraceContextSwitch`.
 
 ### Interrupts and timers
 
-Hardware interrupt delivery crosses an architecture-specific layer before it
-becomes a Zircon interrupt object or a driver callback. The boot-shim supplies
-the platform description; the kernel initializes the interrupt controller and
-routes an IRQ to the owning kernel object. User-space drivers observe the
-interrupt through a framework-provided handle, event, or port packet.
+Hardware interrupt delivery crosses an architecture-specific entry path before
+it becomes a Zircon interrupt object or a driver callback. This section uses
+the arm64 SMOS QEMU path as the teaching example. The boot-shim supplies GIC,
+timer, and CPU-description ZBI items; the kernel initializes the controller;
+and a user-mode driver observes an interrupt through a framework-issued handle
+or port packet.
 
-    device / timer
-          |
-          v
-    CPU interrupt entry
-          |
-          v
-    arch interrupt controller
-          |
-          v
-    InterruptDispatcher / kernel handler
-          |
-          +--> wake waiting thread
-          +--> queue zx_port_packet_t
-          `--> signal event or driver protocol
+#### Interrupt model and terminology
 
-On arm64, the boot data describes GIC, PSCI, and timer information. On riscv64,
-the corresponding path uses PLIC, timer, and CPU-topology information. The
-common result is a Zircon interrupt object that can be waited on directly or
-bound to a port. Drivers should acknowledge or mask hardware through their
-device protocol and framework contract; a shell command only sees the higher
-level device service.
+An **exception** is any control transfer into privileged exception-handling
+code. An **interrupt** is the asynchronous subset: it is raised independently
+of the instruction currently executing. A synchronous exception instead has a
+direct instruction cause, such as an SVC syscall, page fault, breakpoint, or
+illegal instruction. The CPU saves enough state to resume, chooses an entry
+point, and the kernel classifies the cause before it dispatches work.
 
-Timers use the same wait/wake machinery as interrupts. A timeout puts the
-thread to sleep, and the timer expiry makes it eligible to run again; it does
-not busy-loop in the console or driver-host.
+Do not confuse three related identifiers:
 
-#### Interrupt code path: hardware to a driver wait
+| Term | Meaning | Example in this path |
+| --- | --- | --- |
+| CPU vector entry | A fixed architecture entry address | One `VBAR_EL1` slot for an IRQ from EL0 AArch64 |
+| Controller interrupt ID | A number reported by the GIC for a pending source | Timer PPI, UART SPI, or MSI-derived interrupt |
+| Zircon interrupt handle | A process-local capability naming an object | Handle passed to `zx_interrupt_wait()` |
 
-The syscall and dispatcher path can be followed through
+The vector entry decides which early assembly path runs; it does not identify a
+PCI device or replace a Zircon handle. The GIC identifies the pending hardware
+source after the CPU enters the IRQ vector, and the dispatcher maps that source
+to kernel-side state and a waiting client.
+
+#### arm64 exception vector table
+
+At EL1, `VBAR_EL1` holds the base address of the exception vector table. The
+architecture reserves 16 ordered slots: four origin/stack-context groups times
+four exception classes. Each slot is `0x80` bytes, so the table occupies
+`0x800` bytes. The classes are synchronous exception, IRQ, FIQ, and SError.
+The groups distinguish exceptions while already at EL1 with `SP0` or `SP_ELx`,
+and exceptions from a lower EL using AArch64 or AArch32 state.
+
+```text
+╭────────────────────────────────────────────────────────────╮
+│ VBAR_EL1: base of the EL1 exception vector table           │
+╰─────────────────────────┬──────────────────────────────────╯
+                          │ group × 0x200 + class × 0x80
+                          ▼
+┌────────────────────────────────────────────────────────────┐
+│ 16 ordered slots, each 0x80 bytes                          │
+├────────────────────┬────────┬────────┬────────┬────────────┤
+│ Origin / stack     │ Sync   │ IRQ    │ FIQ    │ SError     │
+├────────────────────┼────────┼────────┼────────┼────────────┤
+│ EL1, SP0           │ slot   │ slot   │ slot   │ slot       │
+│ EL1, SP_ELx        │ slot   │ IRQ    │ slot   │ slot       │
+│ Lower EL, AArch64  │ slot   │ IRQ    │ slot   │ slot       │
+│ Lower EL, AArch32  │ slot   │ IRQ    │ slot   │ slot       │
+└────────────────────┴────────┴────────┴────────┴────────────┘
+```
+
+The diagram is conceptual. An entry can share a later common implementation or
+be filled by an invalid-exception stub; it is not a promise that every class has
+a device handler in SMOS. The production table is `arm64_el1_exception` in
+`zircon/kernel/arch/arm64/exceptions.S`. Its `.vbar_table` macros enforce slot
+order and size at assembly time. Dedicated IRQ entries save an `iframe_t` frame
+and call `arm64_irq(iframe, exception_flags)`.
+
+`arm64_irq` in `zircon/kernel/arch/arm64/exceptions_c.cc` starts generic
+interrupt accounting, records the IRQ counter, calls `platform_irq`, and checks
+whether interrupt processing made preemption necessary before it returns.
+
+#### GIC delivery and acknowledgement
+
+The Arm Generic Interrupt Controller (GIC) arbitrates pending sources, applies
+priority and CPU-target policy, and presents one selected IRQ to a CPU. The GIC
+is separate from the vector table: GIC delivery causes an IRQ exception, then
+the CPU executes the matching `VBAR_EL1` slot.
+
+```text
+╭───────────────────────────╮
+│ QEMU device or timer      │
+│ asserts an IRQ            │
+╰──────────────┬────────────╯
+               │ interrupt ID, priority, target CPU
+               ▼
+┌───────────────────────────────────────────────────┐
+│ GIC: pending → enabled → selected for a CPU       │
+└─────────────────────┬─────────────────────────────┘
+                      │ IRQ line to selected CPU
+                      ▼
+┌───────────────────────────────────────────────────┐
+│ Matching VBAR_EL1 IRQ vector                      │
+│ save frame → arm64_irq() → platform_irq()         │
+└─────────────────────┬─────────────────────────────┘
+                      ▼
+╭───────────────────────────────────────────────────╮
+│ Claim, signal the kernel handler, and EOI/complete│
+╰───────────────────────────────────────────────────╯
+```
+
+An acknowledgement tells the controller that software accepted a pending
+interrupt; end-of-interrupt (EOI) and, where required, deactivation retire the
+active controller state. Device acknowledgement is separate: a UART, virtio
+device, or PCI function may require status to be read or cleared so it stops
+asserting its source. Completing only the GIC side can lead to a repeated IRQ.
+
+The GICv2 implementation's `gic_handle_irq` reads `GICC_IAR`, invokes the
+registered handler, and writes `GICC_EOIR`; see
+`zircon/kernel/dev/interrupt/gic/v2/arm_gicv2.cc`. Register details vary by GIC
+version, but controller claim/complete and device-state acknowledgement remain
+separate responsibilities.
+
+#### End-to-end IRQ lifecycle
+
+This sequence separates fast IRQ handling from the driver work that follows. A
+user driver does not execute inside a CPU vector slot. It waits in its own
+thread and resumes only after kernel signaling makes it runnable.
+
+```text
+╭──────────────╮  ╭──────────────╮  ╭──────────────╮  ╭──────────────╮
+│ Device       │  │ GIC / CPU    │  │ Kernel       │  │ Driver       │
+╰──────┬───────╯  ╰──────┬───────╯  ╰──────┬───────╯  ╰──────┬───────╯
+       │                 │                 │                 │
+       │ assert IRQ      │                 │                 │
+       ├────────────────►│ take vector     │                 │
+       │                 ├────────────────►│ arm64_irq()     │
+       │                 │                 │ platform_irq()  │
+       │                 │                 │ signal          │
+       │                 │                 ├────────────────►│ wake / packet
+       │                 │◄────────────────┤ EOI / complete  │
+       │                 │                 │                 │ read state
+       │◄────────────────────────────────────────────────────┤ acknowledge
+```
+
+The diagram shows logical ownership, not a requirement that a driver write a
+hardware register directly. In SMOS, a driver can acknowledge device state
+through mapped MMIO, a Banjo/FIDL protocol, or a framework device API. The
+driver framework grants only the resource handles and protocols required by
+that device. The kernel completes the controller-side IRQ before returning from
+the handler; the scheduled driver thread then performs the separate device-side
+acknowledgement needed to prevent a level source from immediately reasserting.
+
+#### Interrupt objects, waiting, and ports
+
+The syscall and dispatcher path is implemented in
 `zircon/kernel/lib/syscalls/driver.cc` and
-`zircon/kernel/object/interrupt_dispatcher.cc`:
+`zircon/kernel/object/interrupt_dispatcher.cc`. A driver receives an interrupt
+handle through the driver framework; ordinary components cannot manufacture an
+authorized hardware interrupt by guessing an IRQ number.
 
-    driver / framework
-       |
-       | zx_interrupt_wait(handle)
-       v
-    sys_interrupt_wait(...)
-       |
-       v
-    InterruptDispatcher::WaitForInterrupt(...)
-       |
-       `-- blocks the current thread
+```text
+┌────────────────────────────────────────────────────┐
+│ Driver thread                                      │
+└─────────────────────┬──────────────────────────────┘
+                      │ zx_interrupt_wait(handle)
+                      ▼
+┌────────────────────────────────────────────────────┐
+│ sys_interrupt_wait → InterruptDispatcher           │
+│ WaitForInterrupt blocks the current thread         │
+└─────────────────────┬──────────────────────────────┘
+                      │ hardware handler calls InterruptHandler
+                      ▼
+              ┌───────┴────────┐
+              │ Port bound?    │
+              └───┬─────────┬──┘
+                 no         yes
+                  ▼         ▼
+┌───────────────────────┐  ╭───────────────────────────────╮
+│ Wake direct waiter    │  │ Queue zx_port_packet_t;       │
+│ with IRQ timestamp    │  │ event loop selects by key     │
+└───────────────────────┘  ╰───────────────────────────────╯
+```
 
-    hardware IRQ -> arch IRQ entry -> registered IRQ thunk
-                              |
-                              v
-                    InterruptDispatcher::InterruptHandler()
-                              |
-               +--------------+--------------+
-               |                             |
-               v                             v
-        wake zx_interrupt_wait()       queue bound port packet
+`InterruptDispatcher::InterruptHandler()` records the timestamp and either
+satisfies a direct wait or queues a packet to a bound port. A port is useful
+when one driver thread must wait for a channel request, an interrupt, and a
+timer without polling. The driver still reads and acknowledges device state
+before relying on the next edge or level assertion.
 
-For PCI/MSI-style devices, the derived dispatcher registers the hardware
-handler and calls the common `InterruptHandler`. The common handler owns the
-kernel-side signaling; the user driver remains responsible for reading device
-state and acknowledging the device through its mapped registers or protocol.
+#### Interrupt context, preemption, and timers
+
+Vector and controller-handler work must be short and non-blocking. It runs with
+restricted context: sleeping, waiting for a channel reply, taking arbitrary
+long-lived locks, or doing slow console I/O there can delay every interrupt on
+that CPU. The normal division is to acknowledge enough state to make forward
+progress, signal a waiter or queue a port packet, then let a scheduled thread
+perform slower device work.
+
+```text
+┌──────────────────────────────────────────────┐
+│ IRQ vector: save interrupted register state  │
+└────────────────────┬─────────────────────────┘
+                     │ arm64_irq → platform_irq
+                     ▼
+┌──────────────────────────────────────────────┐
+│ Fast work: claim, account, signal, and EOI   │
+└────────────────────┬─────────────────────────┘
+                     │ interrupt made higher-priority work ready?
+                     ▼
+              ┌──────┴──────┐
+              │ preempt?    │
+              └───┬──────┬──┘
+                 yes     no
+                  ▼      ▼
+╭────────────────────╮  ╭──────────────────────────────╮
+│ Scheduler selects  │  │ Return to interrupted context│
+│ runnable work      │  ╰──────────────────────────────╯
+╰────────────────────╯
+```
+
+`int_handler_finish` informs `arm64_irq` whether a preemption check is needed;
+the actual scheduling decision remains in the Zircon scheduler. A timer expiry
+uses the same wake/preemption machinery: it makes a waiting thread eligible to
+run rather than busy-looping in a console or driver-host.
+
+#### arm64 source map and debugging checklist
+
+| Question | Representative source or observation |
+| --- | --- |
+| Which CPU entry runs? | `zircon/kernel/arch/arm64/exceptions.S`, `arm64_el1_exception` and `.vbar_table` |
+| Where are IRQ accounting and preemption checked? | `zircon/kernel/arch/arm64/exceptions_c.cc`, `arm64_irq()` |
+| Where does the controller claim and EOI an IRQ? | `zircon/kernel/dev/interrupt/gic/`; GICv2 example: `arm_gicv2.cc:gic_handle_irq` |
+| Where does an IRQ become a wait/port notification? | `zircon/kernel/object/interrupt_dispatcher.cc` |
+| Where is the user ABI wait validated? | `zircon/kernel/lib/syscalls/driver.cc` |
+| Why does a driver receive no interrupt? | Check routing, controller enable/affinity, device state, mask/acknowledge, and handle/port setup in that order. |
+| Why does one IRQ repeat? | Check device-status acknowledgement separately from GIC EOI/deactivation. |
+| Why is IRQ latency high? | Look for long handler work, disabled interrupts, affinity imbalance, or scheduling delay. |
+
+> TODO: Document the riscv64 `stvec` entry, `scause` dispatch, PLIC
+> claim/complete flow, and timer/IPI delivery separately. Do not infer those
+> details from the arm64 `VBAR_EL1` or GIC diagrams.
 
 ### Processes, handles, and IPC
 

@@ -6,18 +6,16 @@
 # before making changes to this file, and add a member of the fuchsia.dev
 # team as reviewer.
 toc:
-- title: "Overview"
-  path: /docs/development/languages
 - title: "Configure linters and formatter"
-  path: /docs/development/languages/lint_and_format.md
+  path: /lint_and_format.md
 - title: "Fuchsia endian policy"
-  path: /docs/development/languages/endian.md
+  path: /endian.md
 - title: "C/C++"
   section:
-  - include: /docs/development/languages/c-cpp/_toc.yaml
+  - include: /c-cpp/_toc.yaml
 - title: "Python"
   section:
-  - include: /docs/development/languages/python/_toc.yaml
+  - include: /python/_toc.yaml
 - title: "Rust"
   section:
-  - include: /docs/development/languages/rust/_toc.yaml
+  - include: /rust/_toc.yaml

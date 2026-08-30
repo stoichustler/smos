@@ -40,15 +40,15 @@ function! s:ApplyCStyle(style) abort
     if a:style ==# 'hypervisor'
         setlocal tabstop=8 shiftwidth=8 softtabstop=8 noexpandtab
         setlocal cinoptions=:0,l1,g4,h4,N0,t0,+8,(8,W8
-        let l:name = 'Hypervisor/BEAU (tabs 8, columns 120)'
+        let l:name = 'Hypervisor/BEAU (tabs 8)'
     elseif a:style ==# 'google'
         setlocal tabstop=2 shiftwidth=2 softtabstop=2 expandtab
         setlocal cinoptions=:s,l1,g1,h1,N-s,t0,+4,(4,W4
-        let l:name = 'Google C++ (spaces 2, columns 80)'
+        let l:name = 'Google C++ (spaces 2)'
     elseif a:style ==# 'linux'
         setlocal tabstop=8 shiftwidth=8 softtabstop=8 noexpandtab
         setlocal cinoptions=:0,l1,g0,h8,N0,t0,+8,(0,w1,W8
-        let l:name = 'Linux kernel (tabs 8, columns 80)'
+        let l:name = 'Linux kernel (tabs 8)'
     else
         echoerr 'Unknown C/C++ style: ' . a:style
         return
