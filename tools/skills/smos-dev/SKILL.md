@@ -54,6 +54,27 @@ explicit approval before starting the next phase. Approval for one phase does
 not authorize later phases. If new evidence changes the scope, stop and return
 to the affected phase for review.
 
+## Commit authorization
+
+Code must not be submitted without explicit human authorization. This is a
+separate gate from requirement, design, implementation, code-review, and
+verification approval.
+
+- Do not run `git commit`, `git commit --amend`, `git push`, or create/update a
+  change for review unless the requester explicitly authorizes that submission
+  in the current task.
+- Before requesting submission authorization, report the final file list,
+  intended commit message, review status, verification results, and known
+  limitations. Wait for an unambiguous approval such as `批准提交`.
+- Approval to implement, review, build, or verify is not approval to commit.
+  If the requester says only `批准`, ask which gate or action is approved when
+  the context does not make submission authorization explicit.
+- Inspect both `git diff` and `git diff --cached` immediately before a commit.
+  Never include pre-existing or unrelated staged changes; unstage them or stop
+  and report the conflict for human direction.
+- If submission is not authorized, leave the working tree uncommitted and
+  provide reproducible validation results instead.
+
 ### 1. Requirement analysis
 
 - Identify requested behavior, affected architectures, acceptance criteria,

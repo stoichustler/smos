@@ -1,6 +1,6 @@
 # SMOS Architecture Guide
 
-<img src="img/SMOS.png" alt="smos" width="550">
+<img src="assets/SMOS.png" alt="smos" width="750">
 
 
 SMOS is a console-only Fuchsia/Zircon server profile. It retains the original
