@@ -1,0 +1,180 @@
+[SMOS Manual]
+──────────────────────────────────────────────────────────────────────────────────
+
+SMOS is a console-only Fuchsia/Zircon server profile for arm64 and riscv64.
+It keeps the Zircon microkernel, a small user-space service set, QEMU serial
+and storage devices, diagnostics, and the interactive dash shell.  Graphics,
+conventional networking, WLAN, Bluetooth, audio, camera, update, and recovery
+services are outside this product profile.
+
+➊  SMOS (Zircon) microkernel framework
+
+This diagram shows the microkernel boundary.  User-space services contain
+policy; Zircon supplies mechanisms and validates every syscall and handle.
+
+```text
+┌──────────────────────────── SMOS user space ──────────────────────────────┐
+│ component_manager │ drivers │ fshost │ console │ VMM │ dash               │
+│      FIDL channels, namespaces, devfs, files, and user policy             │
+└──────────────────────────────────┬────────────────────────────────────────┘
+                                   │
+                    handles + rights + IPC messages
+                                   │
+┌──────────────────────────────────▼────────────────────────────────────────┐
+│                              Zircon kernel                                │
+│ processes/threads │ VMOs/VMARs │ channels/sockets │ ports │ syscalls      │
+│ jobs/handles      │ interrupts │ timers/signals   │ VM    │ object rights │
+└──────────────────────────────────┬────────────────────────────────────────┘
+                                   │
+┌──────────────────────────────────▼────────────────────────────────────────┐
+│                       hardware, firmware, and monitors                    │
+│              UART │ QEMU virtio │ GIC/PLIC │ EL2/EL3 monitor              │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+The kernel does not parse component URLs, match driver bind rules, implement
+the dash language, or mount a user-facing filesystem.  A user-space process
+receives only the namespace entries and capability handles offered by the
+component framework.  A driver-host restart therefore does not restart the
+kernel or unrelated components.
+
+
+➋  SMOS startup flow
+
+The QEMU image passes a boot-shim as `-kernel` and the assembled ZBI as
+`-initrd`.  The two physical stages are separate: the boot-shim prepares the
+ZBI, while `kernel.phys` loads the next physical module.
+
+```text
+╭──────────────────────────────╮
+│ QEMU / firmware              │
+│ -kernel boot-shim            │
+│ -initrd smos.zbi             │
+╰───────────────┬──────────────╯
+                │ DTB, cmdline, ramdisk
+                ▼
+┌───────────────────────────────┐
+│ arm64/riscv64 boot-shim       │
+│ InitMemory + devicetree parse │
+│ add UART/CPU/memory boot items│
+│ BootZbi::Load -> Boot         │
+└───────────────┬───────────────┘
+                │ ZBI kernel entry
+                ▼
+┌───────────────────────────────┐
+│ kernel.phys / ZbiMain         │
+│ unpack BootFS and phys modules│
+│ relocate -> PhysLoadHandoff   │
+└───────────────┬───────────────┘
+                │ PhysbootHandoff
+                ▼
+┌───────────────────────────────┐
+│ Zircon kernel                 │
+│ VM, scheduler, objects, IRQs  │
+│ bootstrap2 -> userboot_init   │
+└───────────────┬───────────────┘
+                │ starts first user process
+                ▼
+┌───────────────────────────────┐
+│ userboot                      │
+│ reads startup handles and ZBI │
+│ loads bin/component_manager   │
+└───────────────┬───────────────┘
+                │ bootstrap channel + /boot
+                ▼
+┌───────────────────────────────┐
+│ component_manager             │
+│ resolves root and routes caps │
+└───────────────┬───────────────┘
+                │ launches console and drivers
+                ▼
+┌───────────────────────────────┐
+│ driver_manager / driver-host  │
+│ driver_index bind -> devfs    │
+│ console-launcher  -> dash     │
+└───────────────┬───────────────┘
+                │ services and device protocols ready
+                ▼
+╭───────────────────────────────╮
+│ smos:\>                       │
+╰───────────────────────────────╯
+```
+
+Arm64 boot items include GIC and PSCI-related data; riscv64 uses PLIC and
+timer data.  Both paths end at the same dash prompt.  The shell is a client of
+component and device capabilities; it does not load drivers itself.
+
+
+➌  Dash shell command manual
+
+Commands below run after the `smos:\> ` prompt appears.  They are provided by
+the standard Zircon dash shell or by binaries included in the SMOS BootFS.
+Availability still depends on the compact product assembly; use `dm help` for
+device-manager command help.
+
+Basic shell and filesystem commands:
+
+    smos:\> dm help                # list device-manager command usage
+    smos:\> pwd                     # print the current directory
+    smos:\> cd /boot                # change directory
+    smos:\> ls /                    # list a directory
+    smos:\> type ls                 # show how dash resolves a command
+
+Process and system inspection:
+
+    smos:\> ps                     # list processes and threads
+    smos:\> date                   # print system time
+    smos:\> uname                  # print the kernel identity
+    smos:\> echo SHELL_OK          # print a test marker
+    smos:\> ls /boot               # inspect BootFS commands
+    smos:\> set                    # show shell variables and options
+    smos:\> dm help                # show SMOS device-manager commands
+
+The SMOS image verification programs exercise microkernel primitives and
+virtualization support:
+
+    smos:\> mkcheck
+    smos:\> virtcheck
+
+`mkcheck` reports channel, event, timer, thread, and VMO checks.  `virtcheck`
+reports the expected architecture status; riscv64 virtualization is reported
+as unsupported by design.
+
+
+➍  Diagnostics and tracing
+
+Use `loadgen` and `pistress` only for controlled experiments because they
+consume CPU or memory.  `ktrace` group mask `4` records scheduler events and
+requires the kernel debug resource:
+
+    smos:\> loadgen 4
+    smos:\> pistress
+    smos:\> ktrace start 4
+    smos:\> ktrace stop
+    smos:\> ktrace save /tmp/sched.ktrace
+
+The higher-level `trace` command records provider and kernel events:
+
+    smos:\> trace list-categories
+    smos:\> trace record --duration=2 --spawn --output-file=/tmp/run.fxt -- /boot/bin/loadgen 1
+
+Save trace files under `/tmp`.  A command that is not found is not evidence of
+an interactive shell failure: check the product's `/boot/bin` contents and the
+SMOS package assembly before diagnosing the kernel.
+
+When a target program follows the trace options, `--spawn` is required.  Without
+it, dash reports `--spawn` must be set and does not start a trace session.
+
+
+➎  Command notes
+
+The dash prompt and command namespace are user-space interfaces.  Builtins
+such as `cd`, `cp`, `echo`, `ls`, `mkdir`, `rm`, `set`, `type`, and `pwd` are
+interpreted by dash; `date`, `uname`, `ps`, `mkcheck`, and `virtcheck` are
+BootFS programs.  Commands that require capabilities not offered
+by the SMOS product, including conventional network tools, are expected to
+fail.  For kernel or boot implementation details, see `sdk/smos/SMOS.md` and
+`sdk/smos/Workflow.md`.
+
+──────────────────────────────────────────────────────────────────────────────────
+                                                                      [2028-08-31]

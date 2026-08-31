@@ -93,9 +93,17 @@ fuchsia_component("component") {
   deps = [ ":bin" ]
 }
 
+resource("smos_manual") {
+  sources = [ "//sdk/docs/man.txt" ]
+  outputs = [ "meta/man.txt" ]
+}
+
 fuchsia_package("package") {
   package_name = "console-launcher"
-  deps = [ ":component" ]
+  deps = [
+    ":component",
+    ":smos_manual",
+  ]
 }
 
 cc_test_executable("unittests") {

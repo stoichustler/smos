@@ -28,6 +28,10 @@ sdk_documentation("docs") {
       source = "main.md"
       dest = "docs/README.md"
     },
+    {
+      source = "man.txt"
+      dest = "docs/man.txt"
+    },
   ]
   foreach(doc, docs) {
     files += [
