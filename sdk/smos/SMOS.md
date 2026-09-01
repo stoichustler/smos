@@ -17,6 +17,9 @@ counting `.git/`, generated `out/`, or the separately measured standalone SDK
 
 ## Microkernel architecture
 
+<img src="assets/zircon-microkernel.png" alt="smos" width="750">
+
+
 A microkernel keeps the privileged kernel small and moves policy-heavy services
 to user space. The kernel provides mechanisms that must be trusted by every
 process: CPU scheduling, virtual memory, address spaces, kernel objects,

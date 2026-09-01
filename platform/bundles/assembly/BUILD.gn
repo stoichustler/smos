@@ -1376,6 +1376,7 @@ assembly_input_bundle("core_realm_eng") {
 
   # Moved here from //platform/bundles/packages/prod:cmdutils
   on_demand += [
+    "//userspace/sys/smos-bin:clear_pkg",
     "//userspace/sys/smos-bin:date_pkg",
     "//userspace/sys/smos-bin:du_pkg",
     "//userspace/sys/smos-bin:find_pkg",
@@ -1386,6 +1387,10 @@ assembly_input_bundle("core_realm_eng") {
     "//userspace/zircon/bin/uname:uname",
   ]
   shell_commands += [
+    {
+      package = "clear"
+      components = [ "clear" ]
+    },
     {
       package = "date"
       components = [ "date" ]

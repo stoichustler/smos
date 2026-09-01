@@ -13,6 +13,7 @@ group("bins") {
   ]
   deps = [
     ":cat_bin",
+    ":clear_bin",
     ":date_bin",
     ":du_bin",
     ":env_bin",
@@ -30,6 +31,16 @@ rustc_binary("cat_bin") {
   edition = "2021"
   source_root = "src/cat.rs"
   sources = [ "src/cat.rs" ]
+  configs += [ "//release/config/rust:bootfs" ]
+  with_unit_tests = true
+}
+
+rustc_binary("clear_bin") {
+  visibility = [ ":*" ]
+  output_name = "clear"
+  edition = "2021"
+  source_root = "src/clear.rs"
+  sources = [ "src/clear.rs" ]
   configs += [ "//release/config/rust:bootfs" ]
   with_unit_tests = true
 }
@@ -77,6 +88,7 @@ foreach(command,
 bootfs_files_for_assembly("bootfs") {
   deps = [
     ":cat_bin",
+    ":clear_bin",
     ":date_bin",
     ":du_bin",
     ":env_bin",
@@ -95,6 +107,15 @@ fuchsia_package("cat_pkg") {
   ]
   package_name = "cat"
   deps = [ ":cat_bin" ]
+}
+
+fuchsia_package("clear_pkg") {
+  visibility = [
+    ":*",
+    "//platform/bundles/assembly:*",
+  ]
+  package_name = "clear"
+  deps = [ ":clear_bin" ]
 }
 
 fuchsia_package("env_pkg") {
