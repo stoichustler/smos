@@ -68,8 +68,11 @@ boot-to-userspace code path](#complete-zircon-boot-to-userspace-code-path).
 ### Zircon microkernel introduction
 
 Zircon is the low-level kernel used by Fuchsia and by SMOS. It is an
-object-based microkernel: kernel resources are represented by typed objects,
-and processes access those objects through local handles with explicit rights.
+object-based microkernel:
+
+> kernel resources are represented by **typed objects**, and processes access those
+> objects through **local handles** with **explicit rights**.
+
 The handle model is the common substrate for component startup, FIDL IPC,
 driver capabilities, memory mappings, and asynchronous waits.
 
@@ -308,6 +311,16 @@ devicetree data into ZBI items. They then execute
 `BootZbi::Init`, `Load` and `AppendItems`, ending at `BootZbi::Boot` in
 `zircon/kernel/phys/boot-zbi.cc:450`, which jumps to the physical kernel entry.
 
+```text
+BootZbi::Boot()
+  |
+  `-- BootZbi::ZbiBoot() -> arch::ZbiBoot()
+                              |
+                              `-- arch::ZbiBootRaw()
+```
+
+- [zbi-boot.h][1]
+
 The entered `kernel.phys` entry point is
 `zircon/kernel/phys/zbi-main.cc:19`. It performs common physical-stage setup
 (relocation, command line and UART), and then
@@ -318,6 +331,8 @@ next ELF named by `kernel.phys.next`. `PhysLoadHandoff`
 `PhysLoadModuleMain`/`BootZircon` loads `physzircon`,
 `HandoffPrep::DoHandoff` (`zircon/kernel/phys/handoff-prep.cc:359`) constructs
 `PhysHandoff`, and the architecture-specific `PhysbootHandoff` entry is called.
+
+- [handoff-prep.cc][2]
 
 #### 2. Kernel initialization and scheduler startup
 
@@ -340,6 +355,8 @@ resources (`bootstrap_vmos`). It creates a channel for the kernel to write the
 bootstrap message and for user space to receive it, then maps the userboot code,
 vDSO, and initial stack, creates a thread, and enters user space at `:409-412`
 with `ThreadDispatcher::Start(entry, sp, hv, vdso_base)`.
+
+- [userboot.cc][3]
 
 Here `hv` is the channel handle passed to the user-space `_start`; it is not a
 file descriptor, but a Zircon channel carrying `zx_proc_args_t` and capability
@@ -2177,6 +2194,14 @@ not install optional-domain services or drivers into the runtime BootFS.
 ## Rust Implementation
 
 - [Rust.md](Rust.md)
+
+
+
+<!-- References --->
+
+[1]: ../../zircon/kernel/lib/arch/arm64/include/lib/arch/zbi-boot.h
+[2]: ../../zircon/kernel/phys/handoff-prep.cc
+[3]: ../../zircon/kernel/lib/userabi/userboot.cc
 
 ---
 
