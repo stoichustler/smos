@@ -1,5 +1,85 @@
 # SMOS as Hypervisor
 
+## Hypervisor fundamentals
+
+The SMOS virtualization boundary follows Fuchsia's Type-2 model: Zircon owns
+the hypervisor kernel objects, while a user-space VMM owns guest policy,
+emulated devices, and the guest lifecycle. A component must receive the
+`HypervisorResource` capability before it can create guest or vCPU objects.
+This capability route is the product's authorization boundary.
+
+### vCPU execution and exits
+
+`zx_vcpu_create` binds a vCPU object to the creating thread. That same thread
+must perform vCPU state reads/writes and call `zx_vcpu_enter`. Entering the
+vCPU is a blocking host operation: the return marks a transition back to the
+host because the guest executed a VM exit. `zx_vcpu_kick` requests such a
+return from another host control path.
+
+```text
+VMM thread
+ │
+ ├──► zx_vcpu_create(guest, entry)
+ ├──► zx_vcpu_write_state(vcpu, state)
+ ╰──► zx_vcpu_enter(vcpu)
+       ├──► guest executes
+       ├──► VM exit -> kernel classifies reason
+       ╰──► return to VMM with exit state
+```
+
+The kernel handles architectural state and protected entry/exit. The VMM
+interprets configured traps and emulates devices in user space. FIDL is not an
+EL2 interface and is not used from the kernel exit handler.
+
+### Guest memory and two-stage translation
+
+`zx_guest_create` returns a guest object and a VMAR representing guest physical
+address space. The VMM maps a VMO into that VMAR to provide guest RAM. Hardware
+then performs two translations: the guest page tables translate guest virtual
+addresses (GVA) to guest physical addresses (GPA), and Stage-2 translation
+maps GPA to host physical addresses (HPA). A missing Stage-2 mapping can be
+reported through a configured trap for emulation or policy handling.
+
+```text
+guest instruction
+ │
+ ╰──► guest page tables: GVA -> GPA
+       │
+       ╰──► Stage-2 tables: GPA -> HPA
+             │
+             ╰──► host RAM or configured trap
+```
+
+The guest VMAR is a capability-bearing mapping boundary; it does not grant the
+guest arbitrary host VMOs or host address-space access. VMO rights, guest VMAR
+permissions, and the VMM's handle ownership all remain part of the isolation
+contract.
+
+### Traps and virtual interrupts
+
+`zx_guest_set_trap` lets the VMM register MMIO, port, or bell traps. A guest
+MMIO access that is not backed by a Stage-2 mapping exits to the kernel, which
+delivers the configured event to the VMM. The VMM emulates the access and may
+inject a virtual interrupt before resuming the vCPU. Virtual timer and GIC
+state are maintained by the architecture-specific hypervisor implementation.
+
+```text
+guest MMIO access
+ │
+ ╰──► Stage-2 miss / trap match
+       │
+       ╰──► port packet to VMM
+             ├──► emulate device access
+             ├──► update vCPU or device state
+             ╰──► inject virtual interrupt and re-enter
+```
+
+These mechanisms are implemented under `zircon/kernel/object/guest_dispatcher.cc`,
+`vcpu_dispatcher.cc`, and `zircon/kernel/arch/arm64/hypervisor/`. The current
+SMOS product uses ARM64 QEMU and the C++ VMM described in the following
+sections; the generic Fuchsia guest list is intentionally not part of this
+document.
+
 ## Original Implementation
 
 ### Scope

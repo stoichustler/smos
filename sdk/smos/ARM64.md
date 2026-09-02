@@ -396,8 +396,6 @@ states; software writes the End of Interrupt register to complete handling.
 
 <img src="assets/arm64/ARM_GIC_IRQ_handling_state_machine.png" alt="GIC IRQ handling state machine" width="750">
 
-See [`GICv3_overview.pdf`](assets/arm64/GICv3_overview.pdf) for the complete
-programmer model.
 
 ## SMMUv3 and DMA
 

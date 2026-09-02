@@ -221,7 +221,7 @@ fn longer<'a>(left: &'a str, right: &'a str) -> &'a str {
 
 ```text
 C/C++                         Rust
-----------------------------------------------------------
+───────────────────────────────────────────────────────────────
 malloc/free                  ownership + automatic Drop
 const char*                  &str / &[u8]
 char* + length               &[u8] / &mut [u8]
@@ -239,7 +239,7 @@ and functions do not need a manual `free` call.
 
 ```text
 thread stack                  heap
-----------------------         --------------------------
+─────────────────────         ─────────────────────────────────
 let count: u64 = 1;            String { ptr, len, cap }
 let path: PathBuf;       ---->  [ '/', 'b', 'o', 'o', ... ]
 function locals               contiguous `Vec<u8>` buffer

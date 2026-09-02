@@ -35,59 +35,154 @@ reply or feedback path, not for decoration.
 
 ## Code flow
 
-Use `Code flow` for an ordered path through functions, commands, boot stages,
-or request handling. The vertical path is the default because it remains easy
-to scan in narrow terminals.
+Use `Code flow` to trace a detailed call chain through functions, commands, or
+boot stages. It answers “which function calls which, in what order, and what
+returns?”. Use plain-text nodes with indentation and connectors; do not use
+boxes. Use `Sequence Diagram` for message order between peers and `Framework`
+for ownership, layering, or capability boundaries.
+
+### Purpose and selection
+
+Choose Code flow when the important question is “what calls what next?”. Use
+one line for each meaningful function, method, command, callback, or return.
+Use `Sequence Diagram` when the important question is “which peer sends which
+message, and when?”. Use `Framework` when the important question is ownership,
+layering, or a capability boundary.
+
+### Notation
+
+- Write one function, method, command, event, or return value per line. Use
+  implementation identifiers in `backticks` when prose introduces the flow.
+- Use `│` to continue the current call stack, `├──►` for a sibling call, and
+  `╰──►` for the final call at that level.
+- Indent a callee beneath its caller. Keep the caller visible until its return
+  or terminal outcome is shown.
+- Use `◄──` for a return only when its value, error, or ownership matters.
+  Label the return with `ok`, an error, or the concrete result type.
+- Put conditions beside the connector, for example `valid`, `retry < 3`, or
+  `PEER_CLOSED`. Keep exceptional paths explicit and end them with a result.
+- Use `╰─▶` for a callback, retry, or feedback edge that leaves the current
+  stack. State the event or exit condition beside the edge.
+- Do not use `┌─┐`, `└─┘`, `╭─╮`, or other boxes in Code flow. Those shapes belong
+  to Framework and Sequence Diagram diagrams.
 
 ### Linear flow
 
 ```text
-┌───────────────────────────────┐
-│ Input or triggering event     │
-└───────────────┬───────────────┘
-                │ validates
-                ▼
-┌───────────────────────────────┐
-│ Main operation                │
-└───────────────┬───────────────┘
-                │ produces result
-                ▼
-╭───────────────────────────────╮
-│ Output or next workflow stage │
-╰───────────────────────────────╯
+main()
+ │
+ ├──► parse_args()
+ │     │
+ │     ╰──► validate_args()
+ │           │
+ │           ◄── Config
+ │
+ ╰──► run(Config)
+       │
+       ╰──► return Result
 ```
 
-Read the central vertical line as the normal execution path. Keep each box to
-one responsibility and put implementation identifiers in backticks in the
-surrounding prose when the diagram would become too dense.
+The vertical alignment shows the active call stack. Keep every call that is
+needed to understand the result; collapse only implementation details that do
+not change control flow or error handling.
 
 ### Branch and feedback
 
 ```text
-┌───────────────────────────────┐
-│ Operation                     │
-└───────────────┬───────────────┘
-                │ result
-                ▼
-        ┌───────┴───────┐
-        │ condition?    │
-        └───┬───────┬───┘
-           yes      no
-            ▼       ▼
-┌────────────────┐  ┌────────────────┐
-│ Continue       │  │ Recover or log │
-└────────┬───────┘  └────────┬───────┘
-         │                   │ retry
-         │                   ╰─▶ Operation
-         ▼
-╭───────────────────────────────╮
-│ Completed                     │
-╰───────────────────────────────╯
+handle_request()
+ │
+ ├──► validate(request)
+ │     ├──► invalid ──► return InvalidArgument
+ │     ╰──► valid
+ │
+ ╰──► execute(request)
+       ├──► success ──► return Reply
+       ╰──► failure ──► return InternalError
 ```
 
-Place branch labels next to the outgoing connector. Show a retry or recovery
-edge only when it changes the reader's understanding of termination or state;
-otherwise describe it in prose.
+Keep success and failure at the call site that observes them. Do not represent
+an error only in prose when it changes which caller runs next.
+
+### Nested calls and returns
+
+Use indentation to show a call stack. A return edge must identify the result
+that the caller receives; this keeps nested calls distinct from peer messages.
+
+```text
+handle_request()
+ │
+ ╰──► validate_request()
+       │
+       ╰──► execute_request()
+             │
+             ◄── Result
+       │
+       ◄── Result
+```
+
+### Loop and bounded retry
+
+Show the loop condition and the bound that prevents an accidental infinite
+path. Point the retry edge to the operation that actually repeats.
+
+```text
+retry_request()
+ │
+ ├──► attempt()
+ │     ├──► success ──► return Reply
+ │     ╰──► failure
+ │
+ ├──► retry < 3 ╰─▶ attempt()
+ ╰──► retry = 3 ──► return Unavailable
+```
+
+Show the retry bound and point the feedback edge to the operation that repeats.
+If the loop is unbounded by design, state its cancellation or shutdown event.
+
+### Parallel calls and join
+
+Use sibling calls only for work that is concurrent or independently scheduled.
+Name the join condition and show how a failed branch reaches the caller.
+
+```text
+start()
+ │
+ ├──► load_config()
+ ├──► start_workers()
+ │
+ ╰──► join when both complete
+       │
+       ╰──► serve()
+```
+
+### Asynchronous hand-off
+
+Use an explicit callback or event line when control leaves the current stack.
+Do not draw an asynchronous hand-off as a synchronous nested call.
+
+```text
+submit()
+ │
+ ╰──► queue_work()
+       │
+       ╰──► event: work_done
+             │
+             ╰──► on_work_done(result)
+                   │
+                   ◄── return status
+```
+
+An event or callback starts a new path; it is not a synchronous nested call.
+Use `Sequence Diagram` instead when the callback crosses multiple peer
+participants and message timing is the subject.
+
+### Code flow checklist
+
+Before publishing a Code flow, check that it has one clear entry point, a
+single primary reading direction, visible call depth, explicit returns or
+terminal outcomes, and no graph boxes. Keep it narrow enough for 88 columns.
+If the diagram needs peer lifelines, ownership boundaries, or many crossing
+messages, split it into Code flow plus a Sequence Diagram or Framework.
 
 ## Framework
 

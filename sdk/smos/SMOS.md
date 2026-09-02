@@ -64,6 +64,9 @@ shell. The detailed physical hand-off and component startup sequence is
 documented in [Boot-to-driver flow](#boot-to-driver-flow) and [Complete Zircon
 boot-to-userspace code path](#complete-zircon-boot-to-userspace-code-path).
 
+<img src="assets/kernel/overview.png" alt="overview" width="750">
+
+
 ### Zircon microkernel introduction
 
 Zircon is the low-level kernel used by Fuchsia and by SMOS. It is an
@@ -344,6 +347,62 @@ Here `hv` is the channel handle passed to the user-space `_start`; it is not a
 file descriptor, but a Zircon channel carrying `zx_proc_args_t` and capability
 handles.
 
+### Detailed `userboot_init` call flow
+
+```text
+bootstrap2(handoff)
+ │
+ ╰──► EndHandoff()
+       │
+       ╰──► userboot_init(handoff_end)
+             │
+             ├──► MessagePacket::Create(..., kHandleCount)
+             │
+             ├──► ProcessDispatcher::Create(root_job, "userboot")
+             │     ├──► install process + root VMAR handles
+             │     ╰──► get_resource_handle(MMIO, IRQ, SMC*, SYSTEM)
+             │
+             ├──► get_job_handle() -> root job handle
+             │
+             ├──► bootstrap_vmos(handoff_end, handles)
+             │     ├──► InstrumentationData::GetVmos()
+             │     ├──► copy extra physical VMOs + ZBI handle
+             │     ├──► VDso::Create(vdso, time_values, variants)
+             │     ├──► crashlog_to_vmo()
+             │     │     ╰──► crashlog.Recover() + crashlog_stash()
+             │     ├──► BootOptions::Show() -> get_vmo_handle()
+             │     ╰──► CounterDesc/CounterArena -> get_vmo_handle()
+             │
+             ├──► ChannelDispatcher::Create(user_handle, kernel_handle)
+             ├──► kernel_handle.Write(msg)
+             ├──► MapHandleToValue(user_handle) -> hv
+             ├──► UserbootImage::Map(vmar, &vdso_base, &entry)
+             │     ├──► root_vmar->Allocate()
+             │     ├──► RoDso::Map(userboot image)
+             │     ╰──► VDso::Map()
+             │
+             ├──► VmObjectPaged::Create(stack)
+             │     ╰──► vmar->Map(stack) -> sp
+             ├──► ThreadDispatcher::Create(process, "userboot")
+             ├──► thread->Initialize()
+             ├──► StartRootJobObserver()
+             ╰──► thread->Start(entry, sp, hv, vdso_base)
+                   ╰──► userboot::_start(hv) -> Bootstrap(hv)
+```
+
+The call order above follows `userboot.cc:308-417`; `bootstrap2` supplies the
+handoff at `zircon/kernel/top/main.cc:169-205`. `bootstrap_vmos` consumes the
+physical handoff before the root VMAR is used, then returns the mapped userboot
+image and vDSO state. `SMC*` is populated only on arm64; the other resource
+handles follow the architecture-independent path.
+
+Every status check in this kernel path is guarded by `ASSERT` or `ZX_ASSERT`.
+A failed allocation, mapping, channel write, or thread start therefore stops
+the kernel path instead of returning an error to a caller. After the final
+`ThreadDispatcher::Start`, `hv` is the user-side channel handle carrying the
+bootstrap message, `sp` is the ABI-compliant initial stack pointer, and
+`vdso_base` identifies the mapped vDSO used by userboot.
+
 #### 4. Userspace `userboot` loads `userboot.next`
 
 The first user-space instruction is at
@@ -360,6 +419,7 @@ resource handles into `ChildMessageLayout`, sends the message at
 `start.cc:369-376`, and calls `zx_process_start`. Thus the final kernel ABI
 operation from the kernel to the first ordinary user-space process is
 `zx_process_start`, not a Rust call inside component manager.
+
 
 #### 5. `component_manager` establishes the userspace root
 
@@ -600,6 +660,9 @@ This path is separate from a kernel console command. A command sent through
 `k ...` travels through DebugBroker and `console_run_script`; it does not enter
 the EL0 `svc` syscall table. Likewise, `zx_smc_call` executes an SMC conduit on
 arm64; it is not an HVC call to the EL2 monitor.
+
+<img src="assets/kernel/vdso_loading.png" alt="smos" width="750">
+
 
 ### Zircon Object Model
 
@@ -893,6 +956,8 @@ them.
 
 #### VMO, VMAR, and pager relationship
 
+<img src="assets/kernel/vmar_mappings_vmos.png" alt="vmar" width="750">
+
 A **VMO** is a kernel-managed range of memory or a backing object. A **VMAR**
 is an address-region object belonging to a process address space. Mapping a VMO
 into a VMAR creates a process virtual-address view; it does not turn the VMO
@@ -921,10 +986,15 @@ the normal path for driver buffers and framework data. A **pager** supplies
 pages on demand for pager-backed VMOs; it is a protocol between a pager owner
 and the kernel, not a replacement for the VMO handle.
 
+<img src="assets/kernel/vmo_address_in_vmar_address_range.png" alt="vmar" width="750">
+
 SMOS boot memory follows a separate early path: the boot-shim contributes
 physical-memory and platform ZBI items, `kernel.phys` establishes the initial
 physical-loader mappings, and the final process VMAR/VMO objects are created
 only after the Zircon kernel and userboot have started.
+
+<img src="assets/kernel/vmo_to_root_vmar.png" alt="vmar" width="750">
+
 
 #### Driver and virtualization objects
 

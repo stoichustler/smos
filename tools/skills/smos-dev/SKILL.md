@@ -23,7 +23,10 @@ quoted source requires it.
 
 Use [Workflow.md](../../../sdk/smos/Workflow.md) as the canonical source for
 SMOS workflow and framework diagrams. Prefer its Unicode box-drawing style and
-copy one of its templates before inventing a new layout.
+copy one of its templates before inventing a new layout. For execution-order
+diagrams, use the [Code flow](../../../sdk/smos/Workflow.md#code-flow) section
+to trace the detailed call chain in its linear, branch, loop, parallel, or
+asynchronous template.
 
 | Pattern | Meaning |
 | --- | --- |
@@ -35,13 +38,14 @@ copy one of its templates before inventing a new layout.
 | `╰─▶` / `◀─╮` | Return, feedback, or cross-level relationship |
 
 Choose `Code flow` for execution order and `Framework` for ownership,
-layering, capability boundaries, or peer components. Put diagrams in fenced
-`text` blocks, preserve whitespace, target 88 columns or less, and label edges
-when they carry a protocol, capability, event, or condition. Do not rely on
-color or position alone to convey meaning. If a renderer cannot preserve
-Unicode box-drawing characters, provide an ASCII equivalent with the same
-topology and labels. Explain any deliberate deviation from `Workflow.md` next
-to the diagram.
+layering, capability boundaries, or peer components. Use `Sequence Diagram` for
+message order between peers. Put diagrams in fenced `text` blocks and preserve
+whitespace. Code flows are detailed call-chain traces: use plain-text nodes,
+indentation, `│`, `├──►`, `╰──►`, and `◄──`; do not use graph boxes in Code flow.
+Label conditions, returns, retry bounds, events, and terminal outcomes. Keep
+all diagrams within 88 columns. If a renderer cannot preserve Unicode
+connectors, provide an ASCII equivalent with the same topology and labels.
+Explain any deliberate deviation from `Workflow.md` next to the diagram.
 
 ## Required V-model lifecycle
 
