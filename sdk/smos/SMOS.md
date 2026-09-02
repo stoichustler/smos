@@ -64,8 +64,6 @@ shell. The detailed physical hand-off and component startup sequence is
 documented in [Boot-to-driver flow](#boot-to-driver-flow) and [Complete Zircon
 boot-to-userspace code path](#complete-zircon-boot-to-userspace-code-path).
 
-<img src="assets/kernel/overview.png" alt="overview" width="750">
-
 
 ### Zircon microkernel introduction
 
@@ -588,6 +586,8 @@ kernel mechanisms a console process or user-space driver uses; "modules" here
 means logical subsystems, not dynamically loaded kernel objects.
 
 ### SMOS syscall implementation
+
+<img src="assets/kernel/overview.png" alt="overview" width="750">
 
 SMOS does not define a second syscall ABI or a private syscall table. User
 processes use the standard Zircon `zx_*` interface, and the product graph only

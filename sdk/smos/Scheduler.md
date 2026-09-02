@@ -1,41 +1,50 @@
 # SMOS Scheduler
 
-This document adapts Fuchsia's kernel scheduling guides to the scheduler in
-the SMOS Zircon checkout. It focuses on the mechanisms that determine which
-thread runs on which CPU and how a blocked thread becomes runnable again.
+This document adapts Fuchsia's `kernel_scheduling.md`, `fair_scheduler.md`,
+and `kernel_thread_signaling.md` to the scheduler in the SMOS Zircon checkout.
+It describes kernel scheduling and thread-signal behavior, not the separate
+Driver Framework dispatcher or userspace executor policies.
 
 ## Scheduling model
 
-Zircon maintains scheduler state per logical CPU. Each CPU owns priority queues
-of runnable threads and coordinates with other CPUs using inter-processor
-interrupts (IPIs). A runnable thread is placed on an eligible CPU; the local
-scheduler selects the highest effective priority and removes the queue head.
-If no runnable thread exists, the CPU runs its idle thread.
+Zircon keeps scheduler state for each logical CPU. Each CPU owns run queues for
+runnable threads and uses inter-processor interrupts (IPIs) to coordinate
+changes made by another CPU. A thread is either running on one CPU, ready in a
+CPU run queue, or blocked on a wait queue. If no ordinary thread is runnable,
+the CPU runs its idle thread.
 
-The scheduler implementation and state are centered in
-`zircon/kernel/include/kernel/scheduler.h` and the nearby scheduler sources.
-Thread state, wait queues, CPU masks, and dispatcher wakeups feed this state;
-the scheduler does not own userspace policy or component lifecycle.
+The scheduler state and queue operations are implemented in
+`zircon/kernel/include/kernel/scheduler.h`, `zircon/kernel/kernel/scheduler.cc`,
+and `zircon/kernel/kernel/scheduler_state.cc`. Thread dispatchers, wait queues,
+timers, interrupts, and owned locks call into this state; the scheduler does
+not own component-manager or userspace lifecycle policy.
 
-## Priority and queue order
+## Priority and run queues
 
-A thread's effective priority is derived from its base priority and any kernel
-priority adjustments. Higher effective priority wins. Threads at the same
-priority are ordered FIFO, subject to a thread's remaining time slice. A thread
-that still has time remaining is placed at the front when it becomes runnable;
-one that consumed its slice returns to the back.
+The priority scheduler has 32 base priority levels, with 0 lowest and 31
+highest. A thread's effective priority combines its base priority, temporary
+priority adjustment, and inherited priority from an owned wait queue. When the
+effective priority changes, the scheduler can move the thread to another queue
+and request a reschedule.
 
-Priority is a scheduling input, not a guarantee of immediate execution. An
-interrupt, a higher-priority wakeup, CPU affinity, or a preemption decision can
-change when a queued thread runs.
+Each priority queue is FIFO. A thread that still has time remaining after a
+preemption or wakeup can be placed at the front; a thread that consumed its
+time slice is placed at the back. Unblocking also provides a temporary boost so
+that interactive work can receive prompt service. Priority inheritance lets a
+thread holding a contended resource run long enough to release it for a higher
+priority waiter.
+
+Priority is a scheduling input, not an execution-time guarantee. CPU affinity,
+interrupts, wait-queue ownership, preemption state, and higher-priority work
+can all affect when a thread actually runs.
 
 ## Time slices, yield, and preemption
 
 When a thread is selected, the CPU programs a preemption deadline for its full
 or remaining time slice. `zx_thread_yield` voluntarily gives up the current
-turn. Timer expiry, a remote reschedule request, or an interrupt that wakes a
-more eligible thread can request preemption. The scheduler then accounts for
-the running thread, chooses a replacement, and performs the context switch.
+turn. Timer expiry, a remote queue update, or an interrupt that wakes a more
+eligible thread can request preemption. The scheduler accounts for the old
+thread, selects a replacement, and performs the context switch.
 
 ```text
 select_next_thread(cpu)
@@ -49,13 +58,155 @@ select_next_thread(cpu)
              ╰──► interrupt ──► reschedule(cpu)
 ```
 
+The implementation uses preemption state and time-slice extensions to protect
+short critical sections. Disabling preemption is not a substitute for the
+locks that protect a queue or dispatcher; it only constrains local scheduling
+while the protected operation is in progress.
+
+## CPU affinity and migration
+
+Each thread has a CPU affinity mask. When a runnable thread needs a CPU, the
+scheduler prefers an idle eligible CPU, then the thread's last CPU when it is
+eligible, and finally another active CPU in the mask. If all requested CPUs
+are inactive, the scheduler may temporarily run the thread elsewhere. A
+single-CPU mask can therefore leave a thread waiting until its pinned CPU is
+reactivated.
+
+The scheduler reevaluates CPU placement when a thread wakes, changes affinity,
+is preempted, yields, or voluntarily reschedules. A CPU being deactivated
+causes runnable work to move to eligible CPUs; pinned work remains queued until
+the CPU is active again. Reactivating a CPU does not perform global eager
+rebalancing, but normal wakeup and migration decisions can use it.
+
+## Idle and realtime threads
+
+There is one idle thread per CPU. It lives outside the ordinary run queues and
+executes when no other eligible work is runnable, allowing the platform to
+enter an idle or low-power state. Realtime threads are handled specially by
+the kernel scheduler and may run without ordinary preemption until they block,
+yield, or explicitly reschedule. These classes still must obey their kernel
+state and shutdown rules.
+
+## Fair scheduling
+
+The scheduler also contains fair scheduling state. A fair thread has a weight,
+an effective virtual start and finish time, and a calculated time slice. The
+run queue orders fair threads by virtual finish time so CPU bandwidth is
+distributed approximately in proportion to weight while avoiding unbounded
+wait for a runnable thread.
+
+For a CPU with runnable thread count `n`, total weight `W`, target latency `L`,
+and minimum granularity `M`, the conceptual scheduling period is `L` while
+there are few competitors and stretches toward `n * M` when needed. A thread's
+normalized virtual finish is derived from its start time, the period, and its
+weight. The exact fixed-point representation and deadline interaction are
+implemented in `scheduler_state.cc` and `scheduler_pi.cc`; documentation must
+not assume that a particular tuning value is present in every product build.
+
+Fair and deadline scheduling state can interact through priority inheritance
+and owned wait queues. When a thread blocks, wakes, changes profile, or joins
+an owned queue, the scheduler updates per-CPU runnable weight and may adjust
+the next preemption time.
+
+### Algorithm notation
+
+The formulas below use the notation from Fuchsia's fair-scheduler design. The
+subscripts identify a thread or CPU; they do not change the meaning of the
+letter itself.
+
+| Symbol | Semantic meaning | Unit or domain |
+| --- | --- | --- |
+| `P[i]` | The `i`-th thread competing for CPU time | thread |
+| `C[j]` | The `j`-th logical CPU and its run queue | CPU |
+| `w[i]` | Scheduling weight assigned to `P[i]` | positive weight |
+| `W[j]` | Sum of weights competing on `C[j]` | weight |
+| `R[i]` | `P[i]`'s normalized share of CPU service on `C[j]` | `0 < R[i] <= 1` |
+| `M` | Minimum time-slice granularity | duration |
+| `L` | Target scheduling latency for one CPU round | duration |
+| `n[j]` | Number of runnable threads competing on `C[j]` | count |
+| `p[j]` | Scheduling period for `C[j]` | duration |
+| `g[j]` | Number of `M` units in `p[j]` | integer count |
+| `s[i]` | Virtual start time of `P[i]`'s current turn | virtual time |
+| `f[i]` | Virtual finish time used to order `P[i]` | virtual time |
+| `t[i]` | Time slice allocated to `P[i]` in this period | duration |
+
+`R[i]` is a relative service proportion, not a CPU frequency, wall-clock
+rate, or promise that `P[i]` runs continuously. For a thread with positive
+weight, `R[i] = w[i] / W[j]`; all competing relative rates on `C[j]` sum to
+approximately one. The scheduler uses this proportion to allocate bandwidth
+over time.
+
+### Scheduling formulas
+
+Let `N` be the largest number of competing threads that can each receive one
+minimum-granularity slice while the CPU still meets target latency `L`:
+
+```none
+N = floor(L / M)
+
+p[j] = max(L, M * n[j])
+```
+
+When `n[j] <= N`, the period remains `L`. When more threads compete, `p[j]`
+stretches so that every thread can receive at least `M` in the period.
+
+When `P[i]` enters the run queue at CPU system time `T`, its virtual interval is
+defined as:
+
+```none
+s[i] = T
+f[i] = s[i] + p[j] / w[i]
+```
+
+The run queue orders fair threads by ascending `f[i]`. A smaller `f[i]` means
+that the thread is earlier in the virtual service schedule; it is not a
+measurement of elapsed wall-clock execution. The period `p[j]` is used as an
+idealized normalized service interval so that threads joining at different
+times are compared consistently.
+
+For the time slice, first express the period in `M`-sized units and then derive
+the thread's relative service share:
+
+```none
+g[j] = floor(p[j] / M)
+R[i] = w[i] / W[j]
+t[i] = ceil(g[j] * R[i]) * M
+```
+
+Thus `t[i]` is an integer number of minimum-granularity units and is
+approximately proportional to `w[i]`. Increasing `w[i]` increases the share
+relative to other threads on the same CPU; it does not create additional CPU
+capacity.
+
+### SMOS implementation mapping
+
+The current implementation stores these quantities in fixed-point or integer
+fields rather than the real-number notation above:
+
+| Formula concept | SMOS field or operation |
+| --- | --- |
+| `M` | `minimum_granularity_ns_` (default 1 ms) |
+| `L` | `target_latency_grans_` (default 8 ms, in granularity units) |
+| `p[j]` | `scheduling_period_grans_`, updated by `UpdatePeriod()` |
+| `W[j]` | `weight_total_` |
+| `s[i]`, `f[i]` | `start_time_`, `finish_time_` |
+| `t[i]` | `CalculateTimeslice()` and `time_slice_ns_` |
+
+`Scheduler::UpdatePeriod()` stretches the period in granularity units using
+the runnable fair-thread count. `Scheduler::CalculateTimeslice()` computes
+the proportional slice from `ep.fair.weight / weight_total_`, rounds it to an
+integer number of granularity units, and clamps it to at least one unit. The
+virtual finish interval is computed from the period and a fixed-point rate in
+`scheduler.cc`, so the abstract `ceil` expression above is a semantic model,
+not a claim about the exact machine instruction or rounding primitive.
+
 ## Blocking and wakeup
 
-When a thread waits on a kernel object, futex, or internal lock, it leaves the
-runnable queue and enters that object's wait queue. A signal or wake operation
-makes it runnable again. The scheduler selects an eligible CPU using affinity,
-load, and current CPU state, then sends an IPI when another CPU must reevaluate
-its run queue.
+When a thread waits on a kernel object, futex, semaphore, pager operation, or
+internal lock, it leaves the run queue and enters a wait queue. A signal or
+resource release wakes it with a status. The wakeup path chooses an eligible
+CPU, restores the thread's scheduling state, enqueues it by effective priority
+or fair finish time, and requests an IPI or local reschedule when necessary.
 
 ```text
 running(thread)
@@ -64,57 +215,98 @@ running(thread)
        │
        ╰──► wait_queue(object)
              │
-             ╰──► wake(thread)
+             ╰──► wake(thread, status)
                    ├──► choose_eligible_cpu()
-                   ├──► enqueue_by_priority()
-                   ╰──► request_reschedule_if_needed()
+                   ├──► restore_scheduling_state()
+                   ├──► enqueue_run_queue()
+                   ╰──► request_reschedule_or_ipi()
 ```
 
-The wakeup path does not promise that the thread runs on the CPU that woke it.
-CPU migration is an implementation decision constrained by affinity and
-per-CPU scheduler state.
+The special statuses `ZX_ERR_INTERNAL_INTR_RETRY` and
+`ZX_ERR_INTERNAL_INTR_KILLED` can interrupt an otherwise blocking operation.
+Callers must propagate them according to the operation's suspend and kill
+contract instead of treating them as an ordinary timeout.
 
-## CPU assignment and migration
+## Thread signaling and safe points
 
-Each thread has an affinity mask. A thread may migrate when it becomes runnable,
-when its current CPU is deactivated, or when balancing policy selects another
-eligible CPU. Remote queue changes are synchronized with the destination CPU
-through scheduler locks and IPI-driven rescheduling. The idle thread is used
-when a CPU has no runnable work, while realtime and other special scheduling
-classes follow their kernel-specific rules.
+Suspend and kill are requests, not arbitrary asynchronous destruction of a
+running kernel stack. A thread records `THREAD_SIGNAL_SUSPEND` or
+`THREAD_SIGNAL_KILL`, then processes the request at a safe point after its
+kernel stack has unwound. The safe points are the transitions from a user-mode
+syscall or user-mode exception back to user mode; returning to an outer
+kernel-mode context is not safe because that context may still hold resources.
 
-## Fair-scheduling terminology
+For a blocked interruptible thread, the signal path wakes it with
+`ZX_ERR_INTERNAL_INTR_RETRY` for suspend or
+`ZX_ERR_INTERNAL_INTR_KILLED` for kill. The status propagates through the
+blocking call until the thread reaches the user boundary. A suspended thread
+must resume briefly to observe a kill request and act on it.
 
-The upstream fair-scheduler documentation describes virtual timelines,
-scheduling periods, runnable demand, and per-thread weights. SMOS should treat
-those as conceptual terminology unless the selected kernel configuration
-exposes the corresponding implementation. This checkout does not define an
-`enable_fair_scheduler` GN argument, so this document does not prescribe a
-build command that enables it.
+For a running thread, the sender issues an IPI to its current CPU. If the IPI
+arrives while the target is returning from user mode, the architecture signal
+handler can process the request immediately. If it arrives in kernel mode, the
+handler returns to the interrupted kernel context, which must later reach a
+safe point. This distinction prevents termination while a kernel lock or
+resource is held.
 
-## Tracing and diagnosis
+```text
+request_suspend_or_kill(target)
+ │
+ ├──► set THREAD_SIGNAL_SUSPEND or THREAD_SIGNAL_KILL
+ ├──► blocked? ──► wake with RETRY or KILLED status
+ ├──► running? ──► send IPI to target CPU
+ │     ├──► user context ──► process_pending_signals()
+ │     ╰──► kernel context ──► return to interrupted kernel path
+ ╰──► safe point ──► unwind stack and suspend or terminate
+```
 
-Scheduler tracing, when enabled by the selected kernel build, can correlate
-blocking, wakeups, yields, preemption, and reschedule decisions on per-CPU
-timelines. Typical event names in the upstream instrumentation include
-`sched_block`, `sched_unblock`, `sched_yield`, `sched_preempt`, and
-`sched_reschedule`; verify that an event is present in the target image before
-using it in an analysis.
+The implementation is distributed across `thread_dispatcher.cc`,
+`suspend_token_dispatcher.cc`, architecture interrupt code, and wait-queue
+users. The same IPI mechanism is important for a thread executing a long
+`zx_vcpu_enter` operation: a VM exit gives the host kernel a chance to observe
+pending signals and unwind safely.
 
-For a scheduling investigation, record the thread koid, effective priority,
-CPU affinity, wait object, wake source, and whether a preemption timer or IPI
-caused the next decision. A trace without these correlations can show timing
-but not the reason for a scheduling transition.
+## Scheduler tracing
 
-## Source map
+Scheduler tracing is controlled by kernel build settings such as
+`SCHEDULER_TRACING_LEVEL` and `SCHEDULER_QUEUE_TRACING_ENABLED`, defined in
+`zircon/kernel/BUILD.gn` and `scheduler.h`. The target build determines which
+events are emitted. Upstream instrumentation commonly includes:
 
-| Topic | SMOS source |
+- `sched_block` and `sched_unblock` for wait-queue transitions;
+- `sched_yield` for voluntary yield;
+- `sched_preempt` for timer, interrupt, or remote-reschedule preemption;
+- `sched_reschedule` when a run-queue change may select another thread;
+- `sched_latency` when runnable-to-running latency is instrumented.
+
+Events appear on per-CPU timelines. Correlate them with thread koid, effective
+priority or fair weight, affinity, wait object, wake status, preemption timer,
+IPI, and VM-exit records. Event names and trace categories must be verified in
+the target image before being used as a product guarantee.
+
+## Driver dispatcher boundary
+
+`fdf::Dispatcher` is a Driver Framework runtime facility backed by shared
+driver-host threads. Synchronized and unsynchronized dispatchers define
+driver callback concurrency and reentrancy; they are not the kernel's per-CPU
+run queues. Driver callback scheduling can ultimately consume kernel threads,
+but dispatcher lifetime, callback cancellation, and driver hooks belong in the
+Driver Framework documentation.
+
+## Source and adaptation map
+
+| Topic | SMOS source or reference |
 | --- | --- |
-| Scheduler state and queues | `zircon/kernel/include/kernel/scheduler.h` |
-| Thread lifecycle and dispatch | `zircon/kernel/object/thread_dispatcher.cc` |
-| Wait queues and wakeups | `zircon/kernel/` scheduler and object wait-queue sources |
-| CPU activation and affinity | `zircon/kernel/arch/` and scheduler sources |
+| Run queues and scheduling state | `zircon/kernel/include/kernel/scheduler.h` |
+| Scheduler implementation | `zircon/kernel/kernel/scheduler.cc` |
+| Fair/deadline state | `scheduler_state.cc`, `scheduler_pi.cc` |
+| Thread state and signals | `zircon/kernel/object/thread_dispatcher.cc` |
+| Suspend requests | `zircon/kernel/object/suspend_token_dispatcher.cc` |
+| Wait and wake propagation | `zircon/kernel/kernel/`, object wait-queue users |
+| Scheduler build controls | `zircon/kernel/BUILD.gn` |
 
-The conceptual material is adapted from Fuchsia's `kernel_scheduling.md` and
-`fair_scheduler.md` under the Fuchsia BSD license. Configuration and event
-names above are descriptive unless confirmed in the selected SMOS build.
+The explanatory material is adapted from Fuchsia's
+`docs/concepts/kernel/kernel_scheduling.md`, `fair_scheduler.md`, and
+`kernel_thread_signaling.md` under the Fuchsia BSD license. Product-specific
+claims in this document are limited to mechanisms and symbols confirmed in the
+SMOS source tree.
