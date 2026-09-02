@@ -37,6 +37,68 @@ window.  The default product is console-only; graphics and conventional IP
 networking are outside its scope.  The optional virtio-vsock path uses the
 same EL1 object and capability model as the rest of the product.
 
+## Architecture foundations
+
+ARMv8-A defines two execution states.  AArch64 uses 64-bit general-purpose
+registers and the A64 instruction set; AArch32 uses 32-bit registers and the
+A32 or T32 instruction set.  A processor can implement both states, but a
+given exception level executes in only one state at a time.  SMOS user and
+kernel paths are AArch64; AArch32 compatibility is not implied by the product
+configuration.
+
+The architecture also defines four exception levels (ELs).  A larger number
+means more privilege within the current security state:
+
+| Level | Typical role | SMOS mapping |
+| --- | --- | --- |
+| EL0 | Applications and unprivileged services | Components, drivers, and dash |
+| EL1 | Operating-system kernel | Zircon |
+| EL2 | Hypervisor and guest virtualization | Optional SMOS hypervisor |
+| EL3 | Secure monitor and firmware transition | Platform firmware, outside SMOS |
+
+Normal and Secure worlds are a separate security dimension.  EL2 commonly
+belongs to the Normal world, while EL3 arbitrates transitions between worlds.
+An exception can be routed to the current or a higher implemented EL, never
+directly to a lower EL.  `eret` returns to the EL recorded in `SPSR_ELn` and
+the address in `ELR_ELn`; return can stay at the same EL or move lower.
+
+An exception entry is therefore a state transfer, not just a function call:
+
+```text
+lower-EL instruction or interrupt
+  |
+  +--> save return PC and PSTATE in ELR_ELn/SPSR_ELn
+  +--> select the target EL stack and vector slot
+  +--> handler saves general registers and dispatches the cause
+  `--> eret restores the recorded context
+```
+
+The vector slot depends on whether the exception came from the current EL or a
+lower EL and whether the lower context was AArch64 or AArch32.  This is why a
+kernel exception table must be aligned and laid out for all contexts it
+accepts.
+
+### Registers and processor state
+
+AArch64 exposes `x0` through `x30`, each 64 bits wide.  `w0` through `w30` are
+the low 32-bit views; writing a `w` register clears the upper 32 bits of its
+`x` register.  `x30` is the link register, while `sp` is a dedicated stack
+pointer and is not part of the numbered register file.  The program counter is
+not directly addressable as a general-purpose register.
+
+`PSTATE` contains the execution state, current EL, interrupt masks (`DAIF`),
+condition flags (`N`, `Z`, `C`, `V`), and the selected stack-pointer mode.
+Exception entry snapshots it in `SPSR_ELn`; system instructions update the
+architectural controls through named registers such as `SCTLR_EL1`, `TCR_EL1`,
+`TTBR0_EL1`, and `VBAR_EL1`.  Access to these registers is restricted by EL
+and by the register's access policy.
+
+The stack pointer must remain 16-byte aligned at public call boundaries.  A
+prologue commonly saves the frame pointer and link register with `stp`, and an
+epilogue restores them with `ldp` before `ret`.  Interrupt and exception entry
+code must preserve the interrupted context explicitly because the hardware
+only saves the ELR and PSTATE pair.
+
 ## AArch64 ISA
 
 The AArch64 ISA provides 31 general-purpose registers, `x0` through `x30`.
@@ -82,6 +144,23 @@ add     x0, x0, :lo12:symbol
 to `ELR`.  Zircon exception vectors use this instruction after dispatching a
 syscall, fault, IRQ, or other exception.
 
+### Instruction classes and addressing
+
+A64 instructions have a fixed 32-bit encoding, but their operands can be
+32-bit (`Wn`) or 64-bit (`Xn`).  The main classes are data processing, loads and
+stores, branches, and system/control instructions.  Load/store instructions
+support base-plus-immediate, register-offset, pre-indexed, and post-indexed
+forms.  Pre-indexing updates the base before the access; post-indexing updates
+it after the access, which is useful for stack and ring-buffer walkers.
+
+Conditional execution is expressed mostly through conditional branches and
+conditional select instructions rather than a condition suffix on every
+instruction.  Immediate fields have instruction-specific widths and scaling,
+so an assembler may need a sequence such as `movz`/`movk` or `adrp`/`add` for a
+constant or address that does not fit one encoding.  `w`-register writes,
+sign/zero extension, and implicit shift amounts are frequent sources of bugs
+when porting 32-bit code.
+
 ## Memory system
 
 The cache hierarchy is implementation-defined, but a typical arm64 system has
@@ -110,6 +189,50 @@ processes receive mappings through handles rather than by writing page-table
 descriptors directly.
 
 <img src="assets/arm64/Address_translation_process.png" alt="Address translation process" width="750">
+
+### TLBs and translation context
+
+The Translation Lookaside Buffer (TLB) caches recent virtual-to-physical
+translations so that every access does not walk the page tables.  A TLB miss
+causes a hardware table walk; a permission, address-size, or execute-never
+failure then raises a translation fault rather than returning a partial
+mapping.
+
+`TTBR0_EL1` and `TTBR1_EL1` commonly select separate user and kernel address
+spaces.  An ASID tags translations belonging to a process so that a context
+switch can change address spaces without flushing unrelated entries.  A VMID
+serves the analogous purpose for stage-2 translations at EL2.  When a page
+table entry changes, software must invalidate the affected TLB entries with
+the architecture-defined invalidate operation and follow it with the required
+barrier sequence before executing or accessing the new mapping.
+
+ARMv8-A supports 4 KiB, 16 KiB, and 64 KiB translation granules.  A table
+descriptor points to another level, a block descriptor maps a larger aligned
+range, and a page descriptor maps the final granule.  The selected granule,
+virtual-address size, and level count are configured by `TCR_EL1`; the chosen
+descriptor's `AttrIndx`, access-permission, shareability, and execute-never
+bits are combined with `MAIR_EL1` to define the mapping.
+
+### Cache maintenance and points of coherency
+
+The point of unification (PoU) is where instruction and data views become
+consistent; the point of coherency (PoC) is where observers such as other
+cores see a coherent value.  Cache maintenance instructions operate on cache
+lines, so callers must align and size ranges according to the reported cache
+line length.  Typical operations are:
+
+| Operation | Purpose |
+| --- | --- |
+| Clean | Write dirty cache lines to the next memory level. |
+| Invalidate | Discard a cache line so a later load refetches it. |
+| Clean and invalidate | Write back, then discard, a cache line. |
+
+The `DC` instruction family maintains data-cache lines and `IC` invalidates
+instruction-cache lines.  After writing code or changing executable mappings,
+software normally cleans data to PoU, invalidates the instruction cache, and
+executes `DSB` followed by `ISB` at the architecturally required points.  DMA
+ownership still requires the platform's cache and barrier sequence even when
+the CPU caches are coherent with one another.
 
 ### Memory ordering
 
@@ -307,6 +430,20 @@ requires `DSB`, and reusing a descriptor before the device has returned it.
 Keep the descriptor, buffer, interrupt, and reclamation protocol explicit in
 the driver state machine.
 
+### Page-table and context-switch checklist
+
+When debugging a translation failure, inspect the complete tuple rather than
+only the faulting virtual address:
+
+1. Which `TTBR` and ASID/VMID selected the address space?
+2. Which descriptor level and granule size matched the address?
+3. What `AP`, `UXN`, `PXN`, shareability, and `AttrIndx` bits were present?
+4. Was a stale TLB entry invalidated after the table update?
+5. Did the required `DSB`/`ISB` sequence complete before the access?
+
+This checklist separates a bad page-table descriptor from a stale translation,
+an incorrect memory type, and a genuine physical access fault.
+
 ## Exceptions and exception levels
 
 Synchronous exceptions are associated with the executing instruction:
@@ -363,6 +500,38 @@ retry loop.
 
 <img src="assets/arm64/ARM_exclusive_monitor.png" alt="ARM exclusive monitor" width="750">
 
+## AArch64 ABI and porting
+
+The AArch64 Procedure Call Standard (AAPCS64) defines the boundary between
+compiled code and hand-written assembly.  The first eight integer or pointer
+arguments use `x0`-`x7`; an indirect result address may use `x8`.  `x0`-`x17`
+are caller-saved scratch registers (with `x16` and `x17` reserved for
+linker/PLT veneers and `x18` reserved by the platform ABI).  `x19`-`x28`,
+`x29` (the frame pointer), and `x30` (the link register) are callee-saved.
+Floating-point and NEON arguments use `v0`-`v7`; the lower 64 bits of
+`v8`-`v15` are callee-saved.  The stack remains 16-byte aligned at every
+public interface.
+
+These rules explain why a context switch saves more than the registers used by
+one C function: an interrupted thread must preserve the complete architectural
+state, while a leaf function only needs to preserve the callee-saved subset.
+Assembly that calls C must also declare clobbers and obey the compiler's stack
+and register assumptions.
+
+Porting from a 32-bit ABI requires more than changing `int` to `long`.  Keep
+these distinctions explicit:
+
+- `size_t`, pointers, and `uintptr_t` are 64-bit in AArch64 user space;
+- `int` remains 32-bit, so implicit pointer-to-integer conversions can truncate;
+- structure alignment and padding can change the layout of shared interfaces;
+- shifts and masks must use a type wide enough for the intended address bits;
+- variadic arguments follow the AAPCS64 register-save and stack rules; and
+- inline assembly must use the AArch64 register names and constraints.
+
+For an ABI boundary shared with a driver, hypervisor, or firmware, specify
+field widths and endianness in the protocol instead of relying on a compiler's
+default layout.
+
 ## GICv3 interrupt controller
 
 The Generic Interrupt Controller (GIC) routes interrupt sources to processor
@@ -395,6 +564,43 @@ The state transitions are inactive -> pending -> active and pending -> active
 states; software writes the End of Interrupt register to complete handling.
 
 <img src="assets/arm64/ARM_GIC_IRQ_handling_state_machine.png" alt="GIC IRQ handling state machine" width="750">
+
+## Multi-core and power management
+
+SMP, AMP, and HMP describe different software assumptions:
+
+- **SMP** runs one kernel image with equivalent cores and shared scheduling;
+- **AMP** assigns fixed roles or images to different cores; and
+- **HMP** schedules across performance and efficiency cores with different
+  capacity and energy costs.
+
+The exclusive monitor tracks the address used by a load-exclusive operation.
+Another core, an interrupt, or an implementation-defined eviction can clear
+the monitor, so `stxr` must be treated as a retryable failure.  The monitor is
+not a general transaction log and does not make a sequence of unrelated
+addresses atomic.  Use cache-coherent shareability and acquire/release
+ordering around the lock or queue that the exclusive sequence protects.
+
+Idle and power transitions have progressively stronger state-loss effects:
+
+| State | Architectural effect and software action |
+| --- | --- |
+| Clock/standby idle | State is retained; preserve wake and interrupt routing. |
+| Retention | Some domains lose clocks; restore clocks and validate wake status. |
+| Power-down or hotplug | Context may be lost; restore it and reinitialize interfaces. |
+
+DVFS changes frequency and voltage without changing the architectural ISA, but
+timer conversion, scheduler accounting, and thermal policy must use the
+platform's clock description.  PSCI provides the firmware interface commonly
+used to start, stop, suspend, and power CPUs; SMOS must not assume a PSCI
+function exists on every QEMU or board configuration.
+
+On a big.LITTLE system, migration policy can be cluster-based, CPU-based, or
+global.  A runnable thread may migrate on wakeup, fork, idle pull, or thermal
+pressure, but migration must preserve affinity, priority, timer ownership, and
+cache-coherency assumptions.  SMOS's QEMU `virt` board is homogeneous by
+default, so HMP policy is an optional hardware concern rather than a scheduler
+guarantee.
 
 
 ## SMMUv3 and DMA
@@ -443,6 +649,46 @@ See [`Hypervisor.md`](Hypervisor.md) for SMOS virtualization boundaries.  TEE
 firmware and secure-monitor interfaces remain platform-specific and outside
 the default SMOS product.
 
+## Debug and CoreSight
+
+ARM debug has two broad operating styles.  Halting debug stops a PE so an
+external debugger can inspect registers and memory; self-hosted debug lets
+software observe debug events while the PE continues to run.  Breakpoints,
+watchpoints, single-step state, and debug exceptions are subject to the current
+EL and security state.  A debugger must not treat a halted core as equivalent
+to a normally preempted Zircon thread: timers, locks, and device handshakes may
+remain frozen.
+
+The call stack is reconstructed from the frame-pointer/link-register chain or
+from unwind metadata.  Optimized leaf functions may omit a frame pointer, and
+an exception frame has a different layout from an AAPCS64 call frame.  When
+diagnosing an EL1 fault, first identify which frame is an exception frame and
+which registers were saved by the vector code before interpreting `x29` or
+`x30`.
+
+CoreSight trace hardware can connect instruction, exception, and software
+trace sources to sinks such as an on-chip buffer or an external trace port.
+Availability, security routing, and buffer ownership are implementation
+defined.  SMOS's software `ktrace` and tracing-provider records are not a
+substitute for CoreSight instruction trace; use the hardware path only when the
+board exposes and authorizes it.
+
+## Learning path for SMOS bring-up
+
+Use the following order when learning or debugging a new arm64 board:
+
+1. Confirm the entry EL, execution state, stack alignment, and vector base.
+2. Read `SCTLR_EL1`, `TCR_EL1`, `TTBR0_EL1`, `TTBR1_EL1`, and `MAIR_EL1` after
+   MMU enable to verify translation and memory attributes.
+3. Validate GIC distributor/redistributor state before debugging a driver IRQ.
+4. Check cache ownership and barriers before blaming a DMA or SMMU translation.
+5. Correlate scheduler, exception, and device trace records by CPU and time.
+
+This sequence moves from architectural invariants to platform routing and then
+to workload behavior.  It prevents a symptom at EL0 from being diagnosed as a
+driver or hypervisor problem before the EL1 translation and interrupt state is
+known.
+
 ## SMOS arm64 mapping
 
 | ARM64 mechanism | SMOS use |
@@ -459,6 +705,12 @@ the default SMOS product.
 For boot order and image construction, see [`SMOS.md`](SMOS.md) and
 [`Workflow.md`](Workflow.md).  For the user-facing dash commands, see
 [`sdk/docs/man.txt`](../docs/man.txt).
+
+The educational summaries above are derived from *ARM Cortex-A Series
+Programmer's Guide for ARMv8-A*, ARM DEN0024A (2015), especially Chapters 3--6,
+8--18.  The PDF remains the authoritative source for architectural details;
+the SMOS mappings and product limitations in this document are maintained from
+the local Zircon and QEMU sources.
 
 ---
 
