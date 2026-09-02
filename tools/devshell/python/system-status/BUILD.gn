@@ -7,9 +7,9 @@ import("//release/python/python_host_test.gni")
 import("//release/python/python_library.gni")
 
 common_deps = [
-  "//scripts/lib/ffx_cmd",
-  "//scripts/lib/statusinfo",
-  "//scripts/lib/termout",
+  "//tools/scripts/lib/ffx_cmd",
+  "//tools/scripts/lib/statusinfo",
+  "//tools/scripts/lib/termout",
 ]
 
 python_binary("system-status") {

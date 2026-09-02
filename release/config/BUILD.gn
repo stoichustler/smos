@@ -982,7 +982,7 @@ config("Wno-conversion") {
   configs = [ "//userspace/lib/ubsan-custom:allow-implicit-integer-truncation" ]
 
   # To trim this list:
-  # $ scripts/gn/trim_visibility.py --target="//release/config:Wno-conversion"
+  # $ tools/scripts/gn/trim_visibility.py --target="//release/config:Wno-conversion"
   visibility = [
     "//sdk/lib/fidl/cpp/tests/dispatcher:*",
     "//sdk/lib/media/audio/cpp:*",

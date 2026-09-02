@@ -52,12 +52,12 @@ pub fn generate_visualization(
         .context("creating d3_v3 directory for visualization")?;
     fs::write(
         visualization_dir.join("d3_v3").join("LICENSE"),
-        include_bytes!("../../../../../../../../scripts/third_party/d3_v3/LICENSE"),
+        include_bytes!("../../../../../../../../tools/scripts/third_party/d3_v3/LICENSE"),
     )
     .context("creating LICENSE file for visualization")?;
     fs::write(
         visualization_dir.join("d3_v3").join("d3.js"),
-        include_bytes!("../../../../../../../../scripts/third_party/d3_v3/d3.js"),
+        include_bytes!("../../../../../../../../tools/scripts/third_party/d3_v3/d3.js"),
     )
     .context("creating d3.js file for visualization")?;
     fs::write(visualization_dir.join("D3BlobTreeMap.js"), include_bytes!("D3BlobTreeMap.js"))

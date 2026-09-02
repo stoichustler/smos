@@ -7,8 +7,8 @@ import("//release/python/python_host_test.gni")
 import("//release/python/python_library.gni")
 
 common_deps = [
-  "//scripts/lib/async_utils",
-  "//scripts/lib/fx_cmd",
+  "//tools/scripts/lib/async_utils",
+  "//tools/scripts/lib/fx_cmd",
 ]
 
 python_binary("status") {

@@ -61,7 +61,7 @@ default_image_deps += [ labels.qemu_kernel ]
 action("check_vtables_in_rodata") {
   testonly = true
   hermetic_deps = false
-  script = "//scripts/clang/check_vtable_rodata.py"
+  script = "//tools/scripts/clang/check_vtable_rodata.py"
   outputs = [ "$root_build_dir/$target_name" ]
   depfile = "$root_build_dir/$target_name.d"
 

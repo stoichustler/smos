@@ -16,7 +16,7 @@ group("versioning") {
   }
 }
 
-# To make the tests buildable, include `--with-host //scripts/versioning:tests`
+# To make the tests buildable, include `--with-host //tools/scripts/versioning:tests`
 # in the `fx set` command. The GN args for the actions below are unnecessary.
 group("tests") {
   testonly = true
@@ -25,7 +25,7 @@ group("tests") {
 }
 
 # Run using the following command:
-# fx test //scripts/versioning:update_platform_version_tests
+# fx test //tools/scripts/versioning:update_platform_version_tests
 python_host_test("update_platform_version_tests") {
   main_source = "update_platform_version_tests.py"
   sources = [ "update_platform_version.py" ]
@@ -51,8 +51,8 @@ if (bump_api_level) {
   # it updates several files in the checkout.
   #
   # To use this tool manually, run the following:
-  #   fx set bringup.x64 --with-host //scripts/versioning --args=bump_api_level=true
-  #   fx build --host //scripts/versioning:bump_api_level
+  #   fx set bringup.x64 --with-host //tools/scripts/versioning --args=bump_api_level=true
+  #   fx build --host //tools/scripts/versioning:bump_api_level
   action("bump_api_level") {
     testonly = true
 
@@ -66,7 +66,7 @@ if (bump_api_level) {
 
     # To enable rapid development of this script, comment out the deps above.
     # Before each run, `git checkout` the first two files below.
-    script = "//scripts/versioning/update_platform_version.py"
+    script = "//tools/scripts/versioning/update_platform_version.py"
 
     _version_history_file = "//sdk/version_history.json"
     _availability_levels_file_path =

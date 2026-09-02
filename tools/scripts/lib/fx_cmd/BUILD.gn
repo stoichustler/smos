@@ -7,14 +7,14 @@ import("//release/python/python_library.gni")
 
 python_library("fx_cmd") {
   library_name = "fx_cmd"
-  source_root = "//scripts/lib/fx_cmd"
+  source_root = "//tools/scripts/lib/fx_cmd"
   sources = [
     "__init__.py",
     "lib.py",
   ]
   deps = [
-    "//scripts/lib/async_utils",
-    "//scripts/lib/build_dir",
+    "//tools/scripts/lib/async_utils",
+    "//tools/scripts/lib/build_dir",
   ]
 }
 

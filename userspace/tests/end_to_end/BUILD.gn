@@ -47,7 +47,7 @@ template("group_with_no_dir_target_deps") {
 group_with_no_dir_target_deps("workbench_x64_stable_tests") {
   testonly = true
   public_deps = [
-    "//scripts/lib/ffx_cmd:ffx_cmd_inspect_e2e_test($host_toolchain)",
+    "//tools/scripts/lib/ffx_cmd:ffx_cmd_inspect_e2e_test($host_toolchain)",
     "//userspace/developer/ffx/lib/fuchsia-controller/end_to_end_tests/mobly:fuchsia_controller_tests($host_toolchain)",
     "//userspace/performance/experimental/profiler:e2e_tests",
     "//userspace/storage/blackout/host:blackout_emulator_stable",

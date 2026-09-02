@@ -165,10 +165,6 @@
             availability: "optional",
         },
         {
-            service: "fuchsia.gpu.magma.Service",
-            availability: "optional",
-        },
-        {
             service: "fuchsia.hardware.cpu.ctrl.Service",
             availability: "optional",
         },

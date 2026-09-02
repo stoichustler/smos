@@ -48,10 +48,10 @@ if (is_host) {
 
   binary_deps = [
     "dataparse",
-    "//scripts/fxtest/scripts:install",
-    "//scripts/lib/async_utils",
-    "//scripts/lib/statusinfo",
-    "//scripts/lib/termout",
+    "//tools/scripts/fxtest/scripts:install",
+    "//tools/scripts/lib/async_utils",
+    "//tools/scripts/lib/statusinfo",
+    "//tools/scripts/lib/termout",
     "//third_party/colorama",
     "//third_party/jellyfish",
     "//tools/test_list_tool:install",
@@ -125,7 +125,7 @@ if (is_host) {
       "$root_out_dir/test_data/fxtest-rewrite-tests/bin/{{source_file_part}}",
     ]
 
-    deps = [ "//scripts/fxtest/scripts:install" ]
+    deps = [ "//tools/scripts/fxtest/scripts:install" ]
   }
 
   install_python_tool("install") {

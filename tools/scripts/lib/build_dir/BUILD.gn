@@ -7,7 +7,7 @@ import("//release/python/python_library.gni")
 
 python_library("build_dir") {
   library_name = "build_dir"
-  source_root = "//scripts/lib/build_dir"
+  source_root = "//tools/scripts/lib/build_dir"
   sources = [
     "__init__.py",
     "lib.py",

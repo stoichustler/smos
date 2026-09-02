@@ -66,8 +66,8 @@ rustc_library("ffx_assembly") {
   inputs = [
     "src/operations/size_check/index.html",
     "src/operations/size_check/D3BlobTreeMap.js",
-    "//scripts/third_party/d3_v3/d3.js",
-    "//scripts/third_party/d3_v3/LICENSE",
+    "//tools/scripts/third_party/d3_v3/d3.js",
+    "//tools/scripts/third_party/d3_v3/LICENSE",
   ]
 
   deps = [

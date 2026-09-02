@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# This file contains variables relevant to `//scripts/versioning/BUILD.gn`.
+# This file contains variables relevant to `//tools/scripts/versioning/BUILD.gn`.
 # It is minimal because it is imported by `//release/testing/config.gni`.
 
 declare_args() {

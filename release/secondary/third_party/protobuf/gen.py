@@ -94,7 +94,7 @@ gn_out.write(
 gn_out.write(gn_file)
 
 try:
-  cmd = [fuchsia_dir + "/scripts/fx", "format-code", "--files=BUILD.gn"]
+  cmd = [fuchsia_dir + "/tools/scripts/fx", "format-code", "--files=BUILD.gn"]
   subprocess.check_output(cmd, text=True)
 except subprocess.CalledProcessError as e:
   print(f"Error formatting BUILD.gn: {e}")

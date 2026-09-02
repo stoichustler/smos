@@ -20,7 +20,7 @@ if (zedboot_product_assembly_config_label != false) {
   _product_config = zedboot_product_assembly_config_label
 }
 
-# Note: This ZBI output is also used by a script in //scripts/verify_cmdline_params.
+# Note: This ZBI output is also used by a script in //tools/scripts/verify_cmdline_params.
 assembled_system("zedboot_assembly") {
   testonly = true
   output_dir = root_build_dir

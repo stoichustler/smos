@@ -422,7 +422,6 @@
                 "fuchsia.sysinfo.Service",
 
                 // These duplicate a service advertised by devfs, below.
-                // "fuchsia.gpu.magma.Service",
                 // "fuchsia.hardware.cpu.ctrl.Service",
                 // "fuchsia.hardware.rtc.Service",
             ],
@@ -433,7 +432,6 @@
             service: [
                 "fuchsia.gpu.magma.DependencyInjectionService",
                 "fuchsia.gpu.magma.PerformanceCounterService",
-                "fuchsia.gpu.magma.Service",
                 "fuchsia.hardware.adb.Service",
                 "fuchsia.hardware.adc.Service",
                 "fuchsia.hardware.audio.CodecConnectorService",

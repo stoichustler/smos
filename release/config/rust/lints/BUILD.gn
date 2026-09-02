@@ -86,7 +86,7 @@ config("allow_unused_results") {
   # we evaluate wider adoption.
   #
   # To update this list run:
-  # $ scripts/gn/gen_visibility_globs.py \
+  # $ tools/scripts/gn/gen_visibility_globs.py \
   #    --all=//release/config/rust/lints:deny_unused_results \
   #    --allow=//release/config/rust/lints:allow_unused_results \
   #    --ignore-suffix=_rust  # FIDL bindings use the _rust suffix

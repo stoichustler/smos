@@ -48,7 +48,7 @@ if (!is_host) {
       "//tools/cargo-gnaw:install-cargo-gnaw",
 
       # For `fx test`.
-      "//scripts/fxtest/python:install($host_toolchain)",
+      "//tools/scripts/fxtest/python:install($host_toolchain)",
 
       # For Python devshell tools
       "//tools/devshell/python:install($host_toolchain)",
@@ -123,13 +123,13 @@ host_script_test_data("fx_bash_tests") {
   data_path = "fx_bash_tests"
   datasets = [
     {
-      source_base_dir = "//scripts"
+      source_base_dir = "//tools/scripts"
       target_base_dir = "scripts"
       files = [
-        "//scripts/fx",
-        "//scripts/fx-env.sh",
-        "//scripts/fx-help.awk",
-        "//scripts/fx-reentry",
+        "//tools/scripts/fx",
+        "//tools/scripts/fx-env.sh",
+        "//tools/scripts/fx-help.awk",
+        "//tools/scripts/fx-reentry",
       ]
     },
     {

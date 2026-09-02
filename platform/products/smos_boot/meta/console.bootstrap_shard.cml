@@ -214,11 +214,6 @@
             to: "#console-launcher",
         },
         {
-            service: "fuchsia.gpu.magma.Service",
-            from: "#boot-drivers",
-            to: "#console-launcher",
-        },
-        {
             service: "fuchsia.hardware.cpu.ctrl.Service",
             from: "#boot-drivers",
             to: "#console-launcher",

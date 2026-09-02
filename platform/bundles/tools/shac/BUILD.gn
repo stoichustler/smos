@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# Compiled tools that are depended on by shac checks under //scripts/shac.
+# Compiled tools that are depended on by shac checks under //tools/scripts/shac.
 group("shac_tools") {
   testonly = true
   deps = [

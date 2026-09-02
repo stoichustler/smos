@@ -64,7 +64,7 @@ fine in CLion.
 
 ## Vim
 
-See [Helpful Vim tools for Fuchsia development](/scripts/vim/README.md).
+See [Helpful Vim tools for Fuchsia development](/tools/scripts/vim/README.md).
 
 ## Visual Studio Code (VS Code) {#visual-studio-code}
 

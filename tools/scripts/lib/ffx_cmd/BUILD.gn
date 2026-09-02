@@ -27,8 +27,8 @@ if (is_host) {
       "version.py",
     ]
     deps = [
-      "//scripts/lib/async_utils",
-      "//scripts/lib/fx_cmd",
+      "//tools/scripts/lib/async_utils",
+      "//tools/scripts/lib/fx_cmd",
       "//userspace/lib/diagnostics/python/fuchsia_inspect",
     ]
   }
@@ -39,7 +39,7 @@ if (is_host) {
     extra_args = [ "-v" ]
     libraries = [
       ":ffx_cmd",
-      "//scripts/lib/async_utils",
+      "//tools/scripts/lib/async_utils",
     ]
     test_data_deps = [ "//userspace/developer/ffx:suite_test_data" ]
   }

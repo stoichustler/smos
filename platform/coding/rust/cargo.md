@@ -62,7 +62,7 @@ Some plugins require a `.cargo/config` file to allow cargo to operate correctly 
 2. Configure `rustup` to use the Fuchsia Rust toolchain by running:
 
     ```sh
-    rustup toolchain link fuchsia $($FUCHSIA_DIR/scripts/youcompleteme/paths.py VSCODE_RUST_TOOLCHAIN)
+    rustup toolchain link fuchsia $($FUCHSIA_DIR/tools/scripts/youcompleteme/paths.py VSCODE_RUST_TOOLCHAIN)
     rustup default fuchsia
     ```
 

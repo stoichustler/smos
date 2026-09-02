@@ -13,7 +13,7 @@ ROOT_PATH = os.path.join(os.path.dirname(__file__), "..", "..")
 
 RUSTFMT_PATH = "prebuilt/third_party/rust/linux-x64/bin/rustfmt"
 BINDGEN_PATH = "prebuilt/third_party/rust_bindgen/linux-x64/bindgen"
-FX_PATH = "scripts/fx"
+FX_PATH = "tools/scripts/fx"
 
 FUCHSIA_NOTICE_HEADER = (
     """// Copyright %d The Fuchsia Authors. All rights reserved.
