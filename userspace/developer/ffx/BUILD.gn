@@ -190,7 +190,7 @@ if (is_host) {
     visibility = [
       # These are well-defined users of the direct binary dependency and do not
       # need to change.
-      "//platform/bundles/infra/*",
+      "//release/platform/bundles/infra/*",
       "//userspace/developer/ffx/*",
 
       # TODO(b/296235955) Some things in vendor directories depend on this and
@@ -300,7 +300,7 @@ group("tests") {
 }
 
 # NOTE: this group is for tests which need to transitively depend on a Fuchsia system image for
-# "e2e" testing of ffx behavior. These are included in `//platform/bundles/buildbot/host` in order to prevent
+# "e2e" testing of ffx behavior. These are included in `//release/platform/bundles/buildbot/host` in order to prevent
 # dep cycles.
 if (is_host) {
   group("host_tests") {

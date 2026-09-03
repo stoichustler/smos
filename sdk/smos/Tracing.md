@@ -9,6 +9,8 @@ enabled.
 
 ## Tracing model
 
+<img src="assets/kernel/fuchsia-tracing.png" alt="smos" width="750">
+
 Tracing records fine-grained events for a short observation window. Unlike
 sampling-based profiling, tracing can preserve every instrumented event and its
 arguments, which makes it useful for reconstructing ordering, latency, and

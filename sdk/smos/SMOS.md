@@ -474,8 +474,8 @@ Makefile
   +-- make configure ARCH=arm64|riscv64
   |     `-- tools/smos-boot/configure.sh ARCH
   |           |-- validate standalone SDK
-  |           |-- select platform/boards/smos-qemu-<arch>.gni
-  |           |-- import platform/products/smos_boot.gni
+  |           |-- select release/platform/boards/smos-qemu-<arch>.gni
+  |           |-- import release/platform/products/smos_boot.gni
   |           `-- gn gen out/smos-boot-<arch>
   |
   +-- make build ARCH=ARCH
@@ -499,7 +499,7 @@ missing file in the standalone SDK is reported before GN runs. The generated
 small set of verification labels. It does not create or link a source-root
 `prebuilt/` directory.
 
-The product import in `platform/products/smos_boot.gni` selects the bootstrap
+The product import in `release/platform/products/smos_boot.gni` selects the bootstrap
 assembly with a curated platform-AIB allowlist, FVM ramdisk storage, and the
 minimal SMOS source profile. In
 `release/images/fuchsia/BUILD.gn`, the assembly records
@@ -828,6 +828,8 @@ If the message is discarded before the receiver reads it, the kernel closes
 the in-transit handle as part of message destruction. A server must therefore
 either consume or explicitly close every received handle, including handles it
 does not recognize.
+
+<img src="assets/kernel/ipc.png" alt="smos" width="750">
 
 #### Object lifetime and peer closure
 
@@ -2052,7 +2054,7 @@ compact boot timing or image policy.
 | Kernel object and handle rights | `zircon/kernel/object/`, `zircon/kernel/lib/syscalls/` | handle type, rights, signal, and status code |
 | FIDL channel protocol | `sdk/fidl/`, component `.cml`, driver framework protocols | generated binding and channel message |
 | Boot command line and ZBI | `zircon/kernel/phys/`, boot-shim, `tools/smos-boot/run-qemu.sh` | ZBI manifest and serial startup log |
-| Driver resource capability | `platform/boards/`, `userspace/devices/`, driver-host manifests | bind result, capability route, devfs/FIDL publication |
+| Driver resource capability | `release/platform/boards/`, `userspace/devices/`, driver-host manifests | bind result, capability route, devfs/FIDL publication |
 | Runtime tracing | trace macros, provider, trace manager | trace archive with category/object records |
 
 When these layers disagree, debug from the right side of the table toward the
@@ -2196,8 +2198,7 @@ not install optional-domain services or drivers into the runtime BootFS.
 - [Rust.md](Rust.md)
 
 
-
-<!-- References --->
+<!-- References -->
 
 [1]: ../../zircon/kernel/lib/arch/arm64/include/lib/arch/zbi-boot.h
 [2]: ../../zircon/kernel/phys/handoff-prep.cc

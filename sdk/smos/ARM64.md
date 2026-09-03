@@ -163,12 +163,12 @@ when porting 32-bit code.
 
 ## Memory system
 
+<img src="assets/arm64/Cache_basics.png" alt="Cache basics" width="750">
+
 The cache hierarchy is implementation-defined, but a typical arm64 system has
 private L1/L2 caches and a larger shared L3 cache.  Cache lines are commonly 64
 bytes.  Temporal locality keeps recently used lines close to a core; spatial
 locality makes adjacent lines useful for sequential accesses.
-
-<img src="assets/arm64/Cache_basics.png" alt="Cache basics" width="750">
 
 <img src="assets/arm64/Cache_hierarchy.png" alt="Cache hierarchy" width="750">
 
@@ -609,6 +609,8 @@ An SMMU translates addresses in DMA requests from I/O devices.  It is separate
 from the PE MMU: the PE translates virtual addresses, while the SMMU protects
 device access to physical or intermediate physical addresses.
 
+<img src="assets/arm64/ARM_SMMU_2_level_stream_table.png" alt="SMMUv3 two-level stream table" width="750">
+
 A StreamID selects a Stream Table Entry (STE).  An STE enables the stream and
 selects stage 1 translation, stage 2 translation, or both:
 
@@ -620,16 +622,14 @@ selects stage 1 translation, stage 2 translation, or both:
 Stream tables can be linear or two-level.  The two-level form bounds the amount
 of memory needed for sparse StreamID ranges.
 
-<img src="assets/arm64/ARM_SMMU_2_level_stream_table.png" alt="SMMUv3 two-level stream table" width="750">
-
 <img src="assets/arm64/ARM_SMMU_configuration_structure.jpg" alt="SMMUv3 configuration structure" width="750">
-
-<img src="assets/arm64/ARM_SMMU_multi-CD_for_substreams.png" alt="SMMUv3 multiple CDs" width="750">
 
 When SMOS hosts a virtual machine, the hypervisor must ensure that device DMA
 cannot escape the guest's assigned address space.  The exact SMMU programming
 is platform-dependent; the conceptual contract is the same as Zircon's VMO,
 BTI, and IOMMU capability boundaries.
+
+<img src="assets/arm64/ARM_SMMU_multi-CD_for_substreams.png" alt="SMMUv3 multiple CDs" width="750">
 
 ## TrustZone and secure calls
 

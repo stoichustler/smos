@@ -4,7 +4,7 @@
 
 import("//release/icu/config.gni")  # icu_git_info
 
-platform_aibs_dir = get_label_info("//platform/bundles/assembly", "target_out_dir")
+platform_aibs_dir = get_label_info("//release/platform/bundles/assembly", "target_out_dir")
 
 # These are the user-buildtype-safe platform AIBs that are used by bootstrap
 # feature-set-level assemblies.  This is a subset of the overall platform AIBs
@@ -542,7 +542,7 @@ foreach(
     name,
     bootstrap_user_platform_aib_names + bootstrap_userdebug_platform_aib_names +
         bootstrap_eng_platform_aib_names) {
-  label = "//platform/bundles/assembly:${name}"
+  label = "//release/platform/bundles/assembly:${name}"
   _target_out_dir = get_label_info(label, "target_out_dir")
 
   bringup_platform_aib_labels += [ label ]
@@ -553,7 +553,7 @@ foreach(
 user_platform_aib_labels = []
 user_platform_aib_files = []
 foreach(name, user_platform_aib_names) {
-  label = "//platform/bundles/assembly:${name}"
+  label = "//release/platform/bundles/assembly:${name}"
   _target_out_dir = get_label_info(label, "target_out_dir")
 
   user_platform_aib_labels += [ label ]
@@ -562,7 +562,7 @@ foreach(name, user_platform_aib_names) {
 }
 required_user_platform_aib_files = []
 foreach(name, required_user_aib_names) {
-  label = "//platform/bundles/assembly:${name}"
+  label = "//release/platform/bundles/assembly:${name}"
   _target_out_dir = get_label_info(label, "target_out_dir")
   required_user_platform_aib_files +=
       [ "${_target_out_dir}/${name}/assembly_config.json" ]
@@ -571,7 +571,7 @@ foreach(name, required_user_aib_names) {
 userdebug_platform_aib_labels = []
 userdebug_platform_aib_files = []
 foreach(name, userdebug_platform_aib_names) {
-  label = "//platform/bundles/assembly:${name}"
+  label = "//release/platform/bundles/assembly:${name}"
   _target_out_dir = get_label_info(label, "target_out_dir")
 
   userdebug_platform_aib_labels += [ label ]
@@ -580,7 +580,7 @@ foreach(name, userdebug_platform_aib_names) {
 }
 required_userdebug_platform_aib_files = []
 foreach(name, required_userdebug_aib_names) {
-  label = "//platform/bundles/assembly:${name}"
+  label = "//release/platform/bundles/assembly:${name}"
   _target_out_dir = get_label_info(label, "target_out_dir")
   required_userdebug_platform_aib_files +=
       [ "${_target_out_dir}/${name}/assembly_config.json" ]
@@ -588,7 +588,7 @@ foreach(name, required_userdebug_aib_names) {
 
 experimental_aib_files = []
 foreach(name, experimental_aib_names) {
-  label = "//platform/bundles/assembly:${name}"
+  label = "//release/platform/bundles/assembly:${name}"
   _target_out_dir = get_label_info(label, "target_out_dir")
   experimental_aib_files +=
       [ "${_target_out_dir}/${name}/assembly_config.json" ]
@@ -597,7 +597,7 @@ foreach(name, experimental_aib_names) {
 eng_platform_aib_labels = []
 eng_platform_aib_files = []
 foreach(name, eng_platform_aib_names) {
-  label = "//platform/bundles/assembly:${name}"
+  label = "//release/platform/bundles/assembly:${name}"
   _target_out_dir = get_label_info(label, "target_out_dir")
 
   eng_platform_aib_labels += [ label ]
@@ -608,7 +608,7 @@ foreach(name, eng_platform_aib_names) {
 eng_only_platform_aib_labels = []
 eng_only_platform_aib_files = []
 foreach(name, eng_only_platform_aib_names) {
-  label = "//platform/bundles/assembly:${name}"
+  label = "//release/platform/bundles/assembly:${name}"
   _target_out_dir = get_label_info(label, "target_out_dir")
 
   eng_only_platform_aib_labels += [ label ]

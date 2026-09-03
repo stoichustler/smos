@@ -171,13 +171,13 @@ group("tests") {
 group("bazel_action_allowlist") {
   # Bazel assembly
   visibility = [
-    "//platform/boards/pkvm:*",
-    "//platform/boards/vim3:*",
-    "//platform/products/microfuchsia:*",
-    "//platform/products/minimal:*",
-    "//platform/products/terminal:*",
-    "//platform/products/workbench:*",
-    "//platform/products/zedboot:*",
+    "//release/platform/boards/pkvm:*",
+    "//release/platform/boards/vim3:*",
+    "//release/platform/products/microfuchsia:*",
+    "//release/platform/products/minimal:*",
+    "//release/platform/products/terminal:*",
+    "//release/platform/products/workbench:*",
+    "//release/platform/products/zedboot:*",
   ]
 
   # Bazel assembly used in tests
@@ -198,7 +198,7 @@ group("bazel_action_allowlist") {
   visibility += [ "//vendor/*" ]
 
   visibility += [
-    "//platform/boards/vim3:bazel_drivers",
+    "//release/platform/boards/vim3:bazel_drivers",
     "//examples/drivers/simple/dfv2:bazel_package.bazel_build",
     "//examples/drivers/simple/dfv2:simple-driver-test.bazel_build",
     "//examples/drivers/template:bazel_package.bazel_build",

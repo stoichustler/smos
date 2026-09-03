@@ -11,7 +11,7 @@ import("//release/bazel/bazel_workspace.gni")
 # verify_images_manifest("verify_fuchsia_images_configuration") {
 #   gn_assembled_system_target = "//release/images/fuchsia:fuchsia"
 #   bazel_assembled_system_target =
-#       "//platform/products/minimal:product_bundle.x64_create_system"
+#       "//release/platform/products/minimal:product_bundle.x64_create_system"
 # }
 # ```
 #

@@ -103,7 +103,7 @@ bootfs_files_for_assembly("bootfs") {
 fuchsia_package("cat_pkg") {
   visibility = [
     ":*",
-    "//platform/bundles/assembly:*",
+    "//release/platform/bundles/assembly:*",
   ]
   package_name = "cat"
   deps = [ ":cat_bin" ]
@@ -112,7 +112,7 @@ fuchsia_package("cat_pkg") {
 fuchsia_package("clear_pkg") {
   visibility = [
     ":*",
-    "//platform/bundles/assembly:*",
+    "//release/platform/bundles/assembly:*",
   ]
   package_name = "clear"
   deps = [ ":clear_bin" ]
@@ -121,7 +121,7 @@ fuchsia_package("clear_pkg") {
 fuchsia_package("env_pkg") {
   visibility = [
     ":*",
-    "//platform/bundles/assembly:*",
+    "//release/platform/bundles/assembly:*",
   ]
   package_name = "env"
   deps = [ ":env_bin" ]
@@ -130,7 +130,7 @@ fuchsia_package("env_pkg") {
 fuchsia_package("hexdump_pkg") {
   visibility = [
     ":*",
-    "//platform/bundles/assembly:*",
+    "//release/platform/bundles/assembly:*",
   ]
   package_name = "hexdump"
   deps = [ ":hexdump_bin" ]
@@ -148,7 +148,7 @@ foreach(command,
   fuchsia_package("${command}_pkg") {
     visibility = [
       ":*",
-      "//platform/bundles/assembly:*",
+      "//release/platform/bundles/assembly:*",
     ]
     package_name = command
     deps = [ ":${command}_bin" ]

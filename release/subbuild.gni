@@ -81,7 +81,7 @@ template("subbuild") {
       deps = [ "//sdk:idk_build_tools" ]
       tools_dir = rebase_path("$root_build_dir/sdk/idk_build_tools", _build_dir)
     } else {
-      deps = [ "//platform/bundles/tools" ]
+      deps = [ "//release/platform/bundles/tools" ]
       tools_dir = rebase_path("$root_build_dir", _build_dir)
     }
     deps += invoker.extra_deps

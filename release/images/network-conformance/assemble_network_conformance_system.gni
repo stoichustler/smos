@@ -37,8 +37,8 @@ template("assemble_network_conformance_system") {
     }
     if (target_cpu == "x64") {
       input_bundles = [
-        "//platform/boards/x64:x64_common",
-        "//platform/boards/emulation/virtio",
+        "//release/platform/boards/x64:x64_common",
+        "//release/platform/boards/emulation/virtio",
       ]
     }
 

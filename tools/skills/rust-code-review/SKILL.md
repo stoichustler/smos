@@ -13,16 +13,16 @@ Produce review artifacts in English.
 
 Before reviewing any Rust change, read these in-tree references:
 
-- [`platform/coding/rust/README.md`](../../../platform/coding/rust/README.md)
-- [`platform/coding/rust/testing.md`](../../../platform/coding/rust/testing.md)
-- [`platform/coding/rust/unsafe.md`](../../../platform/coding/rust/unsafe.md)
-- [`platform/coding/rust/logging.md`](../../../platform/coding/rust/logging.md)
+- [`release/platform/coding/rust/README.md`](../../../release/platform/coding/rust/README.md)
+- [`release/platform/coding/rust/testing.md`](../../../release/platform/coding/rust/testing.md)
+- [`release/platform/coding/rust/unsafe.md`](../../../release/platform/coding/rust/unsafe.md)
+- [`release/platform/coding/rust/logging.md`](../../../release/platform/coding/rust/logging.md)
 
 When a change adds, updates, vendors, or directly promotes an external crate,
 also read and apply:
 
-- [`platform/coding/rust/external_crates.md`](../../../platform/coding/rust/external_crates.md)
-- [`platform/coding/rust/external_crates/review.md`](../../../platform/coding/rust/external_crates/review.md)
+- [`release/platform/coding/rust/external_crates.md`](../../../release/platform/coding/rust/external_crates.md)
+- [`release/platform/coding/rust/external_crates/review.md`](../../../release/platform/coding/rust/external_crates/review.md)
 
 ## Review workflow
 

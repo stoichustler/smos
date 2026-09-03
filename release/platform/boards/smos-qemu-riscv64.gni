@@ -5,9 +5,9 @@
 has_board = true
 target_cpu = "riscv64"
 
-board_configuration_label = "//platform/boards/smos-qemu-riscv64"
+board_configuration_label = "//release/platform/boards/smos-qemu-riscv64"
 bazel_product_bundle_board = "riscv64"
 board_name = "smos-qemu-riscv64"
 board_is_emu = true
 
-partitions_config_label = "//platform/boards/partitions:riscv64"
+partitions_config_label = "//release/platform/boards/partitions:riscv64"

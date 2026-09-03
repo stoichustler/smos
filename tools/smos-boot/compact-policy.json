@@ -4,7 +4,7 @@
     "arm64": [
       "release/images/fuchsia:fuchsia_assembly",
       "kernel.phys_arm64/linux-arm64-boot-shim.bin",
-      "platform/products/smos_boot/virtualization:host",
+      "release/platform/products/smos_boot/virtualization:host",
       "userspace/smos_boot/virtcheck:virtcheck_test"
     ],
     "riscv64": [

@@ -435,7 +435,7 @@ def collect_generated(
 
         gn_labels = []
         for target in targets[arch]:
-            if target.startswith(("release/", "platform/products/", "userspace/")) and ":" in target:
+            if target.startswith(("release/", "userspace/")) and ":" in target:
                 gn_labels.append(f"//{target}")
         for label in gn_labels:
             records[arch].update(runtime_dependency_inputs(root, out, label, gn))

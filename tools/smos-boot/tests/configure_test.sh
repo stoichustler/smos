@@ -92,9 +92,9 @@ assert_status 0
 assert_file_contains "$fake_root/out/smos-boot-arm64/args.gn" \
   'smos_sdk_milestone = "27"'
 assert_file_contains "$fake_root/out/smos-boot-arm64/args.gn" \
-  'import("//platform/boards/smos-qemu-arm64.gni")'
+  'import("//release/platform/boards/smos-qemu-arm64.gni")'
 assert_file_contains "$fake_root/out/smos-boot-arm64/args.gn" \
-  'import("//platform/products/smos_boot.gni")'
+  'import("//release/platform/products/smos_boot.gni")'
 assert_file_contains "$fake_root/out/smos-boot-arm64/args.gn" \
   'smos_boot_build = true'
 assert_file_contains "$fake_root/out/smos-boot-arm64/args.gn" \
@@ -136,7 +136,7 @@ unset MILESTONE_SDK
 configure riscv64
 assert_status 0
 assert_file_contains "$fake_root/out/smos-boot-riscv64/args.gn" \
-  'import("//platform/boards/smos-qemu-riscv64.gni")'
+  'import("//release/platform/boards/smos-qemu-riscv64.gni")'
 assert_not_file_contains "$fake_root/out/smos-boot-riscv64/args.gn" \
   'smos-qemu-arm64.gni'
 

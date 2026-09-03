@@ -120,7 +120,7 @@ fn create_tee_manager(
         components,
 
         // Contents and includes are set by the tee_manager AIB defined in
-        // //platform/bundles/assembly/BUILD.gn. This prevents us having to make
+        // //release/platform/bundles/assembly/BUILD.gn. This prevents us having to make
         // all of the contents and includes into assembly resources.
         contents: vec![],
         includes: vec![],

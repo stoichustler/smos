@@ -20,7 +20,7 @@ import("//release/dist/distribution_manifest.gni")
 #   As normal:
 #     deps, testonly
 #
-#   NOTE: Visibility is restricted to `//platform/bundles/assembly/*`, and cannot be
+#   NOTE: Visibility is restricted to `//release/platform/bundles/assembly/*`, and cannot be
 #   overridden.
 template("bootfs_files_for_assembly") {
   labels = {
@@ -76,7 +76,7 @@ template("bootfs_files_for_assembly") {
     # bundles or developer overrides.
     visibility = [
       ":*",
-      "//platform/bundles/assembly/*",
+      "//release/platform/bundles/assembly/*",
       "//local/*",
     ]
 

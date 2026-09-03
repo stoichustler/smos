@@ -7,11 +7,11 @@ import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-PRODUCT = ROOT / "platform/products/smos_boot/BUILD.gn"
-VIRTUALIZATION = ROOT / "platform/products/smos_boot/virtualization/BUILD.gn"
-SHARD = ROOT / "platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml"
+PRODUCT = ROOT / "release/platform/products/smos_boot/BUILD.gn"
+VIRTUALIZATION = ROOT / "release/platform/products/smos_boot/virtualization/BUILD.gn"
+SHARD = ROOT / "release/platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml"
 CONSOLE_LAUNCHER = ROOT / "userspace/bringup/bin/console-launcher/meta/console-launcher.cml"
-CONSOLE_SHARD = ROOT / "platform/products/smos_boot/meta/console.bootstrap_shard.cml"
+CONSOLE_SHARD = ROOT / "release/platform/products/smos_boot/meta/console.bootstrap_shard.cml"
 ARCHIVIST = ROOT / "userspace/diagnostics/archivist/meta/archivist.cml"
 ARCHIVIST_SHARD = ROOT / "userspace/diagnostics/archivist/meta/archivist.bootstrap_shard.cml"
 GN = ROOT / "prebuilt/third_party/gn/linux-x64/gn"
@@ -132,7 +132,7 @@ class VirtualizationScopeTest(unittest.TestCase):
             text,
             r"(?s)virtualization\s*=\s*\{.*?bootstrap_enabled\s*=\s*true",
         )
-        self.assertIn("smos_minimal_assembly = true", (ROOT / "platform/products/smos_boot.gni").read_text())
+        self.assertIn("smos_minimal_assembly = true", (ROOT / "release/platform/products/smos_boot.gni").read_text())
 
 
 def describe(out_dir: pathlib.Path, target: str) -> str:
@@ -146,10 +146,10 @@ def describe(out_dir: pathlib.Path, target: str) -> str:
 
 
 def inspect_graph(out_dir: pathlib.Path) -> None:
-    graph = describe(out_dir, "//platform/bundles/assembly:virtualization_support")
+    graph = describe(out_dir, "//release/platform/bundles/assembly:virtualization_support")
     if out_dir.name.endswith("arm64"):
         for required in (
-            "//platform/products/smos_boot/virtualization:host",
+            "//release/platform/products/smos_boot/virtualization:host",
             "//userspace/virtualization/bin/guest:bin",
             "//userspace/virtualization/bin/guest_manager:bin",
             "//userspace/virtualization/bin/vmm:bin",
@@ -180,7 +180,7 @@ def inspect_graph(out_dir: pathlib.Path) -> None:
             for forbidden in ("debian", "termina", "virtio_gpu", "virtio_net", "virtio_sound"):
                 if forbidden in payload:
                     raise AssertionError(f"{out_dir}: forbidden assembled {forbidden}")
-    elif "//platform/products/smos_boot/virtualization:host" in graph:
+    elif "//release/platform/products/smos_boot/virtualization:host" in graph:
         raise AssertionError(f"{out_dir}: riscv64 unexpectedly packages the host runtime")
 
 

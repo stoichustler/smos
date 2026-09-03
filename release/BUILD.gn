@@ -96,9 +96,9 @@ group("non_hermetic_deps") {
   # assembly and board input bundle creation no longer triggers false-positives
   # in the action_tracer.py due to how it cleans it's dynamic outputs.
   visibility += [
-    "//platform/boards/*",
+    "//release/platform/boards/*",
     "//release/assembly/overrides/*",
-    "//platform/bundles/assembly/*",
+    "//release/platform/bundles/assembly/*",
     "//local/*",
   ]
 
@@ -135,10 +135,10 @@ group("non_hermetic_deps") {
   visibility += [
     "//release/assembly/*",
     "//release/testing:*",
-    "//platform/products/bringup:*",
-    "//platform/products/core:*",
-    "//platform/products/smos_boot:*",
-    "//platform/products/zedboot:*",
+    "//release/platform/products/bringup:*",
+    "//release/platform/products/core:*",
+    "//release/platform/products/smos_boot:*",
+    "//release/platform/products/zedboot:*",
   ]
 
   # TODO(https://fxbug.dev/42176361): Remove entry when action tracer can handle ld.lld invocations.
@@ -245,10 +245,10 @@ group("non_hermetic_deps") {
 
   # Products which use Bazel-based assembly have non-hermetic outputs
   visibility += [
-    "//platform/products/microfuchsia:*",
-    "//platform/products/minimal:*",
-    "//platform/products/terminal:*",
-    "//platform/products/workbench:*",
+    "//release/platform/products/microfuchsia:*",
+    "//release/platform/products/minimal:*",
+    "//release/platform/products/terminal:*",
+    "//release/platform/products/workbench:*",
   ]
 
   # FIXME(https://fxbug.dev/42072939): //release/packages/prebuilt_packages.gni

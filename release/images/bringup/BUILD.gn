@@ -40,7 +40,7 @@ files = {
   qemu_kernel = qemu_boot_shim.path
 }
 
-_partitions_config = "//platform/boards/partitions:default"
+_partitions_config = "//release/platform/boards/partitions:default"
 if (has_board) {
   assert(partitions_config_label != false,
          "Need to define partitions_config_label")

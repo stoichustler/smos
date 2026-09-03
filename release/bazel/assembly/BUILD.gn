@@ -94,8 +94,8 @@ verify_assembly_configs("verify_assembly_configs") {
   product_configs = [
     {
       name = "zedboot_product_config"
-      gn_target = "//platform/products/zedboot"
-      bazel_target = "//platform/products/zedboot"
+      gn_target = "//release/platform/products/zedboot"
+      bazel_target = "//release/platform/products/zedboot"
     },
   ]
 
@@ -105,22 +105,22 @@ verify_assembly_configs("verify_assembly_configs") {
   partitions_configs = []
   _partitions_config_label_no_toolchain =
       get_label_info(partitions_config_label, "label_no_toolchain")
-  if (_partitions_config_label_no_toolchain == "//platform/boards/partitions:x64") {
+  if (_partitions_config_label_no_toolchain == "//release/platform/boards/partitions:x64") {
     partitions_configs += [
       {
         name = "x64_partitions_config"
-        gn_target = "//platform/boards/partitions:x64"
+        gn_target = "//release/platform/boards/partitions:x64"
         bazel_target = "//release/bazel/assembly/partitions_configurations:x64"
         extra_copy_outputs = [ "bootloaders/fuchsia.esp.blk" ]
         deps = [ "//release/images/flash:esp.bazel_input" ]
       },
     ]
   }
-  if (_partitions_config_label_no_toolchain == "//platform/boards/partitions:arm64") {
+  if (_partitions_config_label_no_toolchain == "//release/platform/boards/partitions:arm64") {
     partitions_configs += [
       {
         name = "arm64_partitions_config"
-        gn_target = "//platform/boards/partitions:arm64"
+        gn_target = "//release/platform/boards/partitions:arm64"
         bazel_target = "//release/bazel/assembly/partitions_configurations:arm64"
         extra_copy_outputs = [ "bootloaders/fuchsia.esp.blk" ]
         deps = [ "//release/images/flash:esp.bazel_input" ]
@@ -128,30 +128,30 @@ verify_assembly_configs("verify_assembly_configs") {
     ]
   }
   if (_partitions_config_label_no_toolchain ==
-      "//platform/boards/partitions/vim3:vim3") {
+      "//release/platform/boards/partitions/vim3:vim3") {
     partitions_configs += [
       {
         name = "vim3_partitions_config"
-        gn_target = "//platform/boards/partitions/vim3"
-        bazel_target = "//platform/boards/partitions/vim3"
+        gn_target = "//release/platform/boards/partitions/vim3"
+        bazel_target = "//release/platform/boards/partitions/vim3"
       },
     ]
   }
-  if (_partitions_config_label_no_toolchain == "//platform/boards/partitions:riscv64") {
+  if (_partitions_config_label_no_toolchain == "//release/platform/boards/partitions:riscv64") {
     partitions_configs += [
       {
         name = "riscv64_partitions_config"
-        gn_target = "//platform/boards/partitions:riscv64"
+        gn_target = "//release/platform/boards/partitions:riscv64"
         bazel_target =
             "//release/bazel/assembly/partitions_configurations:riscv64"
       },
     ]
   }
-  if (_partitions_config_label_no_toolchain == "//platform/boards/partitions:default") {
+  if (_partitions_config_label_no_toolchain == "//release/platform/boards/partitions:default") {
     partitions_configs += [
       {
         name = "default_partitions_config"
-        gn_target = "//platform/boards/partitions:default"
+        gn_target = "//release/platform/boards/partitions:default"
         bazel_target =
             "//release/bazel/assembly/partitions_configurations:default"
       },

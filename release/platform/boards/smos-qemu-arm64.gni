@@ -5,7 +5,7 @@
 has_board = true
 target_cpu = "arm64"
 
-board_configuration_label = "//platform/boards/smos-qemu-arm64"
+board_configuration_label = "//release/platform/boards/smos-qemu-arm64"
 bazel_product_bundle_board = "qemu-arm64"
 board_name = "smos-qemu-arm64"
 board_is_emu = true
@@ -15,4 +15,4 @@ board_is_emu = true
 # protocol used by the retained bus-pci driver.
 qemu_arm64_enable_user_pci = true
 
-partitions_config_label = "//platform/boards/partitions:default"
+partitions_config_label = "//release/platform/boards/partitions:default"

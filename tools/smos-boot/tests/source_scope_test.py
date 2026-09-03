@@ -23,13 +23,13 @@ HARDWARE_FIDL_FILES = (
 )
 CTF_GENERATOR = ROOT / "sdk/ctf/build/generate_ctf_tests.gni"
 CTF_TESTS = ROOT / "sdk/ctf/tests/BUILD.gn"
-BUNDLES_TOOLS = ROOT / "platform/bundles/tools/BUILD.gn"
+BUNDLES_TOOLS = ROOT / "release/platform/bundles/tools/BUILD.gn"
 AIB_TEMPLATE = ROOT / "release/assembly/assembly_input_bundle.gni"
 CRITICAL_SERVICES_BUILD = ROOT / "userspace/bringup/bin/critical-services/BUILD.gn"
 CONFIG_SCHEMA_BUILD = ROOT / "userspace/lib/assembly/config_schema/BUILD.gn"
 FFX_TOOLS_BUILD = ROOT / "userspace/developer/ffx/tools/BUILD.gn"
-ASSEMBLY_BUNDLES = ROOT / "platform/bundles/assembly/BUILD.gn"
-PLATFORM_AIBS = ROOT / "platform/bundles/assembly/platform_aibs.gni"
+ASSEMBLY_BUNDLES = ROOT / "release/platform/bundles/assembly/BUILD.gn"
+PLATFORM_AIBS = ROOT / "release/platform/bundles/assembly/platform_aibs.gni"
 QEMU_ARM64_MANIFEST = (
     ROOT / "userspace/devices/board/drivers/qemu-arm64/meta/qemu-arm64.cml"
 )
@@ -58,7 +58,7 @@ CORE_TOOLCHAIN_CONFIGS = (
 FUCHSIA_CONFIG = ROOT / "release/config/fuchsia/BUILD.gn"
 ICU_BUILD_CONFIG = ROOT / "release/icu/build_config.gni"
 ICU_CONFIG = ROOT / "release/icu/config.gni"
-VERIFY_PRODUCT = ROOT / "platform/products/smos_boot.gni"
+VERIFY_PRODUCT = ROOT / "release/platform/products/smos_boot.gni"
 FIDL_GO_BUILD = ROOT / "third_party/golibs/BUILD.gn"
 MYPY_ROOT = ROOT / "third_party/pylibs"
 DART_PACKAGES = ROOT / "third_party/dart-pkg"

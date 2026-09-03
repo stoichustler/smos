@@ -7,7 +7,7 @@ For every product definition file in the tree, ensure that it is not setting
 any GN arg that is now deprecated.
 
 Product definition files are defined to be:
-  - //platform/products/**/*.gni
+  - //release/platform/products/**/*.gni
 
 The currently disallowed GN args are:
   - base_package_labels
@@ -111,7 +111,7 @@ def main() -> int:
 
     # Gather the fuchsia.git product definitions
     source_root = args.source_root
-    products_dir = os.path.join(source_root, "platform", "products")
+    products_dir = os.path.join(source_root, "release", "platform", "products")
     product_def_paths = find_product_defs(products_dir)
 
     log("Scanning product defs:")

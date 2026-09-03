@@ -54,21 +54,21 @@ class BuildApiModulesFilterTest(unittest.TestCase):
                 "assembly_input_archives": (
                     [
                         {
-                            "label": "//platform/bundles/assembly:zircon.tgz(//release/toolchain/fuchsia:x64)",
-                            "path": "obj/platform/bundles/assembly/zircon.tgz",
+                            "label": "//release/platform/bundles/assembly:zircon.tgz(//release/toolchain/fuchsia:x64)",
+                            "path": "obj/release/platform/bundles/assembly/zircon.tgz",
                         },
                         {
-                            "label": "//platform/bundles/assembly:embeddable.tgz(//release/toolchain/fuchsia:x64)",
+                            "label": "//release/platform/bundles/assembly:embeddable.tgz(//release/toolchain/fuchsia:x64)",
                             "path": "obj/foo",
                         },
                         {
-                            "label": "//platform/bundles/assembly:bootstrap.tgz(//release/toolchain/fuchsia:x64)",
-                            "path": "obj/platform/bundles/assembly/bootstrap.tgz",
+                            "label": "//release/platform/bundles/assembly:bootstrap.tgz(//release/toolchain/fuchsia:x64)",
+                            "path": "obj/release/platform/bundles/assembly/bootstrap.tgz",
                         },
                     ],
                     [
                         {
-                            "label": "//platform/bundles/assembly:embeddable.tgz(//release/toolchain/fuchsia:x64)",
+                            "label": "//release/platform/bundles/assembly:embeddable.tgz(//release/toolchain/fuchsia:x64)",
                             "path": "obj/foo",
                         },
                     ],

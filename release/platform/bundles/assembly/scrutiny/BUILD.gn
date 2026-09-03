@@ -3,11 +3,11 @@
 # found in the LICENSE file.
 
 import("//release/assembly/generate_scrutiny_configs.gni")
-import("//platform/bundles/assembly/platform_aibs.gni")
+import("//release/platform/bundles/assembly/platform_aibs.gni")
 
 _goldens_dir =
     "//release/bazel_sdk/bazel_rules_fuchsia/fuchsia/private/assembly/goldens"
-_kernel_goldens_dir = "//platform/bundles/assembly/scrutiny/kernel_goldens"
+_kernel_goldens_dir = "//release/platform/bundles/assembly/scrutiny/kernel_goldens"
 
 generate_scrutiny_configs("user") {
   assembly_input_bundles = user_platform_aib_files

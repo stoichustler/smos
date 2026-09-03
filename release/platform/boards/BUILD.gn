@@ -14,22 +14,22 @@ group("boards") {
 if (target_cpu == "arm64") {
   group("arm64") {
     if (smos_minimal_assembly) {
-      deps = [ "//platform/boards/smos-qemu-arm64" ]
+      deps = [ "//release/platform/boards/smos-qemu-arm64" ]
     } else {
       deps = [
-        "//platform/boards/arm64",
-        "//platform/boards/pkvm:arm64",
-        "//platform/boards/qemu-arm64",
-        "//platform/boards/vim3",
+        "//release/platform/boards/arm64",
+        "//release/platform/boards/pkvm:arm64",
+        "//release/platform/boards/qemu-arm64",
+        "//release/platform/boards/vim3",
       ]
     }
   }
 } else if (target_cpu == "riscv64") {
   group("riscv64") {
     if (smos_minimal_assembly) {
-      deps = [ "//platform/boards/smos-qemu-riscv64" ]
+      deps = [ "//release/platform/boards/smos-qemu-riscv64" ]
     } else {
-      deps = [ "//platform/boards/riscv64" ]
+      deps = [ "//release/platform/boards/riscv64" ]
     }
   }
 }

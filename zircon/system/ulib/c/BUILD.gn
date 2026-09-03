@@ -372,7 +372,7 @@ group("libc") {
 }
 
 group("libc_fshost") {
-  visibility = [ "//platform/bundles/assembly/*" ]
+  visibility = [ "//release/platform/bundles/assembly/*" ]
 
   # This has to be public_deps so that the shared_library() target's output
   # files can be input files of the setup and packaging targets that depend on

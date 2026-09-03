@@ -3,7 +3,7 @@
 1.  Update `rustc_artifact.gni` to support new edition.
 2.  Edit [clippy.gni] to add `--force-warn=rust-2021-compatibility` to args.
 3.  Run `fx clippy --all --raw > lints.json` (make sure to add repos `--with
-    //platform/bundles/kitchen_sink --with //platform/bundles/buildbot/core`)
+    //release/platform/bundles/kitchen_sink --with //release/platform/bundles/buildbot/core`)
 4.  Run `fx shush lints.json --lint rust-2021-compatibility fix` (after building
     shush `fx build host-tools/shush`)
     *   Get the CL approved via global OWNERS?
@@ -39,7 +39,7 @@ vim ./release/rust/clippy.gni
 
 git commit -a -m "throwaway"
 
-fx set core.x64 --with //platform/bundles/kitchen_sink --with //platform/bundles/buildbot/core
+fx set core.x64 --with //release/platform/bundles/kitchen_sink --with //release/platform/bundles/buildbot/core
 
 fx clippy --all --raw > lints.json
 

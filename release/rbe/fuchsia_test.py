@@ -19,8 +19,8 @@ class ProjectRootTests(unittest.TestCase):
     def test_compact_source_root_does_not_require_prebuilt(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            for dirname in ("boards", "bundles", "zircon"):
-                (root / dirname).mkdir()
+            for dirname in ("release/platform", "userspace", "zircon"):
+                (root / dirname).mkdir(parents=True)
 
             self.assertTrue(fuchsia._dir_is_fuchsia_root(root))
 

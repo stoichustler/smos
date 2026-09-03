@@ -12,10 +12,9 @@ executed.
 Templates that define boot tests wrap [`boot_test()`][boot_test.gni].
 
 For reasons particular to automated testing, all boot tests are expected be
-aggregated under the [//platform/bundles/boot_tests/BUILD.gn][boot_test_bundle]. Once in
+aggregated under the [//release/platform/bundles/boot_tests/BUILD.gn][boot_test_bundle]. Once in
 your dependency graph, boot tests can be executed locally with
 `fx run-boot-test`.
 
 [boot_test.gni]: /release/testing/boot_tests/boot_test.gni
-[boot_test_bundle]: /platform/bundles/boot_tests/BUILD.gn
-
+[boot_test_bundle]: /release/platform/bundles/boot_tests/BUILD.gn

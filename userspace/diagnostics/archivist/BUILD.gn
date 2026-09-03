@@ -246,12 +246,12 @@ fuchsia_package("package") {
 
 fuchsia_package("archivist-for-embedding") {
   visibility = [
-    "//platform/bundles/buildbot/*",
+    "//release/platform/bundles/buildbot/*",
 
     # TODO(crbug.com/1408597): Remove once the Chromium tests package the fakes.
     ":archivist-for-embedding.bazel_input.archive",
     "//release/bazel/assembly:verify_assembly_configs",
-    "//platform/products/terminal:*",
+    "//release/platform/products/terminal:*",
     "//userspace/chromium:chromium_test_base_deps",
   ]
   deps = [ ":archivist-for-embedding-bundle" ]

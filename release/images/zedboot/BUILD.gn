@@ -15,7 +15,7 @@ import("//release/product.gni")
 assert(current_toolchain == default_toolchain,
        "//release/images/* are only valid in the Fuchsia toolchain")
 
-_product_config = "//platform/products/zedboot"
+_product_config = "//release/platform/products/zedboot"
 if (zedboot_product_assembly_config_label != false) {
   _product_config = zedboot_product_assembly_config_label
 }

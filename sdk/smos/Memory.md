@@ -74,6 +74,66 @@ The VMO and mapping outlive a single page fault. Unmapping removes the virtual
 translation, while closing the last VMO reference can release its pages when
 no other mapping, child VMO, or kernel owner retains them.
 
+### Mapping syscall Code Flow
+
+The mapping syscall performs capability, permission, and output-address
+validation before it creates a VM mapping. The cleanup callback is important:
+if copying the mapped address back to user space or pre-populating a requested
+range fails, the new mapping is destroyed.
+
+```text
+zx_vmar_map()
+ |
+ `──► sys_vmar_map()
+       ├──► get VMAR and VMO handles
+       ├──► validate VMO rights against VMAR permissions
+       ├──► VmAddressRegionDispatcher::Map()
+       │     ├──► validate protection and VMAR flags
+       │     └──► VmAddressRegion::CreateVmMapping()
+       ├──► mapping->MapRange() when prepopulation was requested
+       ├──► copy mapped base to user output
+       ├──► output failure ──► mapping->Destroy() ──► return error
+       └──► success ──► cancel cleanup ──► return mapped address
+```
+
+`sys_vmar_map` also adds `ZX_VM_CAN_MAP_*` permissions derived from the VMO
+rights. A successful mapping therefore records both the requested architecture
+MMU flags and the rights that later `zx_vmar_protect` calls may use.
+
+### Hardware page-fault Code Flow
+
+On arm64, the vector assembly saves the interrupted frame and calls the C
+exception handler. The data-abort handler decodes `ESR_EL1` and `FAR_EL1` into
+VMM flags, while instruction aborts follow the analogous instruction path.
+
+```text
+arm64_el1_exception_sync_lower_a64
+ |
+ `──► arm64_sync_exception()
+       └──► arm64_data_abort_handler(iframe, flags, esr)
+             ├──► decode FAR_EL1, WnR, CM, DFSC
+             ├──► invalid kernel fault ──► exception_die()
+             ├──► vmm_page_fault_handler(far, pf_flags)
+             │     └──► Thread::Current::PageFault()
+             │           └──► VmAspace::PageFault()
+             │                 └──► VmAspace::PageFaultInternal()
+             │                       ├──► root_vmar_->FindMappingLocked()
+             │                       ├──► VmMapping::PageFaultLocked()
+             │                       ├──► VMO/pager supplies pages
+             │                       ├──► page_request.Wait() when needed
+             │                       └──► retry until mapped or terminal status
+             ├──► status >= 0 ──► return to interrupted context
+             ├──► user fault ──► dispatch_user_exception()
+             └──► unresolved ──► exception_die()
+```
+
+`VmAspace::PageFaultInternal` holds the aspace protection while locating and
+resolving the mapping, then releases it before waiting for a pager request.
+After a wait it retries the walk and accounts for pages mapped by the previous
+attempt. A kernel-mode user-copy fault uses a non-suspendable path so that a
+thread cannot be suspended while its kernel operation is holding transient
+state.
+
 ## Memory reclamation
 
 SMOS inherits the kernel mechanisms needed to keep free pages available:
@@ -107,6 +167,30 @@ These implementations are in `zircon/kernel/object/diagnostics.cc`. The exact
 shell command that exposes them depends on the selected console/debug build;
 the functions are not a promise of an always-present userspace command.
 
+### Memory diagnostics Code Flow
+
+The diagnostics path walks process mappings and then attributes resident pages
+to their VMOs. Attribution is distinct from virtual size: shared, pinned,
+discarded, and child-VMO pages can have different owners.
+
+```text
+diagnostic command
+ |
+ `──► DumpProcessVmObjects(koid)
+       ├──► ProcessDispatcher::LookupProcessById()
+       ├──► handle_table().ForEachHandle()
+       │     ├──► DownCastDispatcher<VmObjectDispatcher>()
+       │     ├──► VmObjectDispatcher::vmo()
+       │     ├──► DumpVmObject()
+       │     └──► VmObject::GetAttributedMemory()
+       └──► EnumerateAspaceChildren()
+             └──► AspaceVmoDumper::OnVmMapping()
+                   └──► DumpVmObject() ──► print mapped VMO counts
+```
+
+The exact command front end is product-specific, but the ownership and
+attribution calls above are source-confirmed in `diagnostics.cc`.
+
 ## SMOS boot example
 
 `userboot_init` creates the initial process root VMAR, maps the userboot image
@@ -121,6 +205,10 @@ handles through the bootstrap channel.
 | Topic | SMOS source |
 | --- | --- |
 | VMAR allocation and mapping | `zircon/kernel/vm/`, `vm_address_region_dispatcher.cc` |
+| Mapping syscall | `zircon/kernel/lib/syscalls/vmar.cc` |
+| Page-fault dispatch | `zircon/kernel/arch/arm64/exceptions.S`, `exceptions_c.cc`, |
+|  | `vm/vmm.cc` |
+| VMAR fault resolution | `zircon/kernel/vm/vm_aspace.cc` |
 | VMO dispatch and rights | `zircon/kernel/object/vm_object_dispatcher.cc` |
 | Physical page allocation | `zircon/kernel/vm/pmm.cc` |
 | VM diagnostics | `zircon/kernel/object/diagnostics.cc` |

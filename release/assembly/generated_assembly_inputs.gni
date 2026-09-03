@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 import("//release/python/python_action.gni")
-import("//platform/bundles/assembly/platform_aibs.gni")
+import("//release/platform/bundles/assembly/platform_aibs.gni")
 
 # Generates a list of the files included in a product that must be uploaded by
 # infrastructure.

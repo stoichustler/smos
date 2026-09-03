@@ -30,7 +30,7 @@ _SCRIPT_DIR_REL = Path(os.path.relpath(_SCRIPT_DIR, start=os.curdir))
 
 # SMOS keeps toolchains in the external SMOS_SDK_ROOT, so a compact source
 # checkout intentionally has no top-level prebuilt directory.
-_EXPECTED_ROOT_SUBDIRS = ("platform", "userspace", "zircon")
+_EXPECTED_ROOT_SUBDIRS = ("release/platform", "userspace", "zircon")
 
 
 def _dir_is_fuchsia_root(path: Path) -> bool:

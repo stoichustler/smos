@@ -66,7 +66,7 @@ impl GuestType {
         match self {
             GuestType::Zircon => "//userspace/virtualization/bundles:zircon",
             GuestType::Debian => "//userspace/virtualization/bundles:debian",
-            GuestType::Linux => "//platform/products/smos_boot/virtualization:host",
+            GuestType::Linux => "//release/platform/products/smos_boot/virtualization:host",
             GuestType::Termina => "//userspace/virtualization/bundles:termina",
         }
     }
@@ -75,7 +75,7 @@ impl GuestType {
         match self {
             GuestType::Zircon => "//userspace/virtualization/bundles:zircon_core_shards",
             GuestType::Debian => "//userspace/virtualization/bundles:debian_core_shards",
-            GuestType::Linux => "//platform/bundles/assembly:virtualization_support",
+            GuestType::Linux => "//release/platform/bundles/assembly:virtualization_support",
             GuestType::Termina => "//userspace/virtualization/bundles:termina_core_shards",
         }
     }

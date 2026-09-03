@@ -6,15 +6,15 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 BOARD_FILES = (
-    ROOT / "platform/boards/smos-qemu-arm64.gni",
-    ROOT / "platform/boards/smos-qemu-arm64/BUILD.gn",
-    ROOT / "platform/boards/smos-qemu-riscv64/BUILD.gn",
-    ROOT / "platform/boards/smos-server-drivers/BUILD.gn",
+    ROOT / "release/platform/boards/smos-qemu-arm64.gni",
+    ROOT / "release/platform/boards/smos-qemu-arm64/BUILD.gn",
+    ROOT / "release/platform/boards/smos-qemu-riscv64/BUILD.gn",
+    ROOT / "release/platform/boards/smos-server-drivers/BUILD.gn",
 )
 GENERIC_GRAPHICS_OWNERS = (
-    ROOT / "platform/boards/smos-qemu-arm64/BUILD.gn",
+    ROOT / "release/platform/boards/smos-qemu-arm64/BUILD.gn",
 )
-BOARDS_AGGREGATE = ROOT / "platform/boards/BUILD.gn"
+BOARDS_AGGREGATE = ROOT / "release/platform/boards/BUILD.gn"
 VIRTIO_BUILD = ROOT / "userspace/devices/bus/lib/virtio/BUILD.gn"
 PCI_BUS = ROOT / "userspace/devices/bus/drivers/pci/bus.cc"
 PCI_MANIFEST = ROOT / "userspace/devices/bus/drivers/pci/meta/pci.cml"
@@ -53,7 +53,7 @@ class BoardGraphPolicyTest(unittest.TestCase):
         self.assertEqual([], missing)
 
     def test_arm64_uses_userspace_pci_root(self) -> None:
-        arm64 = (ROOT / "platform/boards/smos-qemu-arm64.gni").read_text()
+        arm64 = (ROOT / "release/platform/boards/smos-qemu-arm64.gni").read_text()
         self.assertIn("qemu_arm64_enable_user_pci = true", arm64)
 
     def test_graphical_and_network_drivers_are_absent(self) -> None:
@@ -62,7 +62,7 @@ class BoardGraphPolicyTest(unittest.TestCase):
         self.assertEqual([], present)
 
     def test_unused_host_rng_driver_is_absent(self) -> None:
-        text = (ROOT / "platform/boards/smos-server-drivers/BUILD.gn").read_text()
+        text = (ROOT / "release/platform/boards/smos-server-drivers/BUILD.gn").read_text()
         self.assertNotIn("virtio-rng", text)
         self.assertNotIn("virtio_rng", text)
 
@@ -75,8 +75,8 @@ class BoardGraphPolicyTest(unittest.TestCase):
     def test_minimal_board_aggregate_loads_only_smos_boards(self) -> None:
         text = BOARDS_AGGREGATE.read_text()
         self.assertIn("if (smos_minimal_assembly)", text)
-        self.assertIn("//platform/boards/smos-qemu-arm64", text)
-        self.assertIn("//platform/boards/smos-qemu-riscv64", text)
+        self.assertIn("//release/platform/boards/smos-qemu-arm64", text)
+        self.assertIn("//release/platform/boards/smos-qemu-riscv64", text)
 
     def test_retained_virtio_library_has_no_graphics_dependency(self) -> None:
         text = VIRTIO_BUILD.read_text()

@@ -24,7 +24,7 @@ digraph {
       rank=same
       kz [label="kernel_zbi"]
       compidic [label=":${image_name}.component_id_index_config-config-data"]
-      "platform/bundles/assembly:${name}"
+      "release/platform/bundles/assembly:${name}"
       ":${image_name}"
     }
 
@@ -195,7 +195,7 @@ digraph {
   blobfs_tool_target -> image_assembler
   fvm_reserved_slices -> gic
   compidic -> confp
-  "platform/bundles/assembly:${name}" -> pa
+  "release/platform/bundles/assembly:${name}" -> pa
   ":${image_name}" -> laib
   aconfs -> gic
   blobfs -> gic

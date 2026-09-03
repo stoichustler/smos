@@ -12,7 +12,7 @@ group("host_tools_used_by_ffx_action") {
   # `ffx_action()` is used by .gni files that are used in other directories.
   visibility = [
     ":host_tools_used_by_ffx_action_testonly",
-    "//platform/boards/*",
+    "//release/platform/boards/*",
     "//release/images/*",
     "//userspace/firmware/gigaboot/*",
     "//vendor/*",

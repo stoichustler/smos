@@ -34,7 +34,7 @@
 #   As normal:
 #     testonly
 #
-#   NOTE: Visibility is restricted to `//platform/bundles/assembly/*`, and cannot be
+#   NOTE: Visibility is restricted to `//release/platform/bundles/assembly/*`, and cannot be
 #  overridden.
 template("config_data_for_assembly") {
   assert(
@@ -100,6 +100,6 @@ template("config_data_for_assembly") {
 
     # The targets created by this template can only be used with assembly input
     # bundles.
-    visibility = [ "//platform/bundles/assembly/*" ]
+    visibility = [ "//release/platform/bundles/assembly/*" ]
   }
 }

@@ -1590,6 +1590,8 @@ userboot::LoadElf(uname)
                     `--> exit(status)
 ```
 
+- [hexdump.rs][1]
+
 ## 21. Maintenance Rules
 
 - Prefer the standard library for new Rust commands; check for an existing Rust
@@ -1602,3 +1604,7 @@ userboot::LoadElf(uname)
   targets.
 - Treat the actual Ninja `-v` rustc command as authoritative; do not infer
   Fuchsia linking behavior from a host Linux link command.
+
+<!-- References -->
+
+[1]: ../../userspace/sys/smos-bin/src/hexdump.rs

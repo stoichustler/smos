@@ -5,7 +5,7 @@
 import("//release/assembly/generated_partitions_config.gni")
 
 assert(current_toolchain == default_toolchain,
-       "//platform/boards/paritions/* is only valid in the Fuchsia toolchain")
+       "//release/platform/boards/paritions/* is only valid in the Fuchsia toolchain")
 
 group("partitions") {
   testonly = true

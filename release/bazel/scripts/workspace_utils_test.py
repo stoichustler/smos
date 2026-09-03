@@ -640,9 +640,9 @@ class GnTargetsDirTest(unittest.TestCase):
                     },
                     {
                         "bazel_name": "eng.bazel_inputs",
-                        "bazel_package": "platform/bundles/assembly",
-                        "generator_label": "//platform/bundles/assembly:eng.platform_artifacts(//release/toolchain/fuchsia:x64)",
-                        "output_directory": "obj/platform/bundles/assembly/eng/platform_artifacts",
+                        "bazel_package": "release/platform/bundles/assembly",
+                        "generator_label": "//release/platform/bundles/assembly:eng.platform_artifacts(//release/toolchain/fuchsia:x64)",
+                        "output_directory": "obj/release/platform/bundles/assembly/eng/platform_artifacts",
                     },
                 ],
                 indent=2,
@@ -665,11 +665,11 @@ class GnTargetsDirTest(unittest.TestCase):
                 "BUILD.bazel",
                 "MODULE.bazel",
                 "WORKSPACE.bazel",
-                "_files/obj/platform/bundles/assembly/eng/platform_artifacts",
+                "_files/obj/release/platform/bundles/assembly/eng/platform_artifacts",
                 "_files/obj/userspace/drivers/virtio/package.far",
                 "all_licenses.spdx.json",
-                "platform/bundles/assembly/BUILD.bazel",
-                "platform/bundles/assembly/_files",
+                "release/platform/bundles/assembly/BUILD.bazel",
+                "release/platform/bundles/assembly/_files",
                 "src/drivers/virtio/BUILD.bazel",
                 "src/drivers/virtio/_files",
             ],
@@ -722,11 +722,11 @@ license(
 
         self.assertDictEqual(
             generated_json[
-                "_files/obj/platform/bundles/assembly/eng/platform_artifacts"
+                "_files/obj/release/platform/bundles/assembly/eng/platform_artifacts"
             ],
             {
                 "target": str(
-                    build_dir / "obj/platform/bundles/assembly/eng/platform_artifacts"
+                    build_dir / "obj/release/platform/bundles/assembly/eng/platform_artifacts"
                 ),
                 "type": "raw_symlink",
             },
@@ -741,7 +741,7 @@ license(
         )
 
         self.assertDictEqual(
-            generated_json["platform/bundles/assembly/_files"],
+            generated_json["release/platform/bundles/assembly/_files"],
             {
                 "target": "../../_files",
                 "type": "raw_symlink",
@@ -749,7 +749,7 @@ license(
         )
 
         self.assertEqual(
-            generated_json["platform/bundles/assembly/BUILD.bazel"]["content"],
+            generated_json["release/platform/bundles/assembly/BUILD.bazel"]["content"],
             r"""# AUTO-GENERATED - DO NOT EDIT
 
 package(
@@ -758,14 +758,14 @@ package(
 )
 
 
-# From GN target: //platform/bundles/assembly:eng.platform_artifacts(//release/toolchain/fuchsia:x64)
+# From GN target: //release/platform/bundles/assembly:eng.platform_artifacts(//release/toolchain/fuchsia:x64)
 filegroup(
     name = "eng.bazel_inputs",
-    srcs = glob(["_files/obj/platform/bundles/assembly/eng/platform_artifacts/**"], exclude_directories=1),
+    srcs = glob(["_files/obj/release/platform/bundles/assembly/eng/platform_artifacts/**"], exclude_directories=1),
 )
 alias(
     name = "eng.bazel_inputs.directory",
-    actual = "_files/obj/platform/bundles/assembly/eng/platform_artifacts",
+    actual = "_files/obj/release/platform/bundles/assembly/eng/platform_artifacts",
 )
 """,
         )

@@ -10,7 +10,7 @@ import("//release/bazel/bazel_inputs.gni")
 import("//release/board.gni")
 import("//release/python/python_action.gni")
 import("//release/zircon/tools.gni")
-import("//platform/bundles/assembly/platform_aibs.gni")
+import("//release/platform/bundles/assembly/platform_aibs.gni")
 import("//userspace/developer/ffx/build/ffx_action.gni")
 
 # Assembles a Fuchsia system.
@@ -428,7 +428,7 @@ template("assembled_system") {
     _custom_platform_aib_files = []
     if (defined(invoker.platform_aib_names)) {
       foreach(name, invoker.platform_aib_names) {
-        label = "//platform/bundles/assembly:${name}"
+        label = "//release/platform/bundles/assembly:${name}"
         _target_out_dir = get_label_info(label, "target_out_dir")
         _custom_platform_aib_labels += [ label ]
         _custom_platform_aib_files +=
@@ -459,7 +459,7 @@ template("assembled_system") {
       compare_command_logs = "${_namespace}.compare_command_logs"
       compare_images_manifests = "${_namespace}.compare_images_manifests"
 
-      # *_platform_aib_labels come from //platform/bundles/assembly/platform_aibs.gni
+      # *_platform_aib_labels come from //release/platform/bundles/assembly/platform_aibs.gni
 
       if (_custom_platform_aib_labels != []) {
         platform_common_aibs = _custom_platform_aib_labels
@@ -576,10 +576,10 @@ template("assembled_system") {
 
       # The directory in which all the platform AIBs can be found
       platform_common_aibs_dir =
-          get_label_info("//platform/bundles/assembly", "target_out_dir")
+          get_label_info("//release/platform/bundles/assembly", "target_out_dir")
 
       # platform_aib_files and eng_platform_aib_files come from
-      # //platform/bundles/assembly/platform_aibs.gni.
+      # //release/platform/bundles/assembly/platform_aibs.gni.
       #
       # This isn't strictly required, but it allows the AIB input files to be
       # specified in GN.

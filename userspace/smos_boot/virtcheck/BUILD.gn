@@ -23,5 +23,5 @@ executable("virtcheck") {
   output_name = "virtcheck"
   sources = [ "main.cc" ]
   deps = _deps
-  visibility = [ "//platform/products/smos_boot:*" ]
+  visibility = [ "//release/platform/products/smos_boot:*" ]
 }

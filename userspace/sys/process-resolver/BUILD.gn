@@ -47,7 +47,7 @@ fuchsia_component("component") {
 fuchsia_package("process-resolver") {
   visibility = [
     ":*",
-    "//platform/bundles/assembly/*",
+    "//release/platform/bundles/assembly/*",
   ]
   deps = [ ":component" ]
 }

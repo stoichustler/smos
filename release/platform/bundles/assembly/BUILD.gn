@@ -10,7 +10,7 @@ import("//release/bazel/bazel_inputs.gni")
 import("//release/components.gni")
 import("//release/icu/icu_assembly_input_bundle.gni")
 import("//release/product.gni")
-import("//platform/bundles/assembly/platform_aibs.gni")
+import("//release/platform/bundles/assembly/platform_aibs.gni")
 import("//userspace/lib/icu/tzdata/icu_tzres_source.gni")
 import("//zircon/kernel/phys/qemu.gni")
 
@@ -66,7 +66,7 @@ group("assembly") {
   # RISCV skips some artifacts, therefore we also ignore that.
   if (!is_coverage && !is_profile && !is_asan && !is_hwasan &&
       current_cpu != "riscv64") {
-    deps += [ "//platform/bundles/assembly/scrutiny" ]
+    deps += [ "//release/platform/bundles/assembly/scrutiny" ]
   }
 }
 
@@ -793,7 +793,7 @@ assembly_input_bundle("console") {
           {
             component_name = "bootstrap"
             shards = [
-              "//platform/products/smos_boot/meta/console.bootstrap_shard.cml",
+              "//release/platform/products/smos_boot/meta/console.bootstrap_shard.cml",
             ]
           },
         ]
@@ -834,7 +834,7 @@ assembly_input_bundle("virtcon") {
     # but the migration with the products that use that GN arg is sufficiently
     # complicated that this is clearer that trying to do a removal of the
     # default boot animation in those products that shouldn't include it (if
-    # it's included by default via `//platform/products/common/bringup.gni`).
+    # it's included by default via `//release/platform/products/common/bringup.gni`).
     "//userspace/bringup/bin/virtcon:boot_animation",
   ]
 
@@ -1374,7 +1374,7 @@ assembly_input_bundle("core_realm_eng") {
     },
   ]
 
-  # Moved here from //platform/bundles/packages/prod:cmdutils
+  # Moved here from //release/platform/bundles/packages/prod:cmdutils
   on_demand += [
     "//userspace/sys/smos-bin:clear_pkg",
     "//userspace/sys/smos-bin:date_pkg",
@@ -1425,7 +1425,7 @@ assembly_input_bundle("core_realm_eng") {
     },
   ]
 
-  # Included with //platform/bundles/tools.
+  # Included with //release/platform/bundles/tools.
   shell_commands += [
     {
       package = "sched"
@@ -3447,8 +3447,8 @@ assembly_input_bundle("pkgfs_disable_executability_restrictions") {
 assembly_input_bundle("virtualization_support") {
   if (smos_minimal_assembly && current_cpu == "arm64") {
     bootfs_files_labels =
-        [ "//platform/products/smos_boot/virtualization:guest_cli" ]
-    bootfs_packages = [ "//platform/products/smos_boot/virtualization:host" ]
+        [ "//release/platform/products/smos_boot/virtualization:guest_cli" ]
+    bootfs_packages = [ "//release/platform/products/smos_boot/virtualization:host" ]
     compiled_packages = [
       {
         bootfs_package = true
@@ -3456,7 +3456,7 @@ assembly_input_bundle("virtualization_support") {
         components = [
           {
             component_name = "bootstrap"
-            shards = [ "//platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml" ]
+            shards = [ "//release/platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml" ]
           },
         ]
       },

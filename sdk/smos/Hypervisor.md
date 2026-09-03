@@ -163,9 +163,9 @@ zircon_guest_manager             vmm_launcher
         |                         Vmm + VmmController
         |                              |
         |                              +--> virtio_console (Rust)
-        |                              +--> virtio_block (Rust)
-        |                              +--> virtio_rng (Rust)
-        |                              +--> virtio_vsock (Rust)
+        |                              +--> virtio_block   (Rust)
+        |                              +--> virtio_rng     (Rust)
+        |                              +--> virtio_vsock   (Rust)
         |
         +---- ZirconGuestManager --> console-launcher / guest CLI
 ```
@@ -175,7 +175,7 @@ hypervisor and executable-memory resources to the manager and launcher, while
 the launcher offers those resources to each dynamic `vmm-N` child. The
 `zircon_guest_manager` component receives the guest package directory and the
 `GuestLifecycle` service from its static `vmm` child. The CML route in
-`platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml` exposes
+`release/platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml` exposes
 only `ZirconGuestManager` to `console-launcher`.
 
 The current product uses the C++ manager in
@@ -353,11 +353,11 @@ ARM64 platform emulation, PCI/virtio controllers, and guest management.
 
 | Layer | Current SMOS source | Responsibility |
 | --- | --- | --- |
-| Product topology | `platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml` | Starts `vmm_launcher` and `zircon_guest_manager`; routes resources and `ZirconGuestManager` |
+| Product topology | `release/platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml` | Starts `vmm_launcher` and `zircon_guest_manager`; routes resources and `ZirconGuestManager` |
 | Guest manager | `userspace/virtualization/bin/guest_manager/guest_manager.cc` | Loads `/guest_pkg/data/guest.cfg`, merges overrides, tracks state, and owns lifecycle callbacks |
-| Manager component | `platform/products/smos_boot/virtualization/meta/zircon_guest_manager.cml` | Provides `GuestManager`, mounts the guest package, and uses the static `vmm` child |
+| Manager component | `release/platform/products/smos_boot/virtualization/meta/zircon_guest_manager.cml` | Provides `GuestManager`, mounts the guest package, and uses the static `vmm` child |
 | VMM controller | `userspace/virtualization/bin/vmm/vmm_controller.cc` | Implements `Create`, `Bind`, `Run`, `Stop`, and asynchronous teardown |
-| VMM component | `platform/products/smos_boot/virtualization/meta/vmm.cml` | Publishes `Guest`/`GuestLifecycle`, owns dynamic virtio collections, and receives hypervisor resources |
+| VMM component | `release/platform/products/smos_boot/virtualization/meta/vmm.cml` | Publishes `Guest`/`GuestLifecycle`, owns dynamic virtio collections, and receives hypervisor resources |
 | Dynamic launcher | `userspace/virtualization/bin/vmm_launcher/src/vmm_launcher.rs` | Alternate `Realm`-based creation of `vmm-N` children |
 | Kernel boundary | `zircon/kernel/object/guest_dispatcher.cc`, `zircon/kernel/object/vcpu_dispatcher.cc`, `zircon/kernel/arch/arm64/hypervisor/` | Guest/vCPU handles, Stage-2 mappings, traps, EL2 entry, and VM exits |
 

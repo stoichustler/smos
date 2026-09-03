@@ -10,7 +10,7 @@ import("//release/images/supports_fastboot_fvm.gni")
 import("//release/images/vbmeta.gni")
 import("//release/info/info.gni")
 import("//release/sdk/product_bundle_transfer_manifest.gni")
-import("//platform/bundles/assembly/platform_aibs.gni")
+import("//release/platform/bundles/assembly/platform_aibs.gni")
 import("//sdk/config.gni")
 import("//userspace/sys/pkg/bin/package-tool/package-tool.gni")
 
@@ -222,8 +222,8 @@ template("bazel_product_bundle") {
     # Some product bundles have eng artifacts in recovery slot and userdebug
     # artifacts in the main slot.
     _bazel_inputs += [
-      "//platform/bundles/assembly:eng",
-      "//platform/bundles/assembly:userdebug",
+      "//release/platform/bundles/assembly:eng",
+      "//release/platform/bundles/assembly:userdebug",
     ]
     not_needed(invoker, [ "allow_userdebug_platform_bundle_use" ])
   } else {
@@ -232,11 +232,11 @@ template("bazel_product_bundle") {
       # Some product bundles have user artifacts in recovery slot and userdebug
       # artifacts in the main slot.
       _bazel_inputs += [
-        "//platform/bundles/assembly:user",
-        "//platform/bundles/assembly:userdebug",
+        "//release/platform/bundles/assembly:user",
+        "//release/platform/bundles/assembly:userdebug",
       ]
     } else {
-      _bazel_inputs += [ "//platform/bundles/assembly:user" ]
+      _bazel_inputs += [ "//release/platform/bundles/assembly:user" ]
     }
   }
 

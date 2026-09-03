@@ -75,21 +75,21 @@ the user understand the issue.
 ### Read relevant documentation
 
 Before you review the user's code, read relevant documentation from
-`platform/coding/c-cpp`. At a minimum you MUST read the following
+`release/platform/coding/c-cpp`. At a minimum you MUST read the following
 before reviewing:
 
-- platform/coding/c-cpp/cpp-style.md
-- platform/coding/c-cpp/naming.md
-- platform/coding/c-cpp/library_restrictions.md
-- platform/coding/c-cpp/lint.md
-- platform/coding/c-cpp/logging.md
-- platform/coding/c-cpp/thread-safe-async.md
+- release/platform/coding/c-cpp/cpp-style.md
+- release/platform/coding/c-cpp/naming.md
+- release/platform/coding/c-cpp/library_restrictions.md
+- release/platform/coding/c-cpp/lint.md
+- release/platform/coding/c-cpp/logging.md
+- release/platform/coding/c-cpp/thread-safe-async.md
 
 If the user provided you with code that touches the `//zircon` directory, you
 MUST also read the following before reviewing their code:
 
-- platform/coding/c-cpp/cxx.md
-- platform/coding/c-cpp/fbl_containers_guide/introduction.md
+- release/platform/coding/c-cpp/cxx.md
+- release/platform/coding/c-cpp/fbl_containers_guide/introduction.md
 
 ### Read the provided code
 

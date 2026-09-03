@@ -347,7 +347,7 @@ template("boot_test") {
 
     _partition_config_label = ":$partition_config_target"
   } else {
-    _partition_config_label = "//platform/boards/partitions:default($default_toolchain)"
+    _partition_config_label = "//release/platform/boards/partitions:default($default_toolchain)"
     if (has_board) {
       assert(partitions_config_label != false,
              "Need to define partitions_config_label")

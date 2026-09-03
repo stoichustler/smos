@@ -35,5 +35,5 @@ smos_platform_aib_names = [
   "virtualization_support",
   "zircon",
 ]
-fuchsia_product_assembly_config_label = "//platform/products/smos_boot"
-zedboot_product_assembly_config_label = "//platform/products/zedboot"
+fuchsia_product_assembly_config_label = "//release/platform/products/smos_boot"
+zedboot_product_assembly_config_label = "//release/platform/products/zedboot"

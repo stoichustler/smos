@@ -63,13 +63,13 @@ group("defined_but_not_built") {
 
 # DEPRECATED! DO NOT ADD TO THIS GROUP
 group("build_infra") {
-  public_deps = [ "//platform/bundles/infra/build" ]
+  public_deps = [ "//release/platform/bundles/infra/build" ]
 }
 
 # DEPRECATED! DO NOT ADD TO THIS GROUP
 group("test_infra") {
   testonly = true
-  public_deps = [ "//platform/bundles/infra/test" ]
+  public_deps = [ "//release/platform/bundles/infra/test" ]
 }
 
 group("e2e_tests") {

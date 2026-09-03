@@ -58,6 +58,48 @@ select_next_thread(cpu)
              ╰──► interrupt ──► reschedule(cpu)
 ```
 
+### Reschedule and context-switch Code Flow
+
+The common path is entered by a timer, an explicit reschedule, a yield, or a
+blocking transition. `RescheduleCommon` owns the current thread lock and the
+destination scheduler queue lock while it accounts runtime and selects the
+next thread.
+
+```text
+sched_reschedule() / sched_preempt() / sched_yield()
+ |
+ └──► Scheduler::RescheduleCommon(current, now)
+       ├──► ProcessSaveStateList(now)
+       ├──► UpdateTimeline(now)
+       ├──► mark current READY + transient Rescheduling
+       ├──► account runtime and energy
+       ├──► adjust fair rate when weight_total_ changed
+       ├──► EvaluateNextThread(now, current, ...)
+       │     ├──► QueueThread(current) when its slice expired
+       │     ├──► DequeueThread(now)
+       │     │     ├──► idle power work
+       │     │     ├──► DequeueDeadlineThread(now)
+       │     │     ├──► DequeueFairThread()
+       │     │     ├──► StealWork() when local queues are empty
+       │     │     └──► idle_power_thread when no work exists
+       │     └──► return next_thread
+       ├──► next thread idle?
+       │     └──► set idle deadline ──► PreemptReset()
+       ├──► timeslice expired or thread changed?
+       │     ├──► NextThreadTimeslice(next_thread, now)
+       │     └──► clamp deadline ──► PreemptReset()
+       ├──► otherwise continue current thread
+       │     └──► adjust deadline if needed ──► PreemptReset()
+       ├──► set next thread RUNNING
+       └──► thread changed? ──► context switch ──► restore lock state
+```
+
+`sched_reschedule` can defer the operation when preemption is disabled, more
+than one spinlock is held, or blocking is disallowed. The request is recorded
+in the current thread's pending-preemption mask and is retried at a safe
+point. `StealWork` temporarily releases the local queue lock while inspecting
+another CPU, then marks the stolen thread's transient state before returning.
+
 The implementation uses preemption state and time-slice extensions to protect
 short critical sections. Disabling preemption is not a substitute for the
 locks that protect a queue or dispatcher; it only constrains local scheduling
@@ -77,6 +119,34 @@ is preempted, yields, or voluntarily reschedules. A CPU being deactivated
 causes runnable work to move to eligible CPUs; pinned work remains queued until
 the CPU is active again. Reactivating a CPU does not perform global eager
 rebalancing, but normal wakeup and migration decisions can use it.
+
+### Unblock and migration Code Flow
+
+An unblock operation chooses a destination CPU under the target queue lock. If
+the thread has a migration callback, the last CPU may be retained temporarily
+so that the callback can complete on the expected queue.
+
+```text
+Scheduler::Unblock(thread)
+ |
+ ├──► FindTargetCpu(thread)
+ ├──► needs_migration? ──► retain last_cpu
+ ├──► lock target->queue_lock_
+ ├──► target active?
+ │     ├──► no ──► retry FindTargetCpu()
+ │     └──► yes
+ ├──► thread->set_ready()
+ ├──► migration pending? ──► save_state_list_.push_front(thread)
+ ├──► otherwise ──► target->Insert(now, thread)
+ │     └──► QueueThread() and fair/deadline run-queue insertion
+ ├──► release thread lock
+ └──► RescheduleMask(target_cpu)
+```
+
+The retry is bounded by the target CPU becoming an active scheduler; a target
+that is concurrently deactivated cannot receive a new queue insertion. A
+remote wakeup therefore requests rescheduling after releasing the queue lock,
+rather than running a driver callback in the scheduler path.
 
 ## Idle and realtime threads
 
@@ -107,6 +177,37 @@ Fair and deadline scheduling state can interact through priority inheritance
 and owned wait queues. When a thread blocks, wakes, changes profile, or joins
 an owned queue, the scheduler updates per-CPU runnable weight and may adjust
 the next preemption time.
+
+### Fair queue insertion Code Flow
+
+Fair scheduling updates virtual time and period state before inserting a thread
+into the ordered fair queue. A preemption preserves a positive normalized
+remainder; a fresh insertion receives a new virtual interval.
+
+```text
+Scheduler::Insert(now, thread, placement)
+ |
+ ├──► queue_state.OnInsert()
+ ├──► UpdateTotalExpectedRuntime()
+ ├──► fair thread? ──► UpdatePeriod() + weight_total_ += weight
+ ├──► QueueThread(thread, placement, now)
+ │     ├──► subtract consumed runtime from time_slice_ns_
+ │     ├──► compute normalized remainder
+ │     ├──► exhausted or insertion? ──► start=max(finish, virtual_time)
+ │     ├──► calculate period and fixed-point rate
+ │     ├──► finish_time = start_time + delta_norm
+ │     ├──► assign generation and sched_latency flow id
+ │     └──► fair_run_queue_.insert(thread)
+ ├──► deadline thread? ──► deadline_run_queue_.insert(thread)
+ └──► TraceThreadQueueEvent("tqe_enque", thread)
+```
+
+`UpdatePeriod` uses the larger of the runnable fair-thread count and target
+latency in granularity units. `CalculateTimeslice` derives the proportional
+slice from `weight_total_`, rounds to an integer number of granules, and clamps
+the result to at least one granule. The virtual finish time is fixed-point in
+the implementation even though the design formulas are written as real-valued
+ratios.
 
 ### Algorithm notation
 
@@ -265,6 +366,30 @@ The implementation is distributed across `thread_dispatcher.cc`,
 users. The same IPI mechanism is important for a thread executing a long
 `zx_vcpu_enter` operation: a VM exit gives the host kernel a chance to observe
 pending signals and unwind safely.
+
+### Pending-signal Code Flow
+
+Signals are consumed at a user-return boundary after the interrupted kernel
+stack is safe to unwind. The architecture wrapper supplies the saved iframe;
+the thread code decides whether to suspend, terminate, or continue.
+
+```text
+arm64_irq() / arm64_sync_exception()
+ |
+ └──► arch_iframe_process_pending_signals(iframe)
+       └──► Thread::Current::ProcessPendingSignals(Iframe, iframe)
+             ├──► read THREAD_SIGNAL_KILL/SUSPEND
+             ├──► KILL set ──► Thread::Current::Exit(0) ──► terminal state
+             ├──► SUSPEND set ──► SaveUserStateLocked() ──► DoSuspend()
+             ├──► restore saved user state and clear suspend bookkeeping
+             ├──► pending exception? ──► ExceptionDispatcher response wait
+             └──► no terminal signal ──► return to user via eret
+```
+
+An interrupt delivered while EL1 code holds a resource returns to that kernel
+context first; the signal is handled only when the path reaches this boundary.
+This ordering prevents a kill or suspend request from abandoning a lock or a
+partially updated scheduler/VM data structure.
 
 ## Scheduler tracing
 

@@ -50,8 +50,8 @@ mkdir -p "$out_dir"
 args_tmp="$(mktemp "$out_dir/.args.gn.XXXXXX")"
 trap 'rm -f "$args_tmp"' EXIT
 cat >"$args_tmp" <<EOF
-import("//platform/boards/$board.gni")
-import("//platform/products/smos_boot.gni")
+import("//release/platform/boards/$board.gni")
+import("//release/platform/products/smos_boot.gni")
 
 smos_sdk_root = "$escaped_sdk_root"
 smos_sdk_milestone = "$milestone_sdk"

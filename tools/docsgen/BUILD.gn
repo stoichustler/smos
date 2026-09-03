@@ -329,7 +329,7 @@ build_api_module("generated_docs") {
     ":invoke_fidldoc",
     ":invoke_helpdoc",
     "//release/bazel/bazel_sdk/docs:docs",
-    "//platform/bundles/drivers:create_all_drivers_doc",
+    "//release/platform/bundles/drivers:create_all_drivers_doc",
   ]
 }
 
@@ -395,7 +395,7 @@ if (current_toolchain == default_toolchain) {
       ":invoke_fidldoc",
       ":invoke_helpdoc",
       "//release/bazel/bazel_sdk/docs:docs",
-      "//platform/bundles/drivers:create_all_drivers_doc",
+      "//release/platform/bundles/drivers:create_all_drivers_doc",
       "//tools/doc_checker:doc_checker_host_tool($host_toolchain)",
     ]
     _doc_checker_dir = get_label_info(

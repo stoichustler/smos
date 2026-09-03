@@ -95,7 +95,7 @@ fuchsia_package("debug-dash-launcher") {
   # It should not be added manually anywhere else.
   #
   # This is temporarily relaxed for a transition
-  # visibility = [ "//platform/bundles/assembly/*" ]
+  # visibility = [ "//release/platform/bundles/assembly/*" ]
 }
 
 group("tests") {

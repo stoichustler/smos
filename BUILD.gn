@@ -27,7 +27,7 @@ declare_args() {
   #         the platform from the definition of the product.
   #
   #         These args replace the use of the non-"legacy_" prefixed arg
-  #         throughout the product definition files (//platform/products/**/*.gni).
+  #         throughout the product definition files (//release/platform/products/**/*.gni).
   #
   #  NOTE:  These "legacy_*" args will go away when the long-term transition to
   #         product assembly is complete, and they should not be relied upon
@@ -533,7 +533,7 @@ build_api_module("boards") {
 build_api_module("board_input_bundles") {
   testonly = true
   data_keys = [ "board_input_bundles" ]
-  deps = [ "//platform/boards" ]
+  deps = [ "//release/platform/boards" ]
 }
 
 # Describes the configuration of the build in the file:
@@ -1668,7 +1668,7 @@ build_api_module("assembly_input_archives") {
   walk_keys = [ "assembly_input_archives_barrier" ]
   deps = [
     # The platform bundles
-    "//platform/bundles/assembly",
+    "//release/platform/bundles/assembly",
 
     # The legacy bundle for the main product assembly.
     "//release/images:main_assembly",
@@ -1692,7 +1692,7 @@ build_api_module("platform_artifacts") {
   testonly = true
   data_keys = [ "platform_artifacts" ]
   walk_keys = [ "platform_artifacts_barrier" ]
-  deps = [ "//platform/bundles/assembly" ]
+  deps = [ "//release/platform/bundles/assembly" ]
 }
 
 # size_report.json contains a list (size 0 or 1) of gerrit size reports
@@ -1897,7 +1897,7 @@ group("default") {
       "//:product_bundles.check",
       "//:test-list",
       "//release/assembly:validate_product_defs",
-      "//platform/bundles/assembly",
+      "//release/platform/bundles/assembly",
 
       # TODO(https://fxbug.dev/42067746) has_board check not working
       "//release/images:default-images",
@@ -1962,7 +1962,7 @@ group("developer_base_packages") {
 
   # the buildbot host tests should only be added via `--with-host`, to the
   # `host_labels` GN arg.
-  assert_no_deps = [ "//platform/bundles/buildbot/host/*" ]
+  assert_no_deps = [ "//release/platform/bundles/buildbot/host/*" ]
 }
 
 # Cache packages added by the developer, using `fx set --with <foo>` or
@@ -1978,7 +1978,7 @@ group("developer_cache_packages") {
 
   # the buildbot host tests should only be added via `--with-host`, to the
   # `host_labels` GN arg.
-  assert_no_deps = [ "//platform/bundles/buildbot/host/*" ]
+  assert_no_deps = [ "//release/platform/bundles/buildbot/host/*" ]
 }
 
 # Universe packages added by the developer, using `fx set` or `fx args`
@@ -1993,7 +1993,7 @@ group("developer_universe_packages") {
 
   # the buildbot host tests should only be added via `--with-host`, to the
   # `host_labels` GN arg.
-  assert_no_deps = [ "//platform/bundles/buildbot/host/*" ]
+  assert_no_deps = [ "//release/platform/bundles/buildbot/host/*" ]
 
   # During validation of the test types, ignore any tests that are found via
   # a path from the test groups back to this group, as it's likely due to e2e
@@ -2115,12 +2115,12 @@ group("discoverable_packages") {
   visibility = [ "//release/images/updates:universe_packages" ]
   public_deps = discoverable_package_labels + [ ":discoverable_tests" ]
 
-  # For all configurations other than bringup, add //platform/bundles/tools to
+  # For all configurations other than bringup, add //release/platform/bundles/tools to
   # the discoverable package set, as generally-available platform tools,
   # as all products were including them in discoverable_package_labels
   # anyway.
   if (!use_bringup_assembly) {
-    public_deps += [ "//platform/bundles/tools" ]
+    public_deps += [ "//release/platform/bundles/tools" ]
   }
   assert_no_deps = [
     "//release/validate:config_data_tag",
@@ -2139,7 +2139,7 @@ group("host") {
     # Static analysis tools used by shac should always be built so that
     # `fx format-code` and other static analysis entrypoints can be run on any
     # build configuration.
-    "//platform/bundles/tools/shac:shac_tools",
+    "//release/platform/bundles/tools/shac:shac_tools",
 
     # Host tests for //release/api/client
     "//release/api:tests",
@@ -2149,7 +2149,7 @@ group("host") {
   ]
 
   if (!use_bringup_assembly) {
-    public_deps += [ "//platform/bundles/tools:host_tools" ]
+    public_deps += [ "//release/platform/bundles/tools:host_tools" ]
   }
 
   if (has_board && !smos_boot_build) {

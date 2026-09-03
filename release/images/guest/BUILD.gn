@@ -117,7 +117,7 @@ if (labels.images == "//release/images/bringup") {
     }
     input_bundles = [
       ":main_bundle",
-      "//platform/boards/emulation/virtio",
+      "//release/platform/boards/emulation/virtio",
     ]
   }
 

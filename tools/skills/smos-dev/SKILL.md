@@ -6,7 +6,7 @@ description: "Default mandatory SMOS development workflow based on a gated V-mod
 # SMOS Development
 
 Use this skill for any change under the SMOS checkout, especially changes to
-`zircon/`, `userspace/`, `sdk/`, `platform/products/`, `platform/bundles/`, build scripts, boot images,
+`zircon/`, `userspace/`, `sdk/`, `release/platform/products/`, `release/platform/bundles/`, build scripts, boot images,
 components, or user-space drivers. Read [SMOS.md](../../../sdk/smos/SMOS.md) when the task
 touches product scope, runtime architecture, SDK packaging, or supported
 architectures.

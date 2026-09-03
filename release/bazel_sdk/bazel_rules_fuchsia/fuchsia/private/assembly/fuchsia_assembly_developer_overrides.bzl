@@ -85,7 +85,7 @@ def fuchsia_assembly_developer_overrides_list(name, maps = []):
             name = "my_project_overrides",
             maps = [
                 {
-                    "assembly": "//platform/products/foo:*",
+                    "assembly": "//release/platform/products/foo:*",
                     "overrides": ":foo_assembly_overrides",
                 },
             ]

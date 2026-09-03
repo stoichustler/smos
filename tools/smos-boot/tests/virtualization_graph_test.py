@@ -5,9 +5,9 @@ import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-LINUX_MANAGER = ROOT / "platform/products/smos_boot/virtualization/meta/linux_guest_manager.cml"
-VIRTUALIZATION_BUILD = ROOT / "platform/products/smos_boot/virtualization/BUILD.gn"
-BOOTSTRAP_SHARD = ROOT / "platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml"
+LINUX_MANAGER = ROOT / "release/platform/products/smos_boot/virtualization/meta/linux_guest_manager.cml"
+VIRTUALIZATION_BUILD = ROOT / "release/platform/products/smos_boot/virtualization/BUILD.gn"
+BOOTSTRAP_SHARD = ROOT / "release/platform/products/smos_boot/meta/virtualization.bootstrap_shard.cml"
 CONSOLE_LAUNCHER = ROOT / "userspace/bringup/bin/console-launcher/meta/console-launcher.cml"
 
 

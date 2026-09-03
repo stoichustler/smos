@@ -9,13 +9,13 @@ import unittest
 
 
 SOURCE_ROOT = pathlib.Path(__file__).resolve().parents[3]
-PRODUCT = SOURCE_ROOT / "platform" / "products" / "smos_boot" / "BUILD.gn"
-PRODUCT_GNI = SOURCE_ROOT / "platform" / "products" / "smos_boot.gni"
+PRODUCT = SOURCE_ROOT / "release" / "platform" / "products" / "smos_boot" / "BUILD.gn"
+PRODUCT_GNI = SOURCE_ROOT / "release" / "platform" / "products" / "smos_boot.gni"
 GN = SOURCE_ROOT / "prebuilt" / "third_party" / "gn" / "linux-x64" / "gn"
 ASSEMBLY_TARGET = "//release/images/fuchsia:fuchsia_assembly"
 IMAGE_ASSEMBLER_TARGET = "//release/images/fuchsia:fuchsia.image_assembler"
 PLATFORM_AIB_CATALOG_TARGET = "//release/images/fuchsia:fuchsia.product_assembler"
-PRODUCT_TARGET = "//platform/products/smos_boot:smos_boot"
+PRODUCT_TARGET = "//release/platform/products/smos_boot:smos_boot"
 
 REQUIRED_PRODUCT_SNIPPETS = (
     'feature_set_level = "bootstrap"',
@@ -28,14 +28,14 @@ REQUIRED_PRODUCT_SNIPPETS = (
 )
 
 REQUIRED_PLATFORM_PROVIDERS = (
-    ("//platform/bundles/assembly:console", "//userspace/bringup/bin/console:package"),
+    ("//release/platform/bundles/assembly:console", "//userspace/bringup/bin/console:package"),
     (
-        "//platform/bundles/assembly:console",
+        "//release/platform/bundles/assembly:console",
         "//userspace/bringup/bin/console-launcher:package",
     ),
-    ("//platform/bundles/assembly:component_manager", "//userspace/sys/component_manager:bootfs"),
-    ("//platform/bundles/assembly:embeddable_userdebug", "//zircon/third_party/uapp/dash:bootfs"),
-    ("//platform/bundles/assembly:driver_framework", "//userspace/devices/bin/driver_manager:package"),
+    ("//release/platform/bundles/assembly:component_manager", "//userspace/sys/component_manager:bootfs"),
+    ("//release/platform/bundles/assembly:embeddable_userdebug", "//zircon/third_party/uapp/dash:bootfs"),
+    ("//release/platform/bundles/assembly:driver_framework", "//userspace/devices/bin/driver_manager:package"),
 )
 
 FORBIDDEN_PRODUCT_LABEL_PARTS = (
@@ -75,7 +75,9 @@ class ProductPolicyTest(unittest.TestCase):
                 self.assertNotIn(forbidden, label, label)
 
     def test_shell_is_owned_by_platform_bundles(self) -> None:
-        bundles = (SOURCE_ROOT / "platform" / "bundles" / "assembly" / "BUILD.gn").read_text()
+        bundles = (
+            SOURCE_ROOT / "release" / "platform" / "bundles" / "assembly" / "BUILD.gn"
+        ).read_text()
         development = (
             SOURCE_ROOT
             / "userspace/lib/assembly/platform_configuration/src/subsystems/development.rs"

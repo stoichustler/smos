@@ -5,20 +5,17 @@
 import("//release/assembly/board_configuration.gni")
 
 assert(current_toolchain == default_toolchain,
-       "The SMOS arm64 board is defined only in the default toolchain.")
-assert(current_cpu == "arm64",
-       "The SMOS arm64 board requires an arm64 toolchain.")
+       "The SMOS riscv64 board is defined only in the default toolchain.")
+assert(current_cpu == "riscv64",
+       "The SMOS riscv64 board requires a riscv64 toolchain.")
 
-board_configuration("smos-qemu-arm64") {
-  provided_features = [
-    "fuchsia::driver_framework_v2_support",
-    "fuchsia::real_time_clock",
-  ]
+board_configuration("smos-qemu-riscv64") {
+  provided_features = [ "fuchsia::driver_framework_v2_support" ]
 
-  input_bundles = [ "//platform/boards/smos-server-drivers:server" ]
+  input_bundles = [ "//release/platform/boards/smos-server-drivers:server" ]
 
   hardware_info = {
-    name = "smos-qemu-arm64"
+    name = "smos-qemu-riscv64"
     product_id = 1
     vendor_id = 1
     revision = 1

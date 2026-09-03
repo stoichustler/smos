@@ -1,6 +1,6 @@
 # Platform directory guide
 
-The `platform/` tree contains SMOS board definitions, reusable build
+The `release/platform/` tree contains SMOS board definitions, reusable build
 bundles, development guidance, and product assembly configurations. This page
 is a directory-level map; the linked `BUILD.gn`, `.gni`, and README files are
 the authoritative implementation details.
