@@ -12,7 +12,7 @@ set scrolloff=10
 set splitbelow
 set splitright
 " TokyoNight theme; transparent areas inherit terminal opacity
-let g:tokyonight_style = 'night' " available: night, storm
+let g:tokyonight_style = 'storm' " available: night, storm
 let g:tokyonight_enable_italic = 0
 let g:tokyonight_transparent_background = 1
 set termguicolors
@@ -103,9 +103,9 @@ set guioptions-=T
 set guioptions-=m
 set report=0
 set cursorline
-" Popup completion for Ex commands and insert-mode completion
+" Popup completion for Ex commands and file paths (for example, :write)
 set wildmenu
-set wildmode=full
+set wildmode=longest:full,full
 set wildoptions=pum
 set completeopt=menu,preview,longest
 set previewpopup=height:20,width:80
@@ -139,13 +139,50 @@ function! BeauStatusMode() abort
     return toupper(l:mode)
 endfunction
 
+function! BeauGitBranch() abort
+    if &buftype !=# '' || empty(expand('%:p'))
+        return ''
+    endif
+
+    let l:path = fnamemodify(expand('%:p'), ':p')
+    let l:dir = fnamemodify(l:path, ':h')
+    if get(b:, 'beau_git_branch_dir', '') !=# l:dir
+        let b:beau_git_branch_dir = l:dir
+        let b:beau_git_branch = ''
+        let l:root = systemlist(
+            \ 'git -C ' . shellescape(l:dir)
+            \ . ' rev-parse --show-toplevel 2>/dev/null')
+        if v:shell_error == 0 && !empty(l:root)
+            let l:branch = systemlist(
+                \ 'git -C ' . shellescape(l:root[0])
+                \ . ' symbolic-ref --quiet --short HEAD 2>/dev/null')
+            if v:shell_error != 0 || empty(l:branch)
+                let l:branch = systemlist(
+                    \ 'git -C ' . shellescape(l:root[0])
+                    \ . ' rev-parse --short HEAD 2>/dev/null')
+            endif
+            if !empty(l:branch)
+                let b:beau_git_branch = trim(l:branch[0])
+            endif
+        endif
+    endif
+    return empty(get(b:, 'beau_git_branch', ''))
+        \ ? '' : ' 🅑  ' . b:beau_git_branch
+endfunction
+
+function! s:InvalidateGitBranch() abort
+    unlet! b:beau_git_branch_dir b:beau_git_branch
+endfunction
+
 function! s:ApplyStatuslineColors() abort
     highlight BeauStatusMode cterm=bold ctermfg=0 ctermbg=12
         \ gui=bold guifg=#1a1b26 guibg=#7aa2f7
     highlight BeauStatusFile cterm=NONE ctermfg=15 ctermbg=8
         \ gui=NONE guifg=#c0caf5 guibg=#32344a
-    highlight BeauStatusMeta cterm=NONE ctermfg=7 ctermbg=0
-        \ gui=NONE guifg=#a9b1d6 guibg=#2a2b3d
+    highlight BeauStatusGit cterm=bold ctermfg=10 ctermbg=8
+        \ gui=bold guifg=#9ece6a guibg=#32344a
+    highlight BeauStatusMeta cterm=bold ctermfg=0 ctermbg=12
+        \ gui=bold guifg=#1a1b26 guibg=#7aa2f7
 endfunction
 
 call s:ApplyStatuslineColors()
@@ -155,12 +192,18 @@ augroup beau_statusline_colors
     autocmd ColorScheme * call <SID>ApplyStatuslineColors()
 augroup END
 
+augroup beau_git_branch_status
+    autocmd!
+    autocmd BufEnter,DirChanged,FocusGained * call <SID>InvalidateGitBranch()
+augroup END
+
 set statusline=
 let &statusline .= '%#BeauStatusMode# BEAU:%{BeauStatusMode()} '
 set statusline+=%#BeauStatusFile#\ %F%<
+let &statusline .= '%#BeauStatusGit#%{BeauGitBranch()}'
 set statusline+=\ %h%m%r%w\ %S
 set statusline+=%=
-let &statusline .= '%#BeauStatusMeta# %y %l:%c %p%% '
+let &statusline .= '🅡  %#BeauStatusMeta# %y %l:%c %p%% '
 
 if exists('s:statusline_timer')
     call timer_stop(s:statusline_timer)
@@ -276,6 +319,28 @@ function! s:ConfigureFloatingTerminalKeys() abort
     call win_execute(s:floating_terminal.win,
         \ 'tnoremap <silent> <buffer> <C-q> '
         \ . '<C-\><C-N><Cmd>FloatTerminal<CR>')
+    " Keep mouse-wheel scrolling without showing a popup scrollbar.
+    call win_execute(s:floating_terminal.win,
+        \ 'tnoremap <silent> <buffer> <ScrollWheelUp> '
+        \ . '<C-\><C-N>3k')
+    call win_execute(s:floating_terminal.win,
+        \ 'tnoremap <silent> <buffer> <ScrollWheelDown> '
+        \ . '<C-\><C-N>3j')
+    call win_execute(s:floating_terminal.win,
+        \ 'tnoremap <silent> <buffer> <S-ScrollWheelUp> '
+        \ . '<C-\><C-N>15k')
+    call win_execute(s:floating_terminal.win,
+        \ 'tnoremap <silent> <buffer> <S-ScrollWheelDown> '
+        \ . '<C-\><C-N>15j')
+    " Keep handling the wheel while the terminal is in Terminal-Normal mode.
+    call win_execute(s:floating_terminal.win,
+        \ 'nnoremap <silent> <buffer> <ScrollWheelUp> 3k')
+    call win_execute(s:floating_terminal.win,
+        \ 'nnoremap <silent> <buffer> <ScrollWheelDown> 3j')
+    call win_execute(s:floating_terminal.win,
+        \ 'nnoremap <silent> <buffer> <S-ScrollWheelUp> 15k')
+    call win_execute(s:floating_terminal.win,
+        \ 'nnoremap <silent> <buffer> <S-ScrollWheelDown> 15j')
 endfunction
 
 function! s:ToggleFloatingTerminal() abort
@@ -294,7 +359,7 @@ function! s:ToggleFloatingTerminal() abort
         let s:floating_terminal.buf = term_start(&shell, {
             \ 'hidden': 1,
             \ 'term_finish': 'close',
-            \ 'term_name': 'BEAU Terminal',
+            \ 'term_name': ' 🅣  HUSTLE ',
             \ 'term_highlight': 'BeauTerminal',
             \ 'term_rows': l:size.minheight,
             \ 'term_cols': l:size.minwidth
@@ -304,17 +369,21 @@ function! s:ToggleFloatingTerminal() abort
             return
         endif
         call setbufvar(s:floating_terminal.buf, '&bufhidden', 'hide')
+        " Keep enough terminal history for mouse-wheel review.
+        call setbufvar(s:floating_terminal.buf, '&termwinscroll', 2000)
         call term_setkill(s:floating_terminal.buf, 'kill')
     endif
 
     let l:options = extend(l:size, {
         \ 'pos': 'center',
         \ 'border': [1, 1, 1, 1],
+        \ 'borderchars': ['─', '│', '─', '│', '┌', '┐', '┘', '└'],
         \ 'padding': [0, 1, 0, 1],
-        \ 'title': ' BEAU Terminal ',
-        \ 'close': 'button',
+        \ 'title': ' 🅣  HUSTLE ',
+        \ 'close': 'none',
         \ 'drag': 1,
         \ 'resize': 1,
+        \ 'scrollbar': 0,
         \ 'highlight': 'BeauTerminal',
         \ 'borderhighlight': ['BeauTerminalBorder'],
         \ 'callback': function('<SID>FloatingTerminalClosed')
@@ -438,6 +507,289 @@ endfunction
 " Recreate commands safely when reloading ~/.vimrc.
 call s:DefineRgCommands()
 
+" Narrow right-side Git change overview.  Each source line maps to one
+" marker, so the overview stays aligned while the source window scrolls.
+if !exists('s:git_minimap')
+    let s:git_minimap = {
+        \ 'win': -1,
+        \ 'buf': -1,
+        \ 'source_win': -1,
+        \ 'source_buf': -1,
+        \ 'matches': [],
+        \ 'refreshing': 0
+        \ }
+endif
+
+function! s:ApplyGitMinimapColors() abort
+    highlight BeauGitMinimap cterm=NONE ctermfg=NONE ctermbg=NONE
+        \ gui=NONE guifg=NONE guibg=NONE
+    highlight BeauGitMinimapAdd cterm=bold ctermfg=10 ctermbg=NONE
+        \ gui=bold guifg=#9ece6a guibg=NONE
+    highlight BeauGitMinimapChange cterm=bold ctermfg=11 ctermbg=NONE
+        \ gui=bold guifg=#e0af68 guibg=NONE
+    highlight BeauGitMinimapDelete cterm=bold ctermfg=9 ctermbg=NONE
+        \ gui=bold guifg=#f7768e guibg=NONE
+endfunction
+
+function! s:GitMinimapValid() abort
+    if s:git_minimap.win <= 0 || !bufexists(s:git_minimap.buf)
+        return 0
+    endif
+    try
+        return get(popup_getpos(s:git_minimap.win), 'visible', 0)
+    catch
+        return 0
+    endtry
+endfunction
+
+function! s:GitMinimapClose() abort
+    if s:GitMinimapValid()
+        call popup_close(s:git_minimap.win)
+    endif
+    let s:git_minimap.win = -1
+    let s:git_minimap.buf = -1
+    let s:git_minimap.source_win = -1
+    let s:git_minimap.source_buf = -1
+    let s:git_minimap.matches = []
+endfunction
+
+function! s:GitMinimapPopupOptions() abort
+    let l:height = max([1, &lines - 2])
+    return {
+        \ 'line': 1,
+        \ 'col': &columns,
+        \ 'minwidth': 1,
+        \ 'maxwidth': 1,
+        \ 'minheight': l:height,
+        \ 'maxheight': l:height,
+        \ 'border': [0, 0, 0, 0],
+        \ 'padding': [0, 0, 0, 0],
+        \ 'highlight': 'BeauGitMinimap',
+        \ 'mapping': 0,
+        \ 'scrollbar': 0,
+        \ 'wrap': 0,
+        \ 'callback': function('<SID>GitMinimapClosed')
+        \ }
+endfunction
+
+function! s:GitMinimapClosed(id, result) abort
+    if s:git_minimap.win == a:id
+        let s:git_minimap.win = -1
+    endif
+endfunction
+
+function! s:ResizeGitMinimap() abort
+    if !s:GitMinimapValid()
+        return
+    endif
+    call popup_setoptions(s:git_minimap.win, s:GitMinimapPopupOptions())
+    call s:GitMinimapSync()
+endfunction
+
+function! s:GitMinimapSourceInfo() abort
+    if &buftype !=# '' || empty(expand('%:p')) || !filereadable(expand('%:p'))
+        return {}
+    endif
+
+    let l:path = fnamemodify(expand('%:p'), ':p')
+    let l:root_lines = systemlist(
+        \ 'git -C ' . shellescape(fnamemodify(l:path, ':h'))
+        \ . ' rev-parse --show-toplevel 2>/dev/null')
+    if v:shell_error != 0 || empty(l:root_lines)
+        return {}
+    endif
+
+    let l:root = fnamemodify(l:root_lines[0], ':p')
+    if strpart(l:path, 0, strlen(l:root)) !=# l:root
+        return {}
+    endif
+    let l:relative = strpart(l:path, strlen(l:root))
+    let l:relative = substitute(l:relative, '^[/\\]', '', '')
+    let l:tracked = systemlist(
+        \ 'git -C ' . shellescape(l:root) . ' ls-files --error-unmatch -- '
+        \ . shellescape(l:relative) . ' 2>/dev/null')
+    return {
+        \ 'path': l:path,
+        \ 'root': l:root,
+        \ 'relative': l:relative,
+        \ 'untracked': v:shell_error != 0 || empty(l:tracked)
+        \ }
+endfunction
+
+function! s:GitMinimapMarks(info, line_count) abort
+    let l:count = max([1, a:line_count])
+    let l:marks = repeat([' '], l:count)
+    if a:info.untracked
+        return repeat(['+'], l:count)
+    endif
+
+    let l:diff = systemlist(
+        \ 'git -C ' . shellescape(a:info.root)
+        \ . ' diff --no-color --unified=0 HEAD -- '
+        \ . shellescape(a:info.relative) . ' 2>/dev/null')
+    if empty(l:diff)
+        return l:marks
+    endif
+
+    for l:diff_line in l:diff
+        let l:hunk = matchlist(l:diff_line,
+            \ '^@@ -\(\d\+\)\%([,]\(\d\+\)\)\?'
+            \ . ' +\(\d\+\)\%([,]\(\d\+\)\)\? @@')
+        if empty(l:hunk)
+            continue
+        endif
+        let l:old_count = empty(l:hunk[2]) ? 1 : str2nr(l:hunk[2])
+        let l:new_start = str2nr(l:hunk[3])
+        let l:new_count = empty(l:hunk[4]) ? 1 : str2nr(l:hunk[4])
+        if l:new_count == 0
+            let l:index = max([1, min([l:count, l:new_start])])
+            let l:marks[l:index - 1] = '-'
+        else
+            let l:mark = l:old_count > 0 ? '~' : '+'
+            let l:last = min([l:count, l:new_start + l:new_count - 1])
+            if l:new_start <= l:last
+                for l:index in range(l:new_start, l:last)
+                    let l:marks[l:index - 1] = l:mark
+                endfor
+            endif
+        endif
+    endfor
+    return l:marks
+endfunction
+
+function! s:GitMinimapCreate() abort
+    let l:buf = bufnr('__BEAU_GIT_MINIMAP__')
+    if l:buf <= 0
+        let l:buf = bufadd('__BEAU_GIT_MINIMAP__')
+        let l:shortmess = &shortmess
+        try
+            set shortmess+=F
+            silent! call bufload(l:buf)
+        finally
+            let &shortmess = l:shortmess
+        endtry
+    endif
+    let s:git_minimap.buf = l:buf
+    call setbufvar(l:buf, 'beau_git_minimap', 1)
+    call setbufvar(l:buf, '&buftype', 'nofile')
+    call setbufvar(l:buf, '&bufhidden', 'hide')
+    call setbufvar(l:buf, '&swapfile', 0)
+    call setbufvar(l:buf, '&buflisted', 0)
+    call setbufvar(l:buf, '&number', 0)
+    call setbufvar(l:buf, '&relativenumber', 0)
+    call setbufvar(l:buf, '&signcolumn', 'no')
+    call setbufvar(l:buf, '&foldcolumn', 0)
+    call setbufvar(l:buf, '&wrap', 0)
+    call setbufvar(l:buf, '&list', 0)
+    call setbufvar(l:buf, '&spell', 0)
+    call setbufvar(l:buf, '&readonly', 1)
+    call setbufvar(l:buf, '&modifiable', 0)
+    call setbufvar(l:buf, '&statusline', '')
+    let s:git_minimap.source_win = win_getid()
+    let s:git_minimap.source_buf = bufnr('%')
+    let s:git_minimap.win = popup_create(l:buf, s:GitMinimapPopupOptions())
+endfunction
+
+function! s:GitMinimapRender(marks) abort
+    let l:buf = s:git_minimap.buf
+    let l:win = s:git_minimap.win
+    for l:match_id in s:git_minimap.matches
+        silent! call matchdelete(l:match_id, l:win)
+    endfor
+    let s:git_minimap.matches = []
+
+    " Render changed lines as colored blocks instead of editable text.
+    let l:display = map(copy(a:marks), 'v:val ==# " " ? " " : "◂"')
+    call setbufvar(l:buf, '&modifiable', 1)
+    call setbufline(l:buf, 1, l:display)
+    let l:old_count = getbufinfo(l:buf)[0].linecount
+    if l:old_count > len(l:display)
+        call deletebufline(l:buf, len(l:display) + 1, l:old_count)
+    endif
+    call setbufvar(l:buf, '&modifiable', 0)
+
+    let l:positions = {'+': [], '~': [], '-': []}
+    for l:index in range(0, len(a:marks) - 1)
+        if has_key(l:positions, a:marks[l:index])
+            call add(l:positions[a:marks[l:index]], [l:index + 1])
+        endif
+    endfor
+    let l:groups = {'+': 'BeauGitMinimapAdd',
+        \ '~': 'BeauGitMinimapChange', '-': 'BeauGitMinimapDelete'}
+    for l:mark in keys(l:positions)
+        if !empty(l:positions[l:mark])
+            call add(s:git_minimap.matches,
+                \ matchaddpos(l:groups[l:mark], l:positions[l:mark], 10, -1,
+                \ {'window': l:win}))
+        endif
+    endfor
+endfunction
+
+function! s:GitMinimapSync() abort
+    if s:git_minimap.refreshing || !s:GitMinimapValid()
+        return
+    endif
+    if win_getid() !=# s:git_minimap.source_win
+        return
+    endif
+    let l:top = line('w0')
+    if get(popup_getpos(s:git_minimap.win), 'firstline', -1) ==# l:top
+        return
+    endif
+    let s:git_minimap.refreshing = 1
+    call popup_setoptions(s:git_minimap.win, {'firstline': l:top})
+    let s:git_minimap.refreshing = 0
+endfunction
+
+function! s:GitMinimapRefresh() abort
+    if s:git_minimap.refreshing || get(b:, 'beau_git_minimap', 0)
+        return
+    endif
+    " NERDTree owns its explorer buffer; do not hide the minimap when it
+    " receives focus alongside the source window.
+    if &filetype ==# 'nerdtree' || get(b:, 'NERDTree', 0)
+        return
+    endif
+    if bufname('%') =~# '^NERD_tree_'
+        return
+    endif
+    " NERDTree briefly enters an unnamed scratch buffer while opening.
+    if &buftype !=# '' || empty(expand('%:p'))
+        return
+    endif
+    let l:info = s:GitMinimapSourceInfo()
+    if empty(l:info)
+        if s:GitMinimapValid()
+            call s:GitMinimapClose()
+        endif
+        return
+    endif
+
+    let s:git_minimap.refreshing = 1
+    if !s:GitMinimapValid()
+        call s:GitMinimapCreate()
+    else
+        call popup_setoptions(s:git_minimap.win, s:GitMinimapPopupOptions())
+        let s:git_minimap.source_win = win_getid()
+        let s:git_minimap.source_buf = bufnr('%')
+    endif
+    let l:marks = s:GitMinimapMarks(l:info, line('$'))
+    call s:GitMinimapRender(l:marks)
+    let s:git_minimap.refreshing = 0
+    call s:GitMinimapSync()
+endfunction
+
+call s:ApplyGitMinimapColors()
+augroup beau_git_minimap
+    autocmd!
+    autocmd ColorScheme * call <SID>ApplyGitMinimapColors()
+    autocmd VimEnter * call <SID>GitMinimapRefresh()
+    autocmd BufEnter * call <SID>GitMinimapRefresh()
+    autocmd BufWritePost * call <SID>GitMinimapRefresh()
+    autocmd CursorMoved,CursorMovedI,WinScrolled * call <SID>GitMinimapSync()
+    autocmd VimResized * call <SID>ResizeGitMinimap()
+augroup END
+
 " Space is the leader for project-style commands
 let mapleader=' '
 set timeoutlen=400
@@ -455,13 +807,58 @@ let g:netrw_hide      = 1
 let g:netrw_banner    = 0
 let g:netrw_keepdir   = 1
 let g:netrw_sort_by   = "name"
+
+" Copy the selected NERDTree node path and paste it into an editing buffer.
+function! s:NERDTreeCopyPath(absolute) abort
+    try
+        let l:node = g:NERDTreeFileNode.GetSelected()
+        let l:path = l:node.path.str()
+    catch
+        echohl WarningMsg
+        echomsg 'NERDTree: no file or directory is selected'
+        echohl None
+        return
+    endtry
+
+    let l:path = a:absolute ? fnamemodify(l:path, ':p') : fnamemodify(l:path, ':.')
+    " Keep a private register as a clipboard-independent fallback.
+    call setreg('p', l:path, 'v')
+    if has('clipboard')
+        call setreg('+', l:path, 'v')
+    endif
+    echomsg 'Path copied: ' . l:path
+endfunction
+
+function! s:PasteNERDTreePath() abort
+    if empty(getreg('p'))
+        echohl WarningMsg
+        echomsg 'No NERDTree path has been copied yet'
+        echohl None
+        return
+    endif
+    normal! "pp
+endfunction
+
+function! s:DefineNERDTreePathMappings() abort
+    nnoremap <silent><buffer> yr :call <SID>NERDTreeCopyPath(0)<CR>
+    nnoremap <silent><buffer> ya :call <SID>NERDTreeCopyPath(1)<CR>
+endfunction
+
+augroup beau_nerdtree_paths
+    autocmd!
+    autocmd FileType nerdtree call <SID>DefineNERDTreePathMappings()
+augroup END
+
 " Paste directly from the system clipboard
 nnoremap <silent> <C-p> "+p
+" Paste the last path copied from NERDTree (works without a clipboard provider).
+nnoremap <silent> <Leader>ip :call <SID>PasteNERDTreePath()<CR>
 " File explorer and workspace search
 nnoremap <silent> <Leader>e :NERDTreeToggle<CR>
 nnoremap <silent> <Leader>f <Nop>
 xnoremap <silent> <Leader>f <Nop>
-nnoremap <silent> <Leader>fe :FZF<CR>
+" File picker with the configured right-side preview window.
+nnoremap <silent> <Leader>fe :Files<CR>
 nnoremap <silent> <Leader>fg :Rg<CR>
 nnoremap <silent> <Leader>fw :call <SID>LiveRgWord()<CR>
 xnoremap <silent> <Leader>fg :<C-u>call <SID>LiveRgVisual()<CR>

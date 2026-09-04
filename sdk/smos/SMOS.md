@@ -420,6 +420,41 @@ bootstrap message, `sp` is the ABI-compliant initial stack pointer, and
 
 #### 4. Userspace `userboot` loads `userboot.next`
 
+##### Focused `userboot` to `component_manager` launch flow
+
+```text
+userboot::_start(hv)
+  └──► Bootstrap(hv)
+        ├──► Extract kernel bootstrap handles
+        ├──► GetBootfsFromZbi() + GetOptionsFromZbi()
+        │      └──► userboot.next (default: bin/component_manager+--boot)
+        ├──► CreateChildContext("bin/component_manager")
+        ├──► elf_load_bootfs()
+        │      └──► map component_manager and PT_INTERP from BootFS
+        ├──► elf_load_vdso() + map initial stack
+        ├──► build zx_proc_args_t
+        │      ├──► PA_VMO_BOOTFS
+        │      ├──► PA_USER0: fuchsia.boot.Userboot
+        │      └──► /svc and resource handles
+        ├──► zx_channel_write(child bootstrap message)
+        └──► zx_process_start()
+               └──► component_manager::main()
+                      ├──► parse --boot
+                      │      └──► /boot/config/component_manager
+                      │           + fuchsia-boot:///root#meta/root.cm
+                      ├──► BuiltinEnvironmentBuilder::build()
+                      │      ├──► consume PA_USER0 Userboot messages
+                      │      └──► host BootFS as /boot
+                      └──► run_root()
+                             └──► Model::start()
+                                    └──► root.ensure_started(...)
+```
+
+This focused flow separates the two responsibilities at the hand-off:
+`userboot` maps and starts the first ELF from BootFS, while `component_manager`
+consumes the startup handles and `fuchsia.boot.Userboot` messages before starting
+the component tree rooted at `fuchsia-boot:///root#meta/root.cm`.
+
 The first user-space instruction is at
 `zircon/kernel/lib/userabi/userboot/start.cc:568`: `_start(arg)` calls
 `Bootstrap(zx::channel{arg})`. `Bootstrap` reads the kernel message, decompresses
@@ -677,6 +712,181 @@ This path is separate from a kernel console command. A command sent through
 `k ...` travels through DebugBroker and `console_run_script`; it does not enter
 the EL0 `svc` syscall table. Likewise, `zx_smc_call` executes an SMC conduit on
 arm64; it is not an HVC call to the EL2 monitor.
+
+#### vDSO mapping and process use
+
+The vDSO is a kernel-provided `ET_DYN` ELF image, not a file that each process
+opens from `/boot`. Userland links against an ABI stub, while the kernel creates
+the runtime vDSO VMO; `userboot` or an ELF runner maps that VMO into each process
+before its first thread runs.
+The following framework separates the build-time ABI, runtime owner, process
+creator, and user-space consumer.
+
+```text
+╭────────────────────────────────────────────────────────────╮
+│ Build-time ABI                                             │
+│ zircon/vdso/*.fidl -> zither -> headers, syscall numbers,  │
+│ ABI stub / zircon.ifs                                      │
+╰──────────────────────────────┬─────────────────────────────╯
+                               │ ABI must match
+                               ▼
+╭────────────────────────────────────────────────────────────╮
+│ Kernel vDSO runtime                                        │
+│ libzircon.so (ET_DYN) -> direct code, syscall veneers,     │
+│ DATA_TIME_VALUES, DATA_CONSTANTS, stable/next/test variants│
+│ VDso::Create() verifies, initializes, and patches the VMOs │
+╰───────────────┬───────────────────────────┬────────────────╯
+                │ PA_VMO_VDSO               │ kernel writable alias
+                ▼                           ▼
+╭──────────────────────────╮       ╭─────────────────────────╮
+│ Process creator          │       │ Kernel maintenance      │
+│ userboot / ELF runner    │       │ timer and suspend logic │
+│ map VMO, compute base,   │       │ updates shared offsets  │
+│ call zx_process_start()  │       │ and validates syscall PC│
+╰──────────────┬───────────╯       ╰──────────────┬──────────╯
+               │ vdso_base                        │
+               ▼                                  │
+╭─────────────────────────────────────────────────▼──────────╮
+│ libc / dynamic linker                                      │
+│ Parses the already mapped ELF and registers it as <vDSO>.  │
+│ zx_* references can then resolve to vDSO symbols.          │
+╰──────────────────────────────┬─────────────────────────────╯
+                               │ function call
+                               ▼
+╭────────────────────────────────────────────────────────────╮
+│ User component                                             │
+│ Direct user-mode implementation, or a vDSO syscall veneer  │
+│ that enters the kernel through the architecture trap.      │
+╰────────────────────────────────────────────────────────────╯
+```
+
+The kernel builds the runtime image as `libzircon.so` in
+`zircon/kernel/lib/userabi/vdso/BUILD.gn`. User programs link against the
+`zircon.ifs` ABI description; the runtime image is supplied by the kernel and
+is not a normal user package. `VDso::Create()` in
+`zircon/kernel/lib/userabi/vdso.cc:358` checks the build ID, fills the constants
+and time-value windows, selects platform-specific implementations, and creates
+the vDSO variants.
+
+An individual process has a VMAR tree rather than a fixed, linear layout. The
+following is a typical memory map; addresses and ordering are illustrative
+because ASLR and VMAR allocation change them at runtime.
+
+```text
+low addresses
+┌──────────────────────────────────────────────────────────┐
+│ Main ELF PT_LOAD segments                                │
+│ R-- rodata / dynamic metadata   R-X text   RW- data/bss  │
+├──────────────────────────────────────────────────────────┤
+│ Dynamic linker and libc                                  │
+│ R-- read-only data              R-X code   RW- state     │
+├──────────────────────────────────────────────────────────┤
+│ Other shared-library mappings                            │
+│ R-- / R-X / RW- segments                                 │
+├──────────────────────────────────────────────────────────┤
+│ vDSO rodata                                              │
+│ R-- ELF metadata, symbols, DATA_TIME_VALUES, constants   │
+├──────────────────────────────────────────────────────────┤
+│ vDSO code                                                │
+│ R-X direct zx_* code and syscall veneers                 │
+├──────────────────────────────────────────────────────────┤
+│ Anonymous and VMO mappings                               │
+│ R-- / RW- / R-X regions created by the process           │
+├──────────────────────────────────────────────────────────┤
+│ TLS and thread stacks                                    │
+│ RW- thread-local state, stack, and optional guard region │
+└──────────────────────────────────────────────────────────┘
+high addresses
+```
+
+The vDSO VMO is mapped as two protected ranges. `RoDso::Map()` maps the
+read-only range `[0, VDSO_CODE_START)` with `R--` permissions and the code range
+`[VDSO_CODE_START, size)` with `R-X` permissions. The kernel records the code
+mapping, permits only one valid vDSO code mapping per process, and rejects VMAR
+operations that would overwrite or remove it. See
+`zircon/kernel/lib/userabi/rodso.cc:14` and
+`zircon/kernel/vm/vm_address_region.cc:196`.
+
+The mapping and startup sequence is:
+
+```text
+kernel handoff
+ │
+ ╰──► VDso::Create(next_vmo, variants, time_values)
+       ├──► verify build ID
+       ├──► initialize DATA_CONSTANTS and DATA_TIME_VALUES
+       ├──► patch direct/syscall time implementations
+       └──► publish PA_VMO_VDSO handles
+             │
+             ╰──► userboot or ELF runner
+                   ├──► create process and root VMAR
+                   ├──► parse vDSO ELF program headers
+                   ├──► map rodata as R--
+                   ├──► map code as R-X
+                   ├──► compute vdso_base
+                   └──► zx_process_start(..., vdso_base)
+                         │
+                         ╰──► libc / ld.so
+                               ├──► parse the mapped ET_DYN image
+                               ├──► register it as <vDSO>
+                               └──► resolve zx_* references
+```
+
+`PA_VMO_VDSO` is a VMO handle used by a process creator to map vDSO into a new
+process. `vdso_base` is a separate numeric argument to `zx_process_start()`;
+it identifies the ELF load base, and the kernel derives the code address from
+that base plus `VDSO_CODE_START`. For the initial `userboot` process, the
+kernel maps userboot and its vDSO together in `UserbootImage::Map()` at
+`zircon/kernel/lib/userabi/userboot.cc:117`. When `userboot` starts
+`component_manager`, `elf_load_vdso()` maps the vDSO into the child and
+`start.cc:375-376` passes the resulting base to `zx_process_start()`.
+
+The dynamic linker receives this base through the process entry ABI. Musl's
+`__dls2()` treats the already mapped image as a preloaded DSO named `<vDSO>`;
+it reads the ELF dynamic section and symbol table without opening a file. This
+is why a normal call such as `zx_clock_get_monotonic()` can use the vDSO even
+though no `/boot/libzircon.so` lookup occurs.
+
+There are two execution paths after symbol resolution:
+
+```text
+zx_* call from application
+ │
+ ├──► direct vDSO implementation
+ │     ├──► read hardware counter or vDSO data page
+ │     ├──► apply the kernel-provided conversion values
+ │     └──► return without an EL0-to-kernel transition
+ │
+ ╰──► vDSO syscall veneer
+       ├──► load syscall number and arguments
+       ├──► execute SVC / ecall / syscall
+       ├──► kernel checks the PC against ValidSyscallPC
+       ├──► dispatch typed kernel syscall implementation
+       └──► return status and results to user mode
+```
+
+For example, `zx_clock_get_monotonic()` normally uses
+`DATA_TIME_VALUES` and `fasttime` to transform ticks in user mode. If the
+platform does not expose the tick counter to user mode, or boot options force a
+syscall, `VDsoMutator` redirects the exported symbol to an alternate
+implementation that obtains ticks from the kernel. The kernel can update the
+monotonic offset through `VDso::SetMonotonicTicksOffset()` after suspend and
+resume while the user mapping remains read-only.
+
+The vDSO mapping can be inspected through the standard process-map interfaces:
+
+- `zx_object_get_info(process, ZX_INFO_PROCESS_MAPS, ...)` returns the Aspace,
+  VMAR, and mapping tree, including base, size, MMU permissions, and backing VMO
+  koid. The Rust equivalent is `Process::info_maps_vec()`.
+- The `vmaps` utility (`/boot/bin/vmaps <process-koid>`, when included in the
+  image) prints `R--`, `R-X`, and `RW-` mappings with their addresses and VMO
+  names.
+- `ZX_PROP_PROCESS_VDSO_BASE_ADDRESS` returns the process's vDSO ELF base, or
+  zero if no vDSO mapping exists.
+
+These observations should be correlated: the property identifies the ELF base,
+while `ZX_INFO_PROCESS_MAPS` shows the separate `R--` and `R-X` mappings and
+their VMAR ownership.
 
 <img src="assets/kernel/vdso_loading.png" alt="smos" width="750">
 
