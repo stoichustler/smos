@@ -199,11 +199,11 @@ augroup END
 
 set statusline=
 let &statusline .= '%#BeauStatusMode# BEAU:%{BeauStatusMode()} '
-set statusline+=%#BeauStatusFile#\ %F%<
+set statusline+=%#BeauStatusFile#\ %f%<
 let &statusline .= '%#BeauStatusGit#%{BeauGitBranch()}'
 set statusline+=\ %h%m%r%w\ %S
 set statusline+=%=
-let &statusline .= '🅡  %#BeauStatusMeta# %y %l:%c %p%% '
+let &statusline .= '🅡  %#BeauStatusMeta# %{empty(&filetype) ? "" : "FILE(" . &filetype . ")"} %l:%c %p%% '
 
 if exists('s:statusline_timer')
     call timer_stop(s:statusline_timer)

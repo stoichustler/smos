@@ -105,11 +105,8 @@ The AArch64 ISA provides 31 general-purpose registers, `x0` through `x30`.
 `x30` is the link register, and `sp` is the stack pointer.  AArch64 stacks
 must remain 128-bit aligned at every public call boundary.
 
-<img src="assets/arm64/Arm64_program_registers.png" alt="AArch64 program registers" width="750">
+<img src="assets/arm64/ARM64_program_registers.png" alt="AArch64 program registers" width="750">
 
-The complete instruction reference is available in
-[`ARM_instruction_set.pdf`](assets/arm64/ARM_instruction_set.pdf).  The
-following instructions occur frequently in boot and kernel code:
 
 ### Bit manipulation
 
@@ -261,6 +258,40 @@ The three architectural barriers have different guarantees:
 | `DMB` | Orders explicit memory accesses around the barrier. | Publish a ring-buffer entry before an IRQ or doorbell. |
 | `DSB` | Waits until selected memory effects are complete. | Finish cache maintenance before handing a buffer to DMA. |
 | `ISB` | Flushes the instruction stream and synchronizes execution context. | Apply a new translation, control, or exception-vector setting. |
+
+> **Memory barrier** is the general term for an instruction which explicitly forces
+> some form of **ordering**, **synchronization**, or **restriction to memory accesses**.
+>
+>  **Observers** can observe **memory accesses**.
+>
+> • The instruction interface of the core, typically called the Instruction Fetch Unit (`IFU`)
+> • The data interface, typically called the Load Store Unit (`LSU`)
+> • The MMU table walk unit
+>
+> A write to memory is observed when it reaches a point in the memory system in which
+> it becomes visible. When it is visible, it is coherent to all the Observers in the
+> specified Shareability domain, as specified in the memory barrier instruction. If a
+> PE writes to a memory location, the write is observable if another PE would see the
+> updated value if it read the same location.
+>
+> The **Data Memory Barrier** (`DMB`) prevents the reordering of specified explicit data
+> accesses across the barrier instruction. All explicit data load or store instructions,
+> which are executed by the PE in program order before the `DMB`, are observed by all
+> Observers within a specified Shareability domain before the data accesses after the
+> `DMB` in program order.
+>
+> A `DSB` is a memory barrier that ensures that those memory accesses that occur before
+> the `DSB` have completed before the completion of the `DSB` instruction.
+>
+> A `DSB` that is executed by a PE completes when:
+> • All explicit memory accesses of the required access types appear in program order
+>   before the `DSB` are complete for the set of observers in the required Shareability
+>   domain.
+> • If the argument specified in the `DSB` is reads and writes, then all cache maintenance
+>   instructions and all TLB maintenance instructions that are issued by the PE before
+>   the `DSB` are complete for the required Shareability domain.
+
+<img src="assets/arm64/ARM_DSB_DMB_arguments.png" alt="Memory Barriers" width="750">
 
 `DMB` does not wait for a peripheral to finish, and `DSB` does not make a
 non-atomic read/modify/write sequence atomic.  Use acquire/release atomics or

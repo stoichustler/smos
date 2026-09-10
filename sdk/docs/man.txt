@@ -1,4 +1,4 @@
-[SMOS Manual]
+[SMOS MANUAL 2026/09/10]
 ──────────────────────────────────────────────────────────────────────────────────
 
 SMOS is a console-only Fuchsia/Zircon server profile for arm64 and riscv64.

@@ -6,11 +6,12 @@ primitives, component and driver frameworks, QEMU console/block/RTC/random
 devices, virtio socket, and the arm64 virtualization host stack.
 
 ```text
-
- .d888b,  88bd8b,d88b  d8888b  .d888b,
- ?8b,     88P'`?8P'?8bd8P' ?88 ?8b,
-   `?8b  d88  d88  88P88b  d88   `?8b
-`?888P' d88' d88'  88b`?8888P'`?888P'
+       )
+ (    (     (  (
+ )\   )\  ' )\ )\
+((_)_((_)) ((_|(_)
+(_-< '  \() _ (_-<
+/__/_|_|_|\___/__/
 
 ```
 
