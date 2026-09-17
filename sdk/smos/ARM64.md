@@ -189,7 +189,7 @@ descriptors directly.
 
 ### TLBs and translation context
 
-The Translation Lookaside Buffer (TLB) caches recent virtual-to-physical
+The Translation Lookaside Buffer (`TLB`) caches recent virtual-to-physical
 translations so that every access does not walk the page tables.  A TLB miss
 causes a hardware table walk; a permission, address-size, or execute-never
 failure then raises a translation fault rather than returning a partial
@@ -212,8 +212,8 @@ bits are combined with `MAIR_EL1` to define the mapping.
 
 ### Cache maintenance and points of coherency
 
-The point of unification (PoU) is where instruction and data views become
-consistent; the point of coherency (PoC) is where observers such as other
+The point of unification (`PoU`) is where instruction and data views become
+consistent; the point of coherency (`PoC`) is where observers such as other
 cores see a coherent value.  Cache maintenance instructions operate on cache
 lines, so callers must align and size ranges according to the reported cache
 line length.  Typical operations are:
@@ -265,7 +265,9 @@ The three architectural barriers have different guarantees:
 >  **Observers** can observe **memory accesses**.
 >
 > • The instruction interface of the core, typically called the Instruction Fetch Unit (`IFU`)
+>
 > • The data interface, typically called the Load Store Unit (`LSU`)
+>
 > • The MMU table walk unit
 >
 > A write to memory is observed when it reaches a point in the memory system in which
@@ -284,9 +286,11 @@ The three architectural barriers have different guarantees:
 > the `DSB` have completed before the completion of the `DSB` instruction.
 >
 > A `DSB` that is executed by a PE completes when:
+>
 > • All explicit memory accesses of the required access types appear in program order
 >   before the `DSB` are complete for the set of observers in the required Shareability
 >   domain.
+>
 > • If the argument specified in the `DSB` is reads and writes, then all cache maintenance
 >   instructions and all TLB maintenance instructions that are issued by the PE before
 >   the `DSB` are complete for the required Shareability domain.
@@ -738,8 +742,8 @@ For boot order and image construction, see [`SMOS.md`](SMOS.md) and
 [`sdk/docs/man.txt`](../docs/man.txt).
 
 The educational summaries above are derived from *ARM Cortex-A Series
-Programmer's Guide for ARMv8-A*, ARM DEN0024A (2015), especially Chapters 3--6,
-8--18.  The PDF remains the authoritative source for architectural details;
+Programmer's Guide for ARMv8-A*, ARM DEN0024A (2015), especially Chapters 3-6,
+8-18.  The PDF remains the authoritative source for architectural details;
 the SMOS mappings and product limitations in this document are maintained from
 the local Zircon and QEMU sources.
 
