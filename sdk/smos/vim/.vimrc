@@ -513,6 +513,8 @@ let g:fzf_layout = {
 let g:fzf_vim = {}
 let g:fzf_vim.preview_window = ['right,55%,<100(up,45%)', 'ctrl-/']
 let g:fzf_vim.buffers_jump = 1
+" Space-fl / :BLines: exact substrings only, not fuzzy character matching.
+let g:fzf_vim.blines_options = ['--exact']
 
 function! s:ConfigureFzfTerminalKeys() abort
     " Keep repeated Esc inside fzf instead of entering Terminal-Normal mode.
@@ -1003,6 +1005,14 @@ function! s:WorkspaceFiles() abort
     execute 'Files' fnameescape(g:beau_workspace_root)
 endfunction
 
+function! s:BufferLines() abort
+    " Each token is an exact substring.  'sos kick nebula' keeps lines that
+    " contain all three strings, and drops fuzzy hits such as 'sxxxx oxs'.
+    call fzf#vim#buffer_lines({
+        \ 'options': ['--exact', '--prompt', 'Lines> ']
+        \ })
+endfunction
+
 function! s:FormatBuffer() abort
     if empty(&formatprg)
         echo 'No formatprg for this filetype'
@@ -1111,7 +1121,7 @@ nnoremap <silent> <Leader>fe :call <SID>WorkspaceFiles()<CR>
 nnoremap <silent> <Leader>fg :Rg<CR>
 nnoremap <silent> <Leader>fw :call <SID>LiveRgWord()<CR>
 xnoremap <silent> <Leader>fg :<C-u>call <SID>LiveRgVisual()<CR>
-nnoremap <silent> <Leader>fl :BLines<CR>
+nnoremap <silent> <Leader>fl :call <SID>BufferLines()<CR>
 nnoremap <silent> <Leader>fb :Buffers<CR>
 nnoremap <silent> <Leader>fh :History<CR>
 nnoremap <silent> <Leader>fc :Commands<CR>
