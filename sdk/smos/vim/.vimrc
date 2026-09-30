@@ -1,3 +1,18 @@
+" Compatibility and encoding must come first; nocompatible can reset options.
+set nocompatible
+set encoding=utf-8
+scriptencoding utf-8
+
+" Space is the leader for project-style commands.
+let mapleader = ' '
+let maplocalleader = '\'
+
+" Bundled optional packs from the Vim runtime, not third-party plugins.
+packadd! matchit
+packadd! editorconfig
+packadd! hlyank
+packadd! cfilter
+
 " Core buffer and navigation behavior
 set autoread
 set hidden
@@ -6,30 +21,45 @@ set number
 set relativenumber
 " Mouse support in normal, visual, insert, and terminal modes
 set mouse=a
-" Window layout defaults
-set nocompatible
+if has('mouse_sgr')
+    set ttymouse=sgr
+endif
 set scrolloff=10
 set splitbelow
 set splitright
-" TokyoNight theme; transparent areas inherit terminal opacity
+set smoothscroll
+set splitkeep=screen
+set confirm
+set belloff=all
+set history=1000
+set undolevels=5000
+set nrformats-=octal
+set display+=lastline
+set switchbuf=useopen,usetab
+set updatetime=400
+set timeout
+set ttimeout
+set timeoutlen=400
+set ttimeoutlen=20
+
+" TokyoNight theme; transparent areas inherit terminal opacity.
+" Apply the colorscheme after syntax so highlight groups are not reset.
 let g:tokyonight_style = 'storm' " available: night, storm
 let g:tokyonight_enable_italic = 0
 let g:tokyonight_transparent_background = 1
+filetype plugin indent on
+syntax on
 set termguicolors
 set background=dark
 colorscheme tokyonight
-" Text encoding
-set encoding=utf-8
-set termencoding=utf-8
+
 " Filetype-aware indentation with a four-space global fallback
 set autoindent
-filetype plugin indent on
-
-" Default indentation for filetypes without a dedicated profile
 set tabstop=4
 set shiftwidth=4
 set softtabstop=4
 set expandtab
+set shiftround
 
 " C/C++ profiles apply only to the current buffer.
 " Run gg=G after selecting a profile to reindent existing code.
@@ -62,16 +92,31 @@ command! BEAUStyle call <SID>ApplyCStyle('hypervisor')
 command! GOOGLEStyle call <SID>ApplyCStyle('google')
 command! LINUXStyle call <SID>ApplyCStyle('linux')
 
+augroup beau_file_defaults
+    autocmd!
+    autocmd FileType c,cpp,objc,objcpp
+        \ if executable('clang-format') |
+        \     setlocal formatprg=clang-format |
+        \ endif
+    autocmd FileType rust
+        \ if executable('rustfmt') |
+        \     setlocal formatprg=rustfmt |
+        \ endif
+    autocmd BufReadPost *
+        \ if line("'\"") > 0 && line("'\"") <= line('$') && &buftype ==# '' |
+        \     execute 'normal! g`"' |
+        \ endif
+    autocmd FocusGained,BufEnter * silent! checktime
+augroup END
+
 " System clipboard integration
 set clipboard=unnamedplus
 nnoremap <silent> <C-c> "+y
 vnoremap <silent> <C-c> "+y
-" Confirm destructive operations instead of failing immediately
-set confirm
 set linespace=0
 " Render tabs, trailing spaces, and off-screen overflow markers
 set list
-set listchars=tab:·\ ,trail:·,precedes:←,extends:→
+set listchars=tab:·\ ,trail:·,nbsp:␣,precedes:←,extends:→
 " Soft wrapping for long lines
 set wrap
 set linebreak
@@ -88,8 +133,12 @@ set hlsearch
 set incsearch
 set ignorecase
 set smartcase
+set infercase
 set matchtime=1
 set nobackup
+set shortmess+=c
+set formatoptions+=j
+set synmaxcol=1000
 " Keep recovery and persistent undo files out of project directories
 let s:swap_dir = expand('~/.vim/swap')
 let s:undo_dir = expand('~/.vim/undo')
@@ -106,16 +155,33 @@ set cursorline
 " Popup completion for Ex commands and file paths (for example, :write)
 set wildmenu
 set wildmode=longest:full,full
-set wildoptions=pum
-set completeopt=menu,preview,longest
+set wildoptions=pum,fuzzy
+set wildignorecase
+set wildignore+=*/.git/*,*/.hg/*,*/.svn/*
+set wildignore+=*/out/*,*/build/*,*/target/*,*/node_modules/*
+set wildignore+=*.o,*.obj,*.a,*.so,*.pyc,*.class,*.swp,*.bin
+set wildignore+=tags,TAGS,GTAGS,GRTAGS,GPATH,cscope.out
+set completeopt=menuone,popup,fuzzy
+set completepopup=height:12,width:70,border:round,highlight:Pmenu
 set previewpopup=height:20,width:80
 " Hide the default split separator for a cleaner layout
-set fillchars=vert:\ ,
-" Allow Backspace across indentation, line breaks, and insert start
-set backspace=2
-syntax on
-" Search tags upward from the current file's directory
-set tags=tags;
+let &fillchars = 'vert: ,eob: '
+set diffopt=internal,filler,closeoff,hiddenoff,algorithm:histogram,indent-heuristic,linematch:60
+set backspace=indent,eol,start
+" Search tags from the current file upward, then from the working directory.
+set tags=./tags;,tags
+
+if executable('rg')
+    let &grepprg = "rg --vimgrep --smart-case --hidden --glob '!.git/*'"
+    set grepformat=%f:%l:%c:%m
+    if empty($FZF_DEFAULT_COMMAND)
+        let $FZF_DEFAULT_COMMAND = 'rg --files --hidden --glob "!.git/*"'
+    endif
+endif
+
+let g:hlyank_hlgroup = 'IncSearch'
+let g:hlyank_duration = 250
+let g:EditorConfig_exclude_patterns = ['fugitive://.*', 'scp://.*']
 " Custom statusline: mode, file state, command keys, type, and position
 function! BeauStatusMode() abort
     let l:mode = mode(1)
@@ -139,39 +205,61 @@ function! BeauStatusMode() abort
     return toupper(l:mode)
 endfunction
 
+if !exists('s:git_branch_jobs')
+    let s:git_branch_jobs = {}
+    let s:git_branch_by_dir = {}
+endif
+
+function! s:GitBranchOut(dir, channel, msg) abort
+    let s:git_branch_by_dir[a:dir] = trim(a:msg)
+    redrawstatus
+endfunction
+
+function! s:GitBranchExit(dir, job, status) abort
+    if has_key(s:git_branch_jobs, a:dir)
+        call remove(s:git_branch_jobs, a:dir)
+    endif
+    if !has_key(s:git_branch_by_dir, a:dir)
+        let s:git_branch_by_dir[a:dir] = ''
+    endif
+    redrawstatus
+endfunction
+
+function! s:RefreshGitBranchAsync(dir) abort
+    if !executable('git') || has_key(s:git_branch_jobs, a:dir)
+        return
+    endif
+
+    let l:cmd = 'git -C ' . shellescape(a:dir)
+        \ . ' symbolic-ref --quiet --short HEAD 2>/dev/null'
+        \ . ' || git -C ' . shellescape(a:dir)
+        \ . ' rev-parse --short HEAD 2>/dev/null'
+    let s:git_branch_jobs[a:dir] = job_start(['sh', '-c', l:cmd], {
+        \ 'in_io': 'null',
+        \ 'err_io': 'null',
+        \ 'out_mode': 'nl',
+        \ 'out_cb': function('<SID>GitBranchOut', [a:dir]),
+        \ 'exit_cb': function('<SID>GitBranchExit', [a:dir])
+        \ })
+endfunction
+
 function! BeauGitBranch() abort
     if &buftype !=# '' || empty(expand('%:p'))
         return ''
     endif
 
-    let l:path = fnamemodify(expand('%:p'), ':p')
-    let l:dir = fnamemodify(l:path, ':h')
-    if get(b:, 'beau_git_branch_dir', '') !=# l:dir
-        let b:beau_git_branch_dir = l:dir
-        let b:beau_git_branch = ''
-        let l:root = systemlist(
-            \ 'git -C ' . shellescape(l:dir)
-            \ . ' rev-parse --show-toplevel 2>/dev/null')
-        if v:shell_error == 0 && !empty(l:root)
-            let l:branch = systemlist(
-                \ 'git -C ' . shellescape(l:root[0])
-                \ . ' symbolic-ref --quiet --short HEAD 2>/dev/null')
-            if v:shell_error != 0 || empty(l:branch)
-                let l:branch = systemlist(
-                    \ 'git -C ' . shellescape(l:root[0])
-                    \ . ' rev-parse --short HEAD 2>/dev/null')
-            endif
-            if !empty(l:branch)
-                let b:beau_git_branch = trim(l:branch[0])
-            endif
-        endif
+    let l:dir = fnamemodify(expand('%:p'), ':h')
+    if has_key(s:git_branch_by_dir, l:dir)
+        let l:branch = s:git_branch_by_dir[l:dir]
+        return empty(l:branch) ? '' : ' 🅑  ' . l:branch
     endif
-    return empty(get(b:, 'beau_git_branch', ''))
-        \ ? '' : ' 🅑  ' . b:beau_git_branch
+
+    call s:RefreshGitBranchAsync(l:dir)
+    return ''
 endfunction
 
 function! s:InvalidateGitBranch() abort
-    unlet! b:beau_git_branch_dir b:beau_git_branch
+    let s:git_branch_by_dir = {}
 endfunction
 
 function! s:ApplyStatuslineColors() abort
@@ -194,16 +282,16 @@ augroup END
 
 augroup beau_git_branch_status
     autocmd!
-    autocmd BufEnter,DirChanged,FocusGained * call <SID>InvalidateGitBranch()
+    autocmd DirChanged,FocusGained * call <SID>InvalidateGitBranch()
 augroup END
 
 set statusline=
 let &statusline .= '%#BeauStatusMode# BEAU:%{BeauStatusMode()} '
-set statusline+=%#BeauStatusFile#\ %f%<
+set statusline+=%#BeauStatusFile#\ %F%<
 let &statusline .= '%#BeauStatusGit#%{BeauGitBranch()}'
 set statusline+=\ %h%m%r%w\ %S
 set statusline+=%=
-let &statusline .= '🅡  %#BeauStatusMeta# %{empty(&filetype) ? "" : "FILE(" . &filetype . ")"} %l:%c %p%% '
+let &statusline .= '🅡  %#BeauStatusMeta# %y %l:%c %p%% '
 
 if exists('s:statusline_timer')
     call timer_stop(s:statusline_timer)
@@ -516,8 +604,12 @@ if !exists('s:git_minimap')
         \ 'source_win': -1,
         \ 'source_buf': -1,
         \ 'matches': [],
-        \ 'refreshing': 0
+        \ 'refreshing': 0,
+        \ 'cache_key': ''
         \ }
+endif
+if !exists('s:git_root_cache')
+    let s:git_root_cache = {}
 endif
 
 function! s:ApplyGitMinimapColors() abort
@@ -543,6 +635,10 @@ function! s:GitMinimapValid() abort
 endfunction
 
 function! s:GitMinimapClose() abort
+    if exists('s:git_minimap_timer')
+        call timer_stop(s:git_minimap_timer)
+        unlet s:git_minimap_timer
+    endif
     if s:GitMinimapValid()
         call popup_close(s:git_minimap.win)
     endif
@@ -551,6 +647,7 @@ function! s:GitMinimapClose() abort
     let s:git_minimap.source_win = -1
     let s:git_minimap.source_buf = -1
     let s:git_minimap.matches = []
+    let s:git_minimap.cache_key = ''
 endfunction
 
 function! s:GitMinimapPopupOptions() abort
@@ -586,20 +683,33 @@ function! s:ResizeGitMinimap() abort
     call s:GitMinimapSync()
 endfunction
 
+function! s:GitRoot(dir) abort
+    let l:dir = fnamemodify(a:dir, ':p')
+    if has_key(s:git_root_cache, l:dir)
+        return s:git_root_cache[l:dir]
+    endif
+
+    let l:root_lines = systemlist(
+        \ 'git -C ' . shellescape(l:dir)
+        \ . ' rev-parse --show-toplevel 2>/dev/null')
+    let l:root = ''
+    if v:shell_error == 0 && !empty(l:root_lines)
+        let l:root = fnamemodify(l:root_lines[0], ':p')
+    endif
+    let s:git_root_cache[l:dir] = l:root
+    return l:root
+endfunction
+
 function! s:GitMinimapSourceInfo() abort
     if &buftype !=# '' || empty(expand('%:p')) || !filereadable(expand('%:p'))
         return {}
     endif
 
     let l:path = fnamemodify(expand('%:p'), ':p')
-    let l:root_lines = systemlist(
-        \ 'git -C ' . shellescape(fnamemodify(l:path, ':h'))
-        \ . ' rev-parse --show-toplevel 2>/dev/null')
-    if v:shell_error != 0 || empty(l:root_lines)
+    let l:root = s:GitRoot(fnamemodify(l:path, ':h'))
+    if empty(l:root)
         return {}
     endif
-
-    let l:root = fnamemodify(l:root_lines[0], ':p')
     if strpart(l:path, 0, strlen(l:root)) !=# l:root
         return {}
     endif
@@ -741,7 +851,7 @@ function! s:GitMinimapSync() abort
     let s:git_minimap.refreshing = 0
 endfunction
 
-function! s:GitMinimapRefresh() abort
+function! s:GitMinimapRefresh(...) abort
     if s:git_minimap.refreshing || get(b:, 'beau_git_minimap', 0)
         return
     endif
@@ -764,8 +874,25 @@ function! s:GitMinimapRefresh() abort
         endif
         return
     endif
+    " Per-line marks on huge untracked files are too expensive for the popup.
+    if l:info.untracked && line('$') > 2000
+        if s:GitMinimapValid()
+            call s:GitMinimapClose()
+        endif
+        return
+    endif
+
+    let l:key = l:info.path . "\n" . getftime(l:info.path)
+        \ . "\n" . line('$') . "\n" . l:info.untracked
+    if s:GitMinimapValid() && get(s:git_minimap, 'cache_key', '') ==# l:key
+        let s:git_minimap.source_win = win_getid()
+        let s:git_minimap.source_buf = bufnr('%')
+        call s:GitMinimapSync()
+        return
+    endif
 
     let s:git_minimap.refreshing = 1
+    let s:git_minimap.cache_key = l:key
     if !s:GitMinimapValid()
         call s:GitMinimapCreate()
     else
@@ -779,20 +906,23 @@ function! s:GitMinimapRefresh() abort
     call s:GitMinimapSync()
 endfunction
 
+function! s:GitMinimapRefreshSoon(...) abort
+    if exists('s:git_minimap_timer')
+        call timer_stop(s:git_minimap_timer)
+    endif
+    let s:git_minimap_timer = timer_start(80, function('<SID>GitMinimapRefresh'))
+endfunction
+
 call s:ApplyGitMinimapColors()
 augroup beau_git_minimap
     autocmd!
     autocmd ColorScheme * call <SID>ApplyGitMinimapColors()
-    autocmd VimEnter * call <SID>GitMinimapRefresh()
-    autocmd BufEnter * call <SID>GitMinimapRefresh()
-    autocmd BufWritePost * call <SID>GitMinimapRefresh()
+    autocmd VimEnter * call <SID>GitMinimapRefreshSoon()
+    autocmd BufEnter * call <SID>GitMinimapRefreshSoon()
+    autocmd BufWritePost * call <SID>GitMinimapRefreshSoon()
     autocmd CursorMoved,CursorMovedI,WinScrolled * call <SID>GitMinimapSync()
     autocmd VimResized * call <SID>ResizeGitMinimap()
 augroup END
-
-" Space is the leader for project-style commands
-let mapleader=' '
-set timeoutlen=400
 
 " NERDTree file explorer; never change Vim's working directory
 let g:NERDTreeWinSize = 35
@@ -800,6 +930,8 @@ let g:NERDTreeWinSizeMax = 40
 let g:NERDTreeShowHidden = 1
 let g:NERDTreeAutoCenter = 1
 let g:NERDTreeChDirMode = 0
+let g:NERDTreeRespectWildIgnore = 1
+let g:NERDTreeMinimalUI = 1
 " netrw fallback file explorer
 let g:netrw_winsize   = 20
 let g:netrw_liststyle = 3
@@ -807,6 +939,20 @@ let g:netrw_hide      = 1
 let g:netrw_banner    = 0
 let g:netrw_keepdir   = 1
 let g:netrw_sort_by   = "name"
+
+" Tagbar outline uses source order, which is more useful for C/C++.
+let g:tagbar_compact = 1
+let g:tagbar_autofocus = 1
+let g:tagbar_sort = 0
+let g:tagbar_width = 32
+let g:tagbar_silent = 1
+
+" NERDCommenter: keep default maps and add Space-/ as a toggle.
+let g:NERDSpaceDelims = 1
+let g:NERDDefaultAlign = 'left'
+let g:NERDCommentEmptyLines = 1
+let g:NERDTrimTrailingWhitespace = 1
+let g:NERDCreateDefaultMappings = 1
 
 " Copy the selected NERDTree node path and paste it into an editing buffer.
 function! s:NERDTreeCopyPath(absolute) abort
@@ -849,24 +995,92 @@ augroup beau_nerdtree_paths
     autocmd FileType nerdtree call <SID>DefineNERDTreePathMappings()
 augroup END
 
-" Paste directly from the system clipboard
-nnoremap <silent> <C-p> "+p
-" Paste the last path copied from NERDTree (works without a clipboard provider).
-nnoremap <silent> <Leader>ip :call <SID>PasteNERDTreePath()<CR>
-" File explorer and workspace search
-nnoremap <silent> <Leader>e :NERDTreeToggle<CR>
-nnoremap <silent> <Leader>f <Nop>
-xnoremap <silent> <Leader>f <Nop>
-" File picker with the configured right-side preview window.
-nnoremap <silent> <Leader>fe :Files<CR>
-nnoremap <silent> <Leader>fg :Rg<CR>
-nnoremap <silent> <Leader>fw :call <SID>LiveRgWord()<CR>
-xnoremap <silent> <Leader>fg :<C-u>call <SID>LiveRgVisual()<CR>
-nnoremap <silent> <Leader>re :RgRegex<CR>
-" Floating terminal and window switching
-nnoremap <silent> <Leader>t <Cmd>FloatTerminal<CR>
-nnoremap <silent> <Leader>w <C-w><C-w>
-" Ctags: Ctrl-] jumps directly; Space-g opens candidates with preview.
+function! s:LeaderFHint() abort
+    echo 'fe files  fg grep  fw word  fl lines  fb buffers  fh recent  fc commands'
+endfunction
+
+function! s:WorkspaceFiles() abort
+    execute 'Files' fnameescape(g:beau_workspace_root)
+endfunction
+
+function! s:FormatBuffer() abort
+    if empty(&formatprg)
+        echo 'No formatprg for this filetype'
+        return
+    endif
+    let l:view = winsaveview()
+    silent execute 'keepjumps normal! gggqG'
+    call winrestview(l:view)
+    echo 'Formatted with ' . &formatprg
+endfunction
+
+function! s:SwitchHeaderSource() abort
+    let l:name = expand('%:t')
+    if empty(l:name)
+        echo 'No file name'
+        return
+    endif
+
+    let l:stem = expand('%:t:r')
+    let l:ext = expand('%:e')
+    if l:ext =~? '^\(c\|cc\|cpp\|cxx\|c++\|C\)$'
+        let l:alts = [l:stem . '.h', l:stem . '.hpp', l:stem . '.hh', l:stem . '.hxx']
+    elseif l:ext =~? '^\(h\|hpp\|hh\|hxx\|H\)$'
+        let l:alts = [l:stem . '.c', l:stem . '.cc', l:stem . '.cpp', l:stem . '.cxx']
+    else
+        echo 'Not a C/C++ header or source file'
+        return
+    endif
+
+    let l:dir = expand('%:p:h')
+    for l:alt in l:alts
+        let l:same = l:dir . '/' . l:alt
+        if filereadable(l:same)
+            execute 'edit' fnameescape(l:same)
+            return
+        endif
+    endfor
+    for l:alt in l:alts
+        let l:found = findfile(l:alt, l:dir . ';')
+        if !empty(l:found)
+            execute 'edit' fnameescape(fnamemodify(l:found, ':p'))
+            return
+        endif
+    endfor
+    echo 'No matching header/source for ' . l:name
+endfunction
+
+function! s:JumpGtagsCursor() abort
+    if !empty(findfile('GTAGS', '.;')) && exists(':GtagsCursor')
+        GtagsCursor
+        return
+    endif
+    call s:FzfTagUnderCursor()
+endfunction
+
+function! s:GtagsRefs() abort
+    let l:word = expand('<cword>')
+    if empty(l:word)
+        echo 'No symbol under cursor'
+        return
+    endif
+    if !exists(':Gtags')
+        echo 'gtags plugin is not available'
+        return
+    endif
+    execute 'Gtags -r' l:word
+endfunction
+
+function! s:ToggleQuickfix() abort
+    for l:win in getwininfo()
+        if l:win.quickfix && !l:win.loclist
+            cclose
+            return
+        endif
+    endfor
+    botright copen 10
+endfunction
+
 function! s:FzfTagUnderCursor() abort
     let l:symbol = expand('<cword>')
     if empty(l:symbol)
@@ -878,7 +1092,44 @@ function! s:FzfTagUnderCursor() abort
         \ }), 0)
 endfunction
 
+command! Format call <SID>FormatBuffer()
+command! -nargs=0 Debug packadd termdebug | Termdebug
+
+" Paste directly from the system clipboard
+nnoremap <silent> <C-p> "+p
+nnoremap <silent> <C-l> :nohlsearch<Bar>diffupdate<CR><C-l>
+nnoremap n nzzzv
+nnoremap N Nzzzv
+" Paste the last path copied from NERDTree (works without a clipboard provider).
+nnoremap <silent> <Leader>ip :call <SID>PasteNERDTreePath()<CR>
+" File explorer and workspace search
+nnoremap <silent> <Leader>e :NERDTreeToggle<CR>
+nnoremap <silent> <Leader>f :call <SID>LeaderFHint()<CR>
+xnoremap <silent> <Leader>f :<C-u>call <SID>LeaderFHint()<CR>
+" File picker stays anchored to the directory where Vim started.
+nnoremap <silent> <Leader>fe :call <SID>WorkspaceFiles()<CR>
+nnoremap <silent> <Leader>fg :Rg<CR>
+nnoremap <silent> <Leader>fw :call <SID>LiveRgWord()<CR>
+xnoremap <silent> <Leader>fg :<C-u>call <SID>LiveRgVisual()<CR>
+nnoremap <silent> <Leader>fl :BLines<CR>
+nnoremap <silent> <Leader>fb :Buffers<CR>
+nnoremap <silent> <Leader>fh :History<CR>
+nnoremap <silent> <Leader>fc :Commands<CR>
+nnoremap <silent> <Leader>re :RgRegex<CR>
+" Floating terminal and window switching
+nnoremap <silent> <Leader>t <Cmd>FloatTerminal<CR>
+nnoremap <silent> <Leader>w <C-w><C-w>
+" Ctags: Ctrl-] jumps directly; Space-g opens candidates with preview.
 nnoremap <silent> <Leader>g <Cmd>call <SID>FzfTagUnderCursor()<CR>
+" GNU GLOBAL when GTAGS exists; otherwise the same fzf tag picker.
+nnoremap <silent> <Leader>s :call <SID>JumpGtagsCursor()<CR>
+nnoremap <silent> <Leader>a :call <SID>GtagsRefs()<CR>
+nnoremap <silent> <Leader>o :TagbarToggle<CR>
+nnoremap <silent> <Leader>h :call <SID>SwitchHeaderSource()<CR>
+nnoremap <silent> <Leader>= :Format<CR>
+nnoremap <silent> <Leader>q :call <SID>ToggleQuickfix()<CR>
+nmap <silent> <Leader>/ <Plug>NERDCommenterToggle
+xmap <silent> <Leader>/ <Plug>NERDCommenterToggle
 " Navigation back works for FZF, searches, and native tag jumps.
 nnoremap <silent> <Leader>b <C-o>
 " Paragraph navigation
@@ -886,9 +1137,9 @@ nnoremap <silent> <Leader>d }
 nnoremap <silent> <Leader>u {
 " Toggle between a clean presentation view and the editing view
 nnoremap <silent> <Leader>n
-    \ :set nonu<CR>:set mouse=<CR>:set norelativenumber<CR>
-    \ :set nolist<CR>
+    \ :set nonumber norelativenumber nolist mouse=<CR>
+    \ :call <SID>GitMinimapClose()<CR>
 nnoremap <silent> <Leader>m
-    \ :set nu<CR>:set mouse=a<CR>:set relativenumber<CR>
-    \ :set list<CR>
+    \ :set number relativenumber list mouse=a<CR>
+    \ :call <SID>GitMinimapRefresh()<CR>
 " Insert completion uses Vim's built-in Ctrl-N and Ctrl-P.
