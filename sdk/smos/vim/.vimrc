@@ -812,13 +812,19 @@ function! s:GitMinimapRender(marks) abort
 
     " Render changed lines as colored blocks instead of editable text.
     let l:display = map(copy(a:marks), 'v:val ==# " " ? " " : "◂"')
+    call setbufvar(l:buf, '&readonly', 0)
     call setbufvar(l:buf, '&modifiable', 1)
-    call setbufline(l:buf, 1, l:display)
-    let l:old_count = getbufinfo(l:buf)[0].linecount
-    if l:old_count > len(l:display)
-        call deletebufline(l:buf, len(l:display) + 1, l:old_count)
-    endif
-    call setbufvar(l:buf, '&modifiable', 0)
+    try
+        call setbufline(l:buf, 1, l:display)
+        let l:old_count = getbufinfo(l:buf)[0].linecount
+        if l:old_count > len(l:display)
+            call deletebufline(l:buf, len(l:display) + 1, l:old_count)
+        endif
+        call setbufvar(l:buf, '&modified', 0)
+    finally
+        call setbufvar(l:buf, '&modifiable', 0)
+        call setbufvar(l:buf, '&readonly', 1)
+    endtry
 
     let l:positions = {'+': [], '~': [], '-': []}
     for l:index in range(0, len(a:marks) - 1)
