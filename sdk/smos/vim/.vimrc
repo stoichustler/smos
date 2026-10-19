@@ -1,17 +1,47 @@
+" BEAU / SMOS host Vimrc (not shipped in the target image).
+"
+" Source of truth: sdk/smos/vim/.vimrc
+" Install:         install -Dm644 sdk/smos/vim/.vimrc ~/.vimrc
+" Reload:          :source $MYVIMRC
+" Related notes:   sdk/smos/vim/vim.md
+"
+" This file is reload-safe: jobs, timers, and popups from a previous
+" :source are stopped before their script-local state is recreated.
+"
+" Contents
+"   1. Startup, leader, runtime packs
+"   2. Core buffer / window options
+"   3. Colorscheme
+"   4. Indentation and C/C++ style commands
+"   5. File defaults (formatprg, last-position, autoread)
+"   6. Clipboard (X11/Wayland, OSC 52, W23)
+"   7. Display, search, swap/undo, completion
+"   8. Statusline and async git branch
+"   9. Command-line UI
+"  10. Floating terminal
+"  11. fzf / live ripgrep
+"  12. Git signs
+"  13. Plugin knobs (NERDTree, netrw, Tagbar, NERDCommenter)
+"  14. Commands and Space-leader maps
+"
 " Compatibility and encoding must come first; nocompatible can reset options.
 set nocompatible
 set encoding=utf-8
 scriptencoding utf-8
 
 " Space is the leader for project-style commands.
+" Map Space to <Nop> so a lone Space does not move the cursor while waiting
+" for timeoutlen (600 ms) to decide whether a leader sequence follows.
 let mapleader = ' '
 let maplocalleader = '\'
+nnoremap <Space> <Nop>
+xnoremap <Space> <Nop>
 
 " Bundled optional packs from the Vim runtime, not third-party plugins.
-packadd! matchit
-packadd! editorconfig
-packadd! hlyank
-packadd! cfilter
+packadd! matchit        " % matches if/endif, HTML tags, etc.
+packadd! editorconfig   " per-project indent from .editorconfig
+packadd! hlyank         " brief highlight after yank
+packadd! cfilter        " :Cfilter / :Lfilter on quickfix/location lists
 
 " Core buffer and navigation behavior
 set autoread
@@ -19,7 +49,8 @@ set hidden
 set magic
 set number
 set relativenumber
-" Mouse support in normal, visual, insert, and terminal modes
+" Mouse support in normal, visual, insert, and terminal modes.
+" SGR is needed for columns beyond 223 in modern terminals.
 set mouse=a
 if has('mouse_sgr')
     set ttymouse=sgr
@@ -37,11 +68,13 @@ set nrformats-=octal
 set display+=lastline
 set switchbuf=useopen,usetab
 set updatetime=400
+" timeoutlen: mapped key sequences (leader maps). ttimeoutlen: Esc / keycodes.
 set timeout
 set ttimeout
-set timeoutlen=400
+set timeoutlen=600
 set ttimeoutlen=20
 
+" --- Colorscheme -------------------------------------------------------------
 " TokyoNight theme; transparent areas inherit terminal opacity.
 " Apply the colorscheme after syntax so highlight groups are not reset.
 let g:tokyonight_style = 'storm' " available: night, storm
@@ -51,9 +84,14 @@ filetype plugin indent on
 syntax on
 set termguicolors
 set background=dark
-colorscheme tokyonight
+try
+    colorscheme tokyonight
+catch
+    silent! colorscheme default
+endtry
 
-" Filetype-aware indentation with a four-space global fallback
+" --- Indentation -------------------------------------------------------------
+" Filetype-aware indentation with a four-space global fallback.
 set autoindent
 set tabstop=4
 set shiftwidth=4
@@ -61,7 +99,8 @@ set softtabstop=4
 set expandtab
 set shiftround
 
-" C/C++ profiles apply only to the current buffer.
+" --- C/C++ indent profiles ---------------------------------------------------
+" Buffer-local only. :BEAUStyle / :GOOGLEStyle / :LINUXStyle.
 " Run gg=G after selecting a profile to reindent existing code.
 function! s:ApplyCStyle(style) abort
     setlocal autoindent cindent nosmartindent
@@ -92,6 +131,9 @@ command! BEAUStyle call <SID>ApplyCStyle('hypervisor')
 command! GOOGLEStyle call <SID>ApplyCStyle('google')
 command! LINUXStyle call <SID>ApplyCStyle('linux')
 
+" --- File defaults -----------------------------------------------------------
+" formatprg feeds :Format / Space-=. Last-position restore skips special
+" buffers. checktime implements autoread when focus returns.
 augroup beau_file_defaults
     autocmd!
     autocmd FileType c,cpp,objc,objcpp
@@ -109,11 +151,37 @@ augroup beau_file_defaults
     autocmd FocusGained,BufEnter * silent! checktime
 augroup END
 
-" System clipboard integration
-set clipboard=unnamedplus
-nnoremap <silent> <C-c> "+y
-vnoremap <silent> <C-c> "+y
+" --- Clipboard ---------------------------------------------------------------
+" System clipboard. Prefer X11/Wayland when a display exists.
+" Over SSH/tty, force OSC 52 before unnamedplus so yank does not emit W23.
+" Skip OSC 52 on linux/cons/dumb/vt terminals to avoid escape garbage.
+" Disable OSC paste so a terminal without it cannot block on paste.
+if has('clipboard_provider') && exists('+clipmethod')
+    let g:osc52_disable_paste = 1
+    try
+        " No native display: do not wait for DA1 (unreliable over SSH/tmux).
+        " Skip linux/cons/dumb/vt so OSC 52 escapes are not printed as text.
+        if empty($DISPLAY) && empty($WAYLAND_DISPLAY)
+            \ && &term !~? '^\%(linux\|cons\|dumb\|vt\)'
+            let g:osc52_force_avail = 1
+            packadd osc52
+            set clipmethod=osc52
+        else
+            packadd osc52
+            if &clipmethod !~# '\<osc52\>'
+                let &clipmethod .= (empty(&clipmethod) ? '' : ',') . 'osc52'
+            endif
+        endif
+    catch
+    endtry
+endif
+" unnamedplus maps yank/delete to + and emits W23 when v:clipmethod is none.
+if exists('v:clipmethod') && v:clipmethod !=# 'none'
+    set clipboard=unnamedplus
+endif
 set linespace=0
+
+" --- Display, search, files --------------------------------------------------
 " Render tabs, trailing spaces, and off-screen overflow markers
 set list
 set listchars=tab:·\ ,trail:·,nbsp:␣,precedes:←,extends:→
@@ -122,7 +190,9 @@ set wrap
 set linebreak
 set breakindent
 set breakindentopt=shift:2
-" Command feedback, searching, and status display
+" Command feedback, searching, and status display.
+" noshowmode/noruler: the custom statusline already shows mode and position.
+" showcmdloc=statusline: pending operator keys appear in %S, not the cmdline.
 set laststatus=2
 set cmdheight=1
 set noshowmode
@@ -139,7 +209,7 @@ set nobackup
 set shortmess+=c
 set formatoptions+=j
 set synmaxcol=1000
-" Keep recovery and persistent undo files out of project directories
+" Swap/undo live under ~/.vim so :e in a source tree does not drop .swp files.
 let s:swap_dir = expand('~/.vim/swap')
 let s:undo_dir = expand('~/.vim/undo')
 call mkdir(s:swap_dir, 'p', 0700)
@@ -171,6 +241,7 @@ set backspace=indent,eol,start
 " Search tags from the current file upward, then from the working directory.
 set tags=./tags;,tags
 
+" :grep and fzf file listing share the same hidden-but-not-.git rg flags.
 if executable('rg')
     let &grepprg = "rg --vimgrep --smart-case --hidden --glob '!.git/*'"
     set grepformat=%f:%l:%c:%m
@@ -182,7 +253,10 @@ endif
 let g:hlyank_hlgroup = 'IncSearch'
 let g:hlyank_duration = 250
 let g:EditorConfig_exclude_patterns = ['fugitive://.*', 'scp://.*']
-" Custom statusline: mode, file state, command keys, type, and position
+
+" --- Statusline --------------------------------------------------------------
+" Layout: BEAU:<mode>  <path>  [branch]  flags  %S  |  <ft> <pos>
+" BeauStatusMode/BeauGitBranch are global so %{...} in 'statusline' can call them.
 function! BeauStatusMode() abort
     let l:mode = mode(1)
     if l:mode =~# '^n'
@@ -205,61 +279,156 @@ function! BeauStatusMode() abort
     return toupper(l:mode)
 endfunction
 
-if !exists('s:git_branch_jobs')
-    let s:git_branch_jobs = {}
-    let s:git_branch_by_dir = {}
+" Filesystem git lookup; no process spawn. Cached per starting directory.
+" Also used by git signs. Walks parents until .git is a dir or a gitfile
+" (worktrees / submodules). Empty string means "not in a repository".
+let s:git_root_cache = {}
+let s:git_dir_cache = {}
+
+function! s:GitRoot(path) abort
+    if empty(a:path)
+        return ''
+    endif
+    let l:dir = fnamemodify(a:path, ':p:h')
+    if has_key(s:git_root_cache, l:dir)
+        return s:git_root_cache[l:dir]
+    endif
+
+    let l:cur = l:dir
+    let l:root = ''
+    while 1
+        if isdirectory(l:cur . '/.git') || filereadable(l:cur . '/.git')
+            let l:root = l:cur
+            break
+        endif
+        let l:parent = fnamemodify(l:cur, ':h')
+        if l:parent ==# l:cur
+            break
+        endif
+        let l:cur = l:parent
+    endwhile
+    let s:git_root_cache[l:dir] = l:root
+    return l:root
+endfunction
+
+" Resolve $GIT_DIR. Regular repos use <root>/.git/; worktrees store
+" "gitdir: <path>" in that file.
+function! s:GitDir(root) abort
+    if empty(a:root)
+        return ''
+    endif
+    if has_key(s:git_dir_cache, a:root)
+        return s:git_dir_cache[a:root]
+    endif
+
+    let l:git = a:root . '/.git'
+    let l:dir = ''
+    if isdirectory(l:git)
+        let l:dir = l:git
+    elseif filereadable(l:git)
+        let l:line = get(readfile(l:git, '', 1), 0, '')
+        let l:gitdir = matchstr(l:line, '^gitdir:\s*\zs.*')
+        if !empty(l:gitdir)
+            if l:gitdir !~# '^[/\\]\|^\a:'
+                let l:gitdir = a:root . '/' . l:gitdir
+            endif
+            let l:dir = substitute(fnamemodify(l:gitdir, ':p'), '[/\\]$', '', '')
+        endif
+    endif
+    let s:git_dir_cache[a:root] = l:dir
+    return l:dir
+endfunction
+
+" Cheap invalidation key: HEAD or index mtime changed => refresh branch/signs.
+function! s:GitStateStamp(root) abort
+    let l:gitdir = s:GitDir(a:root)
+    if empty(l:gitdir)
+        return ''
+    endif
+    return getftime(l:gitdir . '/HEAD') . '/' . getftime(l:gitdir . '/index')
+endfunction
+
+" Path relative to the repo root, as git ls-files / git diff expect.
+function! s:GitRelativePath(root, path) abort
+    let l:root = substitute(fnamemodify(a:root, ':p'), '[/\\]$', '', '')
+    let l:path = fnamemodify(a:path, ':p')
+    if strpart(l:path, 0, strlen(l:root)) !=# l:root
+        return ''
+    endif
+    return substitute(strpart(l:path, strlen(l:root)), '^[/\\]', '', '')
+endfunction
+
+" Reload-safe: kill in-flight git symbolic-ref jobs from a previous :source.
+if exists('s:git_branch_jobs')
+    for s:git_branch_job in values(s:git_branch_jobs)
+        try
+            call job_stop(s:git_branch_job, 'kill')
+        catch
+        endtry
+    endfor
 endif
+let s:git_branch_jobs = {}
+let s:git_branch_by_root = {}
+let s:git_branch_stamp = {}
 
-function! s:GitBranchOut(dir, channel, msg) abort
-    let s:git_branch_by_dir[a:dir] = trim(a:msg)
+function! s:GitBranchOut(root, channel, msg) abort
+    let s:git_branch_by_root[a:root] = trim(a:msg)
     redrawstatus
 endfunction
 
-function! s:GitBranchExit(dir, job, status) abort
-    if has_key(s:git_branch_jobs, a:dir)
-        call remove(s:git_branch_jobs, a:dir)
+function! s:GitBranchExit(root, job, status) abort
+    if has_key(s:git_branch_jobs, a:root)
+        call remove(s:git_branch_jobs, a:root)
     endif
-    if !has_key(s:git_branch_by_dir, a:dir)
-        let s:git_branch_by_dir[a:dir] = ''
+    if !has_key(s:git_branch_by_root, a:root)
+        let s:git_branch_by_root[a:root] = ''
     endif
+    let s:git_branch_stamp[a:root] = s:GitStateStamp(a:root)
     redrawstatus
 endfunction
 
-function! s:RefreshGitBranchAsync(dir) abort
-    if !executable('git') || has_key(s:git_branch_jobs, a:dir)
+" One job per repo root. Detached HEAD falls back to the short commit hash.
+function! s:RefreshGitBranchAsync(root) abort
+    if !has('job') || !executable('git') || empty(a:root)
+        return
+    endif
+    if has_key(s:git_branch_jobs, a:root)
         return
     endif
 
-    let l:cmd = 'git -C ' . shellescape(a:dir)
+    let l:cmd = 'git -C ' . shellescape(a:root)
         \ . ' symbolic-ref --quiet --short HEAD 2>/dev/null'
-        \ . ' || git -C ' . shellescape(a:dir)
+        \ . ' || git -C ' . shellescape(a:root)
         \ . ' rev-parse --short HEAD 2>/dev/null'
-    let s:git_branch_jobs[a:dir] = job_start(['sh', '-c', l:cmd], {
+    let s:git_branch_jobs[a:root] = job_start(['sh', '-c', l:cmd], {
         \ 'in_io': 'null',
         \ 'err_io': 'null',
         \ 'out_mode': 'nl',
-        \ 'out_cb': function('<SID>GitBranchOut', [a:dir]),
-        \ 'exit_cb': function('<SID>GitBranchExit', [a:dir])
+        \ 'out_cb': function('<SID>GitBranchOut', [a:root]),
+        \ 'exit_cb': function('<SID>GitBranchExit', [a:root])
         \ })
 endfunction
 
+" Statusline callback: return cached branch text, and start a refresh if
+" HEAD/index changed. Must stay cheap; it runs on every statusline redraw.
 function! BeauGitBranch() abort
     if &buftype !=# '' || empty(expand('%:p'))
         return ''
     endif
 
-    let l:dir = fnamemodify(expand('%:p'), ':h')
-    if has_key(s:git_branch_by_dir, l:dir)
-        let l:branch = s:git_branch_by_dir[l:dir]
-        return empty(l:branch) ? '' : ' 🅑  ' . l:branch
+    let l:root = s:GitRoot(expand('%:p'))
+    if empty(l:root)
+        return ''
     endif
 
-    call s:RefreshGitBranchAsync(l:dir)
-    return ''
-endfunction
+    let l:stamp = s:GitStateStamp(l:root)
+    if get(s:git_branch_stamp, l:root, '') !=# l:stamp
+            \ || !has_key(s:git_branch_by_root, l:root)
+        call s:RefreshGitBranchAsync(l:root)
+    endif
 
-function! s:InvalidateGitBranch() abort
-    let s:git_branch_by_dir = {}
+    let l:branch = get(s:git_branch_by_root, l:root, '')
+    return empty(l:branch) ? '' : ' 🅑  ' . l:branch
 endfunction
 
 function! s:ApplyStatuslineColors() abort
@@ -282,23 +451,21 @@ augroup END
 
 augroup beau_git_branch_status
     autocmd!
-    autocmd DirChanged,FocusGained * call <SID>InvalidateGitBranch()
+    autocmd DirChanged,FocusGained * redrawstatus
 augroup END
 
+" %S is the pending showcmd (operators/counts) because showcmdloc=statusline.
 set statusline=
 let &statusline .= '%#BeauStatusMode# BEAU:%{BeauStatusMode()} '
-set statusline+=%#BeauStatusFile#\ %F%<
+set statusline+=%#BeauStatusFile#\ %<%F
 let &statusline .= '%#BeauStatusGit#%{BeauGitBranch()}'
 set statusline+=\ %h%m%r%w\ %S
 set statusline+=%=
 let &statusline .= '🅡  %#BeauStatusMeta# %y %l:%c %p%% '
 
-if exists('s:statusline_timer')
-    call timer_stop(s:statusline_timer)
-    unlet s:statusline_timer
-endif
-
-" Style the native ':' command line as a thin bottom command panel
+" --- Command-line UI ---------------------------------------------------------
+" Style the native ':' command line as a thin bottom command panel.
+" Temporarily link MsgArea to Pmenu and hide showcmd so the panel is uncluttered.
 let s:cmdline_msgarea = []
 let s:cmdline_showcmd = &showcmd
 
@@ -324,7 +491,10 @@ augroup beau_cmdline_ui
     autocmd CmdlineLeave : call <SID>CmdlineUiLeave()
 augroup END
 
-" Reusable floating shell; hiding it preserves the process and cwd
+" --- Floating terminal -------------------------------------------------------
+" Reusable floating shell. buf holds the job; win is the popup.
+" Hide (Space-t / Ctrl-Q) keeps the process and cwd; Esc Esc wipes it.
+" exists() keeps the job alive across :source $MYVIMRC.
 if !exists('s:floating_terminal')
     let s:floating_terminal = {'buf': -1, 'win': -1}
 endif
@@ -393,6 +563,7 @@ function! s:ResizeFloatingTerminal() abort
     endif
 endfunction
 
+" popup_create leaves Terminal-Normal; feed 'i' so the shell accepts keys.
 function! s:EnsureFloatingTerminalJobMode(timer) abort
     if s:FloatingTerminalVisible() && mode(1) !~# '^t'
         call feedkeys('i', 'n')
@@ -431,6 +602,7 @@ function! s:ConfigureFloatingTerminalKeys() abort
         \ 'nnoremap <silent> <buffer> <S-ScrollWheelDown> 15j')
 endfunction
 
+" Visible => hide popup. Dead job => start a new shell. Else reuse buf.
 function! s:ToggleFloatingTerminal() abort
     if s:FloatingTerminalVisible()
         call popup_close(s:floating_terminal.win)
@@ -499,7 +671,8 @@ augroup beau_floating_terminal
     autocmd VimResized * call <SID>ResizeFloatingTerminal()
 augroup END
 
-" fzf.vim popup and preview layout
+" --- fzf / live ripgrep ------------------------------------------------------
+" ~/.fzf is the fzf binary install; fzf.vim is a pack plugin under ~/.vim.
 set rtp+=~/.fzf
 
 let g:fzf_layout = {
@@ -532,14 +705,24 @@ let s:rg_history = {
     \ 'regex': expand('~/.vim/rg-regex-history')
     \ }
 
-" All Rg variants stay anchored to the directory where Vim started.
+" All Files/Rg variants stay anchored to the directory where Vim started,
+" even after :cd or NERDTree. exists() preserves the root across :source.
 if !exists('g:beau_workspace_root')
     let g:beau_workspace_root = getcwd()
 endif
 
+function! s:FzfVimAvailable() abort
+    return get(g:, 'loaded_fzf_vim', 0) || exists(':Files') == 2
+endfunction
+
+" a:regex 0 => --fixed-strings (Space-fg). 1 => ripgrep regex (Space-re).
 function! s:LiveRg(query, fullscreen, regex) abort
     if !executable('rg')
         echoerr 'Rg requires ripgrep (rg) in PATH'
+        return
+    endif
+    if !s:FzfVimAvailable()
+        echoerr 'fzf.vim is not available'
         return
     endif
 
@@ -597,153 +780,96 @@ endfunction
 " Recreate commands safely when reloading ~/.vimrc.
 call s:DefineRgCommands()
 
-" Narrow right-side Git change overview.  Each source line maps to one
-" marker, so the overview stays aligned while the source window scrolls.
-if !exists('s:git_minimap')
-    let s:git_minimap = {
-        \ 'win': -1,
-        \ 'buf': -1,
-        \ 'source_win': -1,
-        \ 'source_buf': -1,
-        \ 'matches': [],
-        \ 'refreshing': 0,
-        \ 'cache_key': ''
-        \ }
+" --- Git signs ---------------------------------------------------------------
+" Signcolumn +/-/~ for the current buffer vs HEAD. Replaces the old popup.
+" Reload-safe: stop leftover minimap popup/timer and in-flight git diff jobs.
+" s:git_signs.gen drops stale job output; .cache skips unchanged files;
+" .dirty queues a second refresh if the buffer changed while a job ran.
+if exists('s:git_minimap_timer')
+    call timer_stop(s:git_minimap_timer)
+    unlet s:git_minimap_timer
 endif
-if !exists('s:git_root_cache')
-    let s:git_root_cache = {}
+if exists('s:git_minimap')
+    try
+        if get(s:git_minimap, 'win', -1) > 0
+            call popup_close(s:git_minimap.win)
+        endif
+    catch
+    endtry
+    let s:git_minimap_buf = get(s:git_minimap, 'buf', -1)
+    unlet s:git_minimap
+    if s:git_minimap_buf > 0 && bufexists(s:git_minimap_buf)
+        execute 'silent! bwipeout!' s:git_minimap_buf
+    endif
+    unlet s:git_minimap_buf
 endif
 
-function! s:ApplyGitMinimapColors() abort
-    highlight BeauGitMinimap cterm=NONE ctermfg=NONE ctermbg=NONE
-        \ gui=NONE guifg=NONE guibg=NONE
-    highlight BeauGitMinimapAdd cterm=bold ctermfg=10 ctermbg=NONE
-        \ gui=bold guifg=#9ece6a guibg=NONE
-    highlight BeauGitMinimapChange cterm=bold ctermfg=11 ctermbg=NONE
-        \ gui=bold guifg=#e0af68 guibg=NONE
-    highlight BeauGitMinimapDelete cterm=bold ctermfg=9 ctermbg=NONE
-        \ gui=bold guifg=#f7768e guibg=NONE
+if exists('s:git_signs') && has_key(s:git_signs, 'jobs')
+    for s:git_sign_job in values(s:git_signs.jobs)
+        try
+            call job_stop(s:git_sign_job, 'kill')
+        catch
+        endtry
+    endfor
+endif
+if exists('s:git_signs') && get(s:git_signs, 'timer', -1) > 0
+    call timer_stop(s:git_signs.timer)
+endif
+let s:git_signs = {
+    \ 'enabled': 1,
+    \ 'jobs': {},
+    \ 'gen': {},
+    \ 'out': {},
+    \ 'cache': {},
+    \ 'dirty': {},
+    \ 'timer': -1,
+    \ 'pending_buf': 0
+    \ }
+
+function! s:GitSignsSupported() abort
+    return has('signs') && has('job') && executable('git')
 endfunction
 
-function! s:GitMinimapValid() abort
-    if s:git_minimap.win <= 0 || !bufexists(s:git_minimap.buf)
-        return 0
+function! s:ApplyGitSignColors() abort
+    highlight BeauGitSignAdd cterm=bold ctermfg=10 ctermbg=NONE
+        \ gui=bold guifg=#9ece6a guibg=NONE
+    highlight BeauGitSignChange cterm=bold ctermfg=11 ctermbg=NONE
+        \ gui=bold guifg=#e0af68 guibg=NONE
+    highlight BeauGitSignDelete cterm=bold ctermfg=9 ctermbg=NONE
+        \ gui=bold guifg=#f7768e guibg=NONE
+    if !s:GitSignsSupported()
+        return
+    endif
+    call sign_define('BeauGitAdd', {
+        \ 'text': '+ ',
+        \ 'texthl': 'BeauGitSignAdd'
+        \ })
+    call sign_define('BeauGitChange', {
+        \ 'text': '~ ',
+        \ 'texthl': 'BeauGitSignChange'
+        \ })
+    call sign_define('BeauGitDelete', {
+        \ 'text': '- ',
+        \ 'texthl': 'BeauGitSignDelete'
+        \ })
+endfunction
+
+function! s:GitSignsUnplace(buf) abort
+    if !has('signs') || a:buf <= 0 || !bufexists(a:buf)
+        return
     endif
     try
-        return get(popup_getpos(s:git_minimap.win), 'visible', 0)
+        call sign_unplace('beau_git', {'buffer': a:buf})
     catch
-        return 0
     endtry
 endfunction
 
-function! s:GitMinimapClose() abort
-    if exists('s:git_minimap_timer')
-        call timer_stop(s:git_minimap_timer)
-        unlet s:git_minimap_timer
-    endif
-    if s:GitMinimapValid()
-        call popup_close(s:git_minimap.win)
-    endif
-    let s:git_minimap.win = -1
-    let s:git_minimap.buf = -1
-    let s:git_minimap.source_win = -1
-    let s:git_minimap.source_buf = -1
-    let s:git_minimap.matches = []
-    let s:git_minimap.cache_key = ''
-endfunction
-
-function! s:GitMinimapPopupOptions() abort
-    let l:height = max([1, &lines - 2])
-    return {
-        \ 'line': 1,
-        \ 'col': &columns,
-        \ 'minwidth': 1,
-        \ 'maxwidth': 1,
-        \ 'minheight': l:height,
-        \ 'maxheight': l:height,
-        \ 'border': [0, 0, 0, 0],
-        \ 'padding': [0, 0, 0, 0],
-        \ 'highlight': 'BeauGitMinimap',
-        \ 'mapping': 0,
-        \ 'scrollbar': 0,
-        \ 'wrap': 0,
-        \ 'callback': function('<SID>GitMinimapClosed')
-        \ }
-endfunction
-
-function! s:GitMinimapClosed(id, result) abort
-    if s:git_minimap.win == a:id
-        let s:git_minimap.win = -1
-    endif
-endfunction
-
-function! s:ResizeGitMinimap() abort
-    if !s:GitMinimapValid()
-        return
-    endif
-    call popup_setoptions(s:git_minimap.win, s:GitMinimapPopupOptions())
-    call s:GitMinimapSync()
-endfunction
-
-function! s:GitRoot(dir) abort
-    let l:dir = fnamemodify(a:dir, ':p')
-    if has_key(s:git_root_cache, l:dir)
-        return s:git_root_cache[l:dir]
-    endif
-
-    let l:root_lines = systemlist(
-        \ 'git -C ' . shellescape(l:dir)
-        \ . ' rev-parse --show-toplevel 2>/dev/null')
-    let l:root = ''
-    if v:shell_error == 0 && !empty(l:root_lines)
-        let l:root = fnamemodify(l:root_lines[0], ':p')
-    endif
-    let s:git_root_cache[l:dir] = l:root
-    return l:root
-endfunction
-
-function! s:GitMinimapSourceInfo() abort
-    if &buftype !=# '' || empty(expand('%:p')) || !filereadable(expand('%:p'))
-        return {}
-    endif
-
-    let l:path = fnamemodify(expand('%:p'), ':p')
-    let l:root = s:GitRoot(fnamemodify(l:path, ':h'))
-    if empty(l:root)
-        return {}
-    endif
-    if strpart(l:path, 0, strlen(l:root)) !=# l:root
-        return {}
-    endif
-    let l:relative = strpart(l:path, strlen(l:root))
-    let l:relative = substitute(l:relative, '^[/\\]', '', '')
-    let l:tracked = systemlist(
-        \ 'git -C ' . shellescape(l:root) . ' ls-files --error-unmatch -- '
-        \ . shellescape(l:relative) . ' 2>/dev/null')
-    return {
-        \ 'path': l:path,
-        \ 'root': l:root,
-        \ 'relative': l:relative,
-        \ 'untracked': v:shell_error != 0 || empty(l:tracked)
-        \ }
-endfunction
-
-function! s:GitMinimapMarks(info, line_count) abort
+" Parse unified-diff hunks (git diff -U0). Cap at 2000 marks so a huge
+" rewrite does not flood the signcolumn.
+function! s:GitSignsParseHunks(lines, line_count) abort
     let l:count = max([1, a:line_count])
-    let l:marks = repeat([' '], l:count)
-    if a:info.untracked
-        return repeat(['+'], l:count)
-    endif
-
-    let l:diff = systemlist(
-        \ 'git -C ' . shellescape(a:info.root)
-        \ . ' diff --no-color --unified=0 HEAD -- '
-        \ . shellescape(a:info.relative) . ' 2>/dev/null')
-    if empty(l:diff)
-        return l:marks
-    endif
-
-    for l:diff_line in l:diff
+    let l:marks = {}
+    for l:diff_line in a:lines
         let l:hunk = matchlist(l:diff_line,
             \ '^@@ -\(\d\+\)\%([,]\(\d\+\)\)\?'
             \ . ' +\(\d\+\)\%([,]\(\d\+\)\)\? @@')
@@ -755,184 +881,221 @@ function! s:GitMinimapMarks(info, line_count) abort
         let l:new_count = empty(l:hunk[4]) ? 1 : str2nr(l:hunk[4])
         if l:new_count == 0
             let l:index = max([1, min([l:count, l:new_start])])
-            let l:marks[l:index - 1] = '-'
+            let l:marks[l:index] = 'BeauGitDelete'
         else
-            let l:mark = l:old_count > 0 ? '~' : '+'
+            let l:name = l:old_count > 0 ? 'BeauGitChange' : 'BeauGitAdd'
             let l:last = min([l:count, l:new_start + l:new_count - 1])
             if l:new_start <= l:last
                 for l:index in range(l:new_start, l:last)
-                    let l:marks[l:index - 1] = l:mark
+                    let l:marks[l:index] = l:name
                 endfor
             endif
+        endif
+        if len(l:marks) > 2000
+            return {}
         endif
     endfor
     return l:marks
 endfunction
 
-function! s:GitMinimapCreate() abort
-    let l:buf = bufnr('__BEAU_GIT_MINIMAP__')
-    if l:buf <= 0
-        let l:buf = bufadd('__BEAU_GIT_MINIMAP__')
-        let l:shortmess = &shortmess
+function! s:GitSignsPlace(buf, marks) abort
+    call s:GitSignsUnplace(a:buf)
+    if empty(a:marks) || !bufexists(a:buf)
+        return
+    endif
+    let l:list = []
+    for l:lnum in keys(a:marks)
+        call add(l:list, {
+            \ 'buffer': a:buf,
+            \ 'group': 'beau_git',
+            \ 'id': str2nr(l:lnum),
+            \ 'lnum': str2nr(l:lnum),
+            \ 'name': a:marks[l:lnum]
+            \ })
+    endfor
+    try
+        call sign_placelist(l:list)
+    catch
+    endtry
+endfunction
+
+function! s:GitSignsOut(buf, gen, channel, msg) abort
+    if get(s:git_signs.gen, a:buf, 0) != a:gen
+        return
+    endif
+    if !has_key(s:git_signs.out, a:buf)
+        let s:git_signs.out[a:buf] = []
+    endif
+    call add(s:git_signs.out[a:buf], a:msg)
+endfunction
+
+function! s:GitSignsExit(buf, gen, line_count, cache_key, job, status) abort
+    if has_key(s:git_signs.jobs, a:buf)
+        call remove(s:git_signs.jobs, a:buf)
+    endif
+    if get(s:git_signs.gen, a:buf, 0) != a:gen || !bufexists(a:buf)
+        return
+    endif
+
+    let l:lines = get(s:git_signs.out, a:buf, [])
+    if has_key(s:git_signs.out, a:buf)
+        call remove(s:git_signs.out, a:buf)
+    endif
+
+    if empty(l:lines) || l:lines[0] ==# 'UNTRACKED'
+        call s:GitSignsUnplace(a:buf)
+        let s:git_signs.cache[a:buf] = a:cache_key
+    else
+        let l:diff = l:lines[0] ==# 'TRACKED' ? l:lines[1:] : l:lines
+        let l:marks = s:GitSignsParseHunks(l:diff, a:line_count)
+        call s:GitSignsPlace(a:buf, l:marks)
+        let s:git_signs.cache[a:buf] = a:cache_key
+    endif
+
+    if get(s:git_signs.dirty, a:buf, 0)
+        call remove(s:git_signs.dirty, a:buf)
+        let s:git_signs.pending_buf = a:buf
+        call s:GitSignsRefresh()
+    endif
+endfunction
+
+function! s:GitSignsOnDelete(buf) abort
+    let l:buf = str2nr(a:buf)
+    if has_key(s:git_signs.jobs, l:buf)
         try
-            set shortmess+=F
-            silent! call bufload(l:buf)
-        finally
-            let &shortmess = l:shortmess
+            call job_stop(s:git_signs.jobs[l:buf], 'kill')
+        catch
+        endtry
+        call remove(s:git_signs.jobs, l:buf)
+    endif
+    for l:key in ['gen', 'out', 'cache', 'dirty']
+        if has_key(s:git_signs[l:key], l:buf)
+            call remove(s:git_signs[l:key], l:buf)
+        endif
+    endfor
+endfunction
+
+" Skip special buffers, unreadable paths, files outside a repo, and
+" buffers larger than 20000 lines. Cache key is path + mtime + linecount + HEAD.
+function! s:GitSignsRefresh(...) abort
+    if !s:git_signs.enabled || !s:GitSignsSupported()
+        return
+    endif
+
+    let l:buf = get(s:git_signs, 'pending_buf', 0)
+    if l:buf <= 0 || !bufexists(l:buf)
+        let l:buf = bufnr('%')
+    endif
+    if l:buf <= 0 || !bufexists(l:buf)
+        return
+    endif
+
+    if getbufvar(l:buf, '&buftype') !=# ''
+        return
+    endif
+    let l:path = fnamemodify(bufname(l:buf), ':p')
+    if empty(l:path) || !filereadable(l:path)
+        call s:GitSignsUnplace(l:buf)
+        return
+    endif
+
+    let l:root = s:GitRoot(l:path)
+    if empty(l:root)
+        call s:GitSignsUnplace(l:buf)
+        if has_key(s:git_signs.cache, l:buf)
+            call remove(s:git_signs.cache, l:buf)
+        endif
+        return
+    endif
+    let l:relative = s:GitRelativePath(l:root, l:path)
+    if empty(l:relative)
+        call s:GitSignsUnplace(l:buf)
+        return
+    endif
+
+    let l:info = getbufinfo(l:buf)
+    let l:line_count = empty(l:info) ? 0 : l:info[0].linecount
+    let l:key = l:path . "\n" . string(getftime(l:path))
+        \ . "\n" . string(l:line_count)
+        \ . "\n" . s:GitStateStamp(l:root)
+    if l:line_count > 20000
+        call s:GitSignsUnplace(l:buf)
+        let s:git_signs.cache[l:buf] = l:key
+        return
+    endif
+    if get(s:git_signs.cache, l:buf, '') ==# l:key
+        return
+    endif
+    if has_key(s:git_signs.jobs, l:buf)
+        let s:git_signs.dirty[l:buf] = 1
+        return
+    endif
+
+    let l:gen = get(s:git_signs.gen, l:buf, 0) + 1
+    let s:git_signs.gen[l:buf] = l:gen
+    let s:git_signs.out[l:buf] = []
+    " argv: $1=repo root, $2=relative path. TRACKED/UNTRACKED is the first line.
+    let l:job = job_start([
+        \ 'sh', '-c',
+        \ 'if git -C "$1" ls-files --error-unmatch -- "$2" >/dev/null 2>&1; then'
+        \ . ' printf "%s\n" TRACKED;'
+        \ . ' git -C "$1" diff --no-color --unified=0 HEAD -- "$2";'
+        \ . ' else printf "%s\n" UNTRACKED; fi',
+        \ '_', l:root, l:relative
+        \ ], {
+        \ 'in_io': 'null',
+        \ 'err_io': 'null',
+        \ 'out_mode': 'nl',
+        \ 'out_cb': function('<SID>GitSignsOut', [l:buf, l:gen]),
+        \ 'exit_cb': function('<SID>GitSignsExit',
+        \     [l:buf, l:gen, l:line_count, l:key])
+        \ })
+    if job_status(l:job) ==# 'fail'
+        return
+    endif
+    let s:git_signs.jobs[l:buf] = l:job
+endfunction
+
+function! s:GitSignsRefreshSoon(...) abort
+    let s:git_signs.pending_buf = bufnr('%')
+    if s:git_signs.timer > 0
+        call timer_stop(s:git_signs.timer)
+    endif
+    let s:git_signs.timer = timer_start(80, function('<SID>GitSignsRefresh'))
+endfunction
+
+function! s:GitSignsDisable() abort
+    let s:git_signs.enabled = 0
+    if s:git_signs.timer > 0
+        call timer_stop(s:git_signs.timer)
+        let s:git_signs.timer = -1
+    endif
+    if has('signs')
+        try
+            call sign_unplace('beau_git')
+        catch
         endtry
     endif
-    let s:git_minimap.buf = l:buf
-    call setbufvar(l:buf, 'beau_git_minimap', 1)
-    call setbufvar(l:buf, '&buftype', 'nofile')
-    call setbufvar(l:buf, '&bufhidden', 'hide')
-    call setbufvar(l:buf, '&swapfile', 0)
-    call setbufvar(l:buf, '&buflisted', 0)
-    call setbufvar(l:buf, '&number', 0)
-    call setbufvar(l:buf, '&relativenumber', 0)
-    call setbufvar(l:buf, '&signcolumn', 'no')
-    call setbufvar(l:buf, '&foldcolumn', 0)
-    call setbufvar(l:buf, '&wrap', 0)
-    call setbufvar(l:buf, '&list', 0)
-    call setbufvar(l:buf, '&spell', 0)
-    call setbufvar(l:buf, '&readonly', 1)
-    call setbufvar(l:buf, '&modifiable', 0)
-    call setbufvar(l:buf, '&statusline', '')
-    let s:git_minimap.source_win = win_getid()
-    let s:git_minimap.source_buf = bufnr('%')
-    let s:git_minimap.win = popup_create(l:buf, s:GitMinimapPopupOptions())
+    let s:git_signs.cache = {}
 endfunction
 
-function! s:GitMinimapRender(marks) abort
-    let l:buf = s:git_minimap.buf
-    let l:win = s:git_minimap.win
-    for l:match_id in s:git_minimap.matches
-        silent! call matchdelete(l:match_id, l:win)
-    endfor
-    let s:git_minimap.matches = []
-
-    " Render changed lines as colored blocks instead of editable text.
-    let l:display = map(copy(a:marks), 'v:val ==# " " ? " " : "◂"')
-    call setbufvar(l:buf, '&readonly', 0)
-    call setbufvar(l:buf, '&modifiable', 1)
-    try
-        call setbufline(l:buf, 1, l:display)
-        let l:old_count = getbufinfo(l:buf)[0].linecount
-        if l:old_count > len(l:display)
-            call deletebufline(l:buf, len(l:display) + 1, l:old_count)
-        endif
-        call setbufvar(l:buf, '&modified', 0)
-    finally
-        call setbufvar(l:buf, '&modifiable', 0)
-        call setbufvar(l:buf, '&readonly', 1)
-    endtry
-
-    let l:positions = {'+': [], '~': [], '-': []}
-    for l:index in range(0, len(a:marks) - 1)
-        if has_key(l:positions, a:marks[l:index])
-            call add(l:positions[a:marks[l:index]], [l:index + 1])
-        endif
-    endfor
-    let l:groups = {'+': 'BeauGitMinimapAdd',
-        \ '~': 'BeauGitMinimapChange', '-': 'BeauGitMinimapDelete'}
-    for l:mark in keys(l:positions)
-        if !empty(l:positions[l:mark])
-            call add(s:git_minimap.matches,
-                \ matchaddpos(l:groups[l:mark], l:positions[l:mark], 10, -1,
-                \ {'window': l:win}))
-        endif
-    endfor
+function! s:GitSignsEnable() abort
+    let s:git_signs.enabled = 1
+    let s:git_signs.pending_buf = bufnr('%')
+    call s:GitSignsRefresh()
 endfunction
 
-function! s:GitMinimapSync() abort
-    if s:git_minimap.refreshing || !s:GitMinimapValid()
-        return
-    endif
-    if win_getid() !=# s:git_minimap.source_win
-        return
-    endif
-    let l:top = line('w0')
-    if get(popup_getpos(s:git_minimap.win), 'firstline', -1) ==# l:top
-        return
-    endif
-    let s:git_minimap.refreshing = 1
-    call popup_setoptions(s:git_minimap.win, {'firstline': l:top})
-    let s:git_minimap.refreshing = 0
-endfunction
-
-function! s:GitMinimapRefresh(...) abort
-    if s:git_minimap.refreshing || get(b:, 'beau_git_minimap', 0)
-        return
-    endif
-    " NERDTree owns its explorer buffer; do not hide the minimap when it
-    " receives focus alongside the source window.
-    if &filetype ==# 'nerdtree' || get(b:, 'NERDTree', 0)
-        return
-    endif
-    if bufname('%') =~# '^NERD_tree_'
-        return
-    endif
-    " NERDTree briefly enters an unnamed scratch buffer while opening.
-    if &buftype !=# '' || empty(expand('%:p'))
-        return
-    endif
-    let l:info = s:GitMinimapSourceInfo()
-    if empty(l:info)
-        if s:GitMinimapValid()
-            call s:GitMinimapClose()
-        endif
-        return
-    endif
-    " Per-line marks on huge untracked files are too expensive for the popup.
-    if l:info.untracked && line('$') > 2000
-        if s:GitMinimapValid()
-            call s:GitMinimapClose()
-        endif
-        return
-    endif
-
-    let l:key = l:info.path . "\n" . getftime(l:info.path)
-        \ . "\n" . line('$') . "\n" . l:info.untracked
-    if s:GitMinimapValid() && get(s:git_minimap, 'cache_key', '') ==# l:key
-        let s:git_minimap.source_win = win_getid()
-        let s:git_minimap.source_buf = bufnr('%')
-        call s:GitMinimapSync()
-        return
-    endif
-
-    let s:git_minimap.refreshing = 1
-    let s:git_minimap.cache_key = l:key
-    if !s:GitMinimapValid()
-        call s:GitMinimapCreate()
-    else
-        call popup_setoptions(s:git_minimap.win, s:GitMinimapPopupOptions())
-        let s:git_minimap.source_win = win_getid()
-        let s:git_minimap.source_buf = bufnr('%')
-    endif
-    let l:marks = s:GitMinimapMarks(l:info, line('$'))
-    call s:GitMinimapRender(l:marks)
-    let s:git_minimap.refreshing = 0
-    call s:GitMinimapSync()
-endfunction
-
-function! s:GitMinimapRefreshSoon(...) abort
-    if exists('s:git_minimap_timer')
-        call timer_stop(s:git_minimap_timer)
-    endif
-    let s:git_minimap_timer = timer_start(80, function('<SID>GitMinimapRefresh'))
-endfunction
-
-call s:ApplyGitMinimapColors()
-augroup beau_git_minimap
+call s:ApplyGitSignColors()
+augroup beau_git_signs
     autocmd!
-    autocmd ColorScheme * call <SID>ApplyGitMinimapColors()
-    autocmd VimEnter * call <SID>GitMinimapRefreshSoon()
-    autocmd BufEnter * call <SID>GitMinimapRefreshSoon()
-    autocmd BufWritePost * call <SID>GitMinimapRefreshSoon()
-    autocmd CursorMoved,CursorMovedI,WinScrolled * call <SID>GitMinimapSync()
-    autocmd VimResized * call <SID>ResizeGitMinimap()
+    autocmd ColorScheme * call <SID>ApplyGitSignColors()
+    autocmd VimEnter,BufEnter,BufReadPost,BufWritePost,FocusGained *
+        \ call <SID>GitSignsRefreshSoon()
+    autocmd BufDelete,BufWipeout * call <SID>GitSignsOnDelete(expand('<abuf>'))
 augroup END
 
-" NERDTree file explorer; never change Vim's working directory
+" --- Plugin knobs ------------------------------------------------------------
+" NERDTree file explorer; never change Vim's working directory (ChDirMode=0).
 let g:NERDTreeWinSize = 35
 let g:NERDTreeWinSizeMax = 40
 let g:NERDTreeShowHidden = 1
@@ -962,7 +1125,8 @@ let g:NERDCommentEmptyLines = 1
 let g:NERDTrimTrailingWhitespace = 1
 let g:NERDCreateDefaultMappings = 1
 
-" Copy the selected NERDTree node path and paste it into an editing buffer.
+" Copy the selected NERDTree node path. yr = relative, ya = absolute.
+" Always fills register p so Space-ip works without a clipboard provider.
 function! s:NERDTreeCopyPath(absolute) abort
     try
         let l:node = g:NERDTreeFileNode.GetSelected()
@@ -1003,17 +1167,26 @@ augroup beau_nerdtree_paths
     autocmd FileType nerdtree call <SID>DefineNERDTreePathMappings()
 augroup END
 
+" --- Commands and leader maps ------------------------------------------------
 function! s:LeaderFHint() abort
     echo 'fe files  fg grep  fw word  fl lines  fb buffers  fh recent  fc commands'
 endfunction
 
 function! s:WorkspaceFiles() abort
+    if !s:FzfVimAvailable()
+        echoerr 'fzf.vim is not available'
+        return
+    endif
     execute 'Files' fnameescape(g:beau_workspace_root)
 endfunction
 
 function! s:BufferLines() abort
     " Each token is an exact substring.  'sos kick nebula' keeps lines that
     " contain all three strings, and drops fuzzy hits such as 'sxxxx oxs'.
+    if !s:FzfVimAvailable()
+        echoerr 'fzf.vim is not available'
+        return
+    endif
     call fzf#vim#buffer_lines({
         \ 'options': ['--exact', '--prompt', 'Lines> ']
         \ })
@@ -1030,6 +1203,8 @@ function! s:FormatBuffer() abort
     echo 'Formatted with ' . &formatprg
 endfunction
 
+" Same directory first, then walk parents with findfile(). Not a project-wide
+" ctags lookup; use Space-g / Space-s for that.
 function! s:SwitchHeaderSource() abort
     let l:name = expand('%:t')
     if empty(l:name)
@@ -1066,6 +1241,7 @@ function! s:SwitchHeaderSource() abort
     echo 'No matching header/source for ' . l:name
 endfunction
 
+" Prefer GNU GLOBAL when GTAGS exists in a parent of the current file.
 function! s:JumpGtagsCursor() abort
     if !empty(findfile('GTAGS', '.;')) && exists(':GtagsCursor')
         GtagsCursor
@@ -1103,6 +1279,10 @@ function! s:FzfTagUnderCursor() abort
         echo 'No symbol under cursor'
         return
     endif
+    if !s:FzfVimAvailable()
+        echoerr 'fzf.vim is not available'
+        return
+    endif
     call fzf#vim#tags(l:symbol, fzf#vim#with_preview({
         \ 'placeholder': '--tag {2}:{-1}:{3..}'
         \ }), 0)
@@ -1111,18 +1291,26 @@ endfunction
 command! Format call <SID>FormatBuffer()
 command! -nargs=0 Debug packadd termdebug | Termdebug
 
-" Paste directly from the system clipboard
-nnoremap <silent> <C-p> "+p
+" Leader map index (Space = <Leader>)
+"   e  NERDTree toggle          f  find hint
+"   fe workspace files          fg live rg (text)     fw word
+"   fl buffer lines (exact)     fb buffers            fh recent files
+"   fc commands                 re live rg (regex)
+"   t  floating terminal        w  next window
+"   g  fzf tags                 s  GtagsCursor / tags a  Gtags -r
+"   o  Tagbar                   h  header <-> source  =  formatprg
+"   q  quickfix                 /  comment toggle     b  jump back
+"   d  next paragraph           u  prev paragraph
+"   n  presentation view        m  restore editing view
+"   ip paste NERDTree path (register p)
+" NERDTree buffer: yr copy relative path, ya copy absolute path.
 nnoremap <silent> <C-l> :nohlsearch<Bar>diffupdate<CR><C-l>
 nnoremap n nzzzv
 nnoremap N Nzzzv
-" Paste the last path copied from NERDTree (works without a clipboard provider).
 nnoremap <silent> <Leader>ip :call <SID>PasteNERDTreePath()<CR>
-" File explorer and workspace search
 nnoremap <silent> <Leader>e :NERDTreeToggle<CR>
 nnoremap <silent> <Leader>f :call <SID>LeaderFHint()<CR>
 xnoremap <silent> <Leader>f :<C-u>call <SID>LeaderFHint()<CR>
-" File picker stays anchored to the directory where Vim started.
 nnoremap <silent> <Leader>fe :call <SID>WorkspaceFiles()<CR>
 nnoremap <silent> <Leader>fg :Rg<CR>
 nnoremap <silent> <Leader>fw :call <SID>LiveRgWord()<CR>
@@ -1132,12 +1320,9 @@ nnoremap <silent> <Leader>fb :Buffers<CR>
 nnoremap <silent> <Leader>fh :History<CR>
 nnoremap <silent> <Leader>fc :Commands<CR>
 nnoremap <silent> <Leader>re :RgRegex<CR>
-" Floating terminal and window switching
 nnoremap <silent> <Leader>t <Cmd>FloatTerminal<CR>
 nnoremap <silent> <Leader>w <C-w><C-w>
-" Ctags: Ctrl-] jumps directly; Space-g opens candidates with preview.
 nnoremap <silent> <Leader>g <Cmd>call <SID>FzfTagUnderCursor()<CR>
-" GNU GLOBAL when GTAGS exists; otherwise the same fzf tag picker.
 nnoremap <silent> <Leader>s :call <SID>JumpGtagsCursor()<CR>
 nnoremap <silent> <Leader>a :call <SID>GtagsRefs()<CR>
 nnoremap <silent> <Leader>o :TagbarToggle<CR>
@@ -1146,16 +1331,13 @@ nnoremap <silent> <Leader>= :Format<CR>
 nnoremap <silent> <Leader>q :call <SID>ToggleQuickfix()<CR>
 nmap <silent> <Leader>/ <Plug>NERDCommenterToggle
 xmap <silent> <Leader>/ <Plug>NERDCommenterToggle
-" Navigation back works for FZF, searches, and native tag jumps.
 nnoremap <silent> <Leader>b <C-o>
-" Paragraph navigation
 nnoremap <silent> <Leader>d }
 nnoremap <silent> <Leader>u {
-" Toggle between a clean presentation view and the editing view
 nnoremap <silent> <Leader>n
     \ :set nonumber norelativenumber nolist mouse=<CR>
-    \ :call <SID>GitMinimapClose()<CR>
+    \ :call <SID>GitSignsDisable()<CR>
 nnoremap <silent> <Leader>m
     \ :set number relativenumber list mouse=a<CR>
-    \ :call <SID>GitMinimapRefresh()<CR>
+    \ :call <SID>GitSignsEnable()<CR>
 " Insert completion uses Vim's built-in Ctrl-N and Ctrl-P.
